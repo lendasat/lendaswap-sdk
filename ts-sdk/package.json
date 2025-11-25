@@ -1,0 +1,52 @@
+{
+  "name": "@lendaswap/sdk",
+  "version": "0.1.0",
+  "description": "Lendaswap Client SDK for TypeScript/JavaScript",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "wasm"
+  ],
+  "scripts": {
+    "build:wasm": "cd ../wasm-sdk && wasm-pack build --target web --out-dir ../ts-sdk/wasm",
+    "build:wasm:release": "cd ../wasm-sdk && wasm-pack build --target web --release --out-dir ../ts-sdk/wasm",
+    "build:ts": "tsc",
+    "build": "pnpm run build:wasm && pnpm run build:ts",
+    "build:release": "pnpm run build:wasm:release && pnpm run build:ts",
+    "test": "vitest",
+    "clean": "rm -rf dist wasm"
+  },
+  "dependencies": {
+    "dexie": "^4.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.7",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.0.0"
+  },
+  "keywords": [
+    "lendaswap",
+    "bitcoin",
+    "wallet",
+    "ark",
+    "arkade",
+    "vhtlc",
+    "wasm"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lendasat/lendaswap.git",
+    "directory": "client-sdk/ts-sdk"
+  }
+}

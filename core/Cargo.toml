@@ -1,0 +1,59 @@
+[package]
+name = "lendaswap-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Lendaswap Client SDK - Core Library (platform-agnostic)"
+
+[lib]
+crate-type = ["rlib"]
+
+[features]
+default = []
+
+[dependencies]
+# Error handling
+anyhow = "1"
+thiserror = "1.0"
+
+# Serialization
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Logging
+log = "0.4"
+
+# Crypto
+rand = "0.8"
+sha2 = "0.10"
+
+# Bitcoin
+bip39 = { version = "2.1.0", features = ["rand_core"] }
+bitcoin = { version = "0.32.2", features = ["secp-recovery"] }
+miniscript = "12"
+
+# Arkade
+ark-rest = { git = "https://github.com/arkade-os/rust-sdk", package = "ark-rest", rev = "37aa6852" }
+ark-rs = { git = "https://github.com/arkade-os/rust-sdk", rev = "37aa6852" }
+
+# Nostr (for key derivation compatibility)
+nostr = { version = "0.40.0", default-features = false, features = ["std"] }
+
+# Async
+futures = "0.3"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+
+# Random for WASM compatibility
+getrandom = { version = "0.2", features = ["wasm-bindgen", "js"] }
+getrandom_latest = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+
+rust_decimal = { version = "1", features = ["serde-with-float"] }
+rust_decimal_macros = "1"
+time = { version = "0.3", features = ["serde", "formatting", "parsing", "macros"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
