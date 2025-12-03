@@ -385,7 +385,7 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
             .get_user_id_xpub()
             .await
             .map_err(|e| crate::Error::Other(format!("Could not retrieve user xpub {e:#}")))?
-            .ok_or_else(|| crate::Error::NoMnemonic)?;
+            .ok_or(crate::Error::NoMnemonic)?;
         let recovered = self.api_client.recover_swaps(xpub.as_str()).await?;
 
         for recovered_swap in recovered.swaps {
@@ -414,7 +414,7 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
             .get_mnemonic()
             .await
             .map_err(|e| crate::Error::Other(format!("Could not read mnemonic {e:#}")))?
-            .ok_or_else(|| crate::Error::NoMnemonic)?;
+            .ok_or(crate::Error::NoMnemonic)?;
         Ok(mnemonic)
     }
 
@@ -423,7 +423,7 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
             .wallet
             .get_user_id_xpub()
             .await?
-            .ok_or_else(|| crate::Error::NoMnemonic)?;
+            .ok_or(crate::Error::NoMnemonic)?;
         Ok(xpub)
     }
 
