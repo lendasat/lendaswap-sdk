@@ -23,7 +23,10 @@
     "build": "pnpm run build:wasm && pnpm run build:ts",
     "build:release": "pnpm run build:wasm:release && pnpm run build:ts",
     "test": "vitest",
-    "clean": "rm -rf dist wasm"
+    "clean": "rm -rf dist wasm",
+    "prepublishOnly": "pnpm run build:release",
+    "publish:npm": "pnpm run build:release && pnpm publish --access public",
+    "publish:npm:dry-run": "pnpm run build:release && pnpm publish --access public --dry-run"
   },
   "dependencies": {
     "dexie": "^4.0.0"
