@@ -1,5 +1,5 @@
 {
-  "name": "@lendaswap/sdk",
+  "name": "@lendasat/lendaswap-sdk",
   "version": "0.1.0",
   "description": "Lendaswap Client SDK for TypeScript/JavaScript",
   "type": "module",
@@ -51,5 +51,8 @@
     "type": "git",
     "url": "https://github.com/lendasat/lendaswap.git",
     "directory": "client-sdk/ts-sdk"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
