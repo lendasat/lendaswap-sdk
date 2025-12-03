@@ -50,7 +50,7 @@ class WalletDatabase extends Dexie {
  *
  * // Use with the Client
  * const client = await Client.create(
- *   'https://api.lendaswap.com',
+ *   'https://apilendaswap.lendasat.com',
  *   walletStorage,
  *   swapStorage,
  *   'bitcoin',
@@ -158,7 +158,7 @@ export class DexieWalletStorageProvider implements WalletStorageProvider {
  * const swapStorage = createDexieSwapStorage();
  *
  * const client = await Client.create(
- *   'https://api.lendaswap.com',
+ *   'https://apilendaswap.lendasat.com',
  *   walletStorage,
  *   swapStorage,
  *   'bitcoin',

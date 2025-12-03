@@ -20,7 +20,7 @@ pnpm add @lendaswap/sdk
 import { ApiClient } from '@lendaswap/sdk';
 
 // Create an API client
-const api = await ApiClient.create('https://api.lendaswap.com');
+const api = await ApiClient.create('https://apilendaswap.lendasat.com');
 
 // Get available trading pairs
 const pairs = await api.getAssetPairs();
@@ -80,7 +80,7 @@ const params = await wallet.deriveSwapParams();
 ```typescript
 import { PriceFeedService } from '@lendaswap/sdk';
 
-const priceFeed = new PriceFeedService('https://api.lendaswap.com');
+const priceFeed = new PriceFeedService('https://apilendaswap.lendasat.com');
 
 priceFeed.subscribe((prices) => {
   console.log('Price update:', prices);

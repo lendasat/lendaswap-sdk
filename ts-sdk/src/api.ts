@@ -324,25 +324,6 @@ export interface QuoteResponseInfo {
 }
 
 /**
- * High-level API client for the Lendaswap REST API.
- *
- * This provides a TypeScript-friendly interface around the WASM API client.
- *
- * @example
- * ```typescript
- * import { ApiClient } from '@lendaswap/sdk';
- *
- * const api = await ApiClient.create('https://api.lendaswap.com');
- *
- * // Get supported tokens
- * const tokens = await api.getTokens();
- *
- * // Get a quote
- * const quote = await api.getQuote('btc_arkade', 'usdc_pol', 100000n);
- * console.log('Exchange rate:', quote.exchangeRate);
- * ```
- */
-/**
  * Convert a value from WASM (which may be a Map) to a plain object.
  * serde_wasm_bindgen serializes structs as Maps by default.
  */
@@ -434,7 +415,7 @@ export class Client {
    * };
    *
    * const client = await Client.create(
-   *   'https://api.lendaswap.com',
+   *   'https://apilendaswap.lendasat.com',
    *   walletStorage,
    *   swapStorage,
    *   'bitcoin',

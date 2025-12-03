@@ -18,7 +18,7 @@
  *
  * // Create client
  * const client = await Client.create(
- *   'https://api.lendaswap.com',
+ *   'https://apilendaswap.lendasat.com',
  *   walletStorage,
  *   swapStorage,
  *   'bitcoin',

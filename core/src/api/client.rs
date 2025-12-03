@@ -15,7 +15,7 @@ impl ApiClient {
     /// Create a new API client.
     ///
     /// # Arguments
-    /// * `base_url` - Base URL of the Lendaswap API (e.g., "https://api.lendaswap.com")
+    /// * `base_url` - Base URL of the Lendaswap API (e.g., "https://apilendaswap.lendasat.com")
     pub fn new(base_url: impl Into<String>) -> Self {
         Self {
             base_url: base_url.into().trim_end_matches('/').to_string(),
