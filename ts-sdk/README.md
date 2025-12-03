@@ -1,98 +1,304 @@
-# @lendaswap/sdk
+# @lendasat/lendaswap-sdk
 
 TypeScript/JavaScript SDK for Lendaswap - Bitcoin-to-stablecoin atomic swaps.
 
 ## Overview
 
-This SDK provides a high-level interface for interacting with the Lendaswap API, enabling atomic swaps between Bitcoin (Lightning/Arkade) and EVM stablecoins (USDC, USDT on Polygon/Ethereum).
+This SDK provides a high-level interface for interacting with the Lendaswap API, enabling atomic swaps between Bitcoin (
+Lightning/Arkade) and EVM stablecoins (USDC, USDT on Polygon/Ethereum).
 
 ## Installation
 
 ```bash
-npm install @lendaswap/sdk
+npm install @lendasat/lendaswap-sdk
 # or
-pnpm add @lendaswap/sdk
+pnpm add @lendasat/lendaswap-sdk
 ```
 
 ## Quick Start
 
-```typescript
-import { ApiClient } from '@lendaswap/sdk';
+### Get Asset Pairs and Quote
 
-// Create an API client
-const api = await ApiClient.create('https://apilendaswap.lendasat.com');
+```typescript
+import {
+  Client,
+  createDexieWalletStorage,
+  createDexieSwapStorage,
+} from '@lendasat/lendaswap-sdk';
+
+// Create storage providers (uses IndexedDB via Dexie)
+const walletStorage = createDexieWalletStorage();
+const swapStorage = createDexieSwapStorage();
+
+// Create client
+const client = await Client.create(
+  'https://apilendaswap.lendasat.com',
+  walletStorage,
+  swapStorage,
+  'bitcoin',
+  'https://arkade.computer'
+);
+
+// Initialize wallet (generates or loads mnemonic)
+await client.init();
 
 // Get available trading pairs
-const pairs = await api.getAssetPairs();
+const pairs = await client.getAssetPairs();
+console.log('Available pairs:', pairs);
 
-// Get a quote for swapping 100,000 sats to USDC
-const quote = await api.getQuote('btc_arkade', 'usdc_pol', 100000n);
+// Get a quote for swapping 100,000 sats to USDC on Polygon
+const quote = await client.getQuote('btc_arkade', 'usdc_pol', 100_000n);
 console.log('Exchange rate:', quote.exchange_rate);
 console.log('You receive:', quote.min_amount, 'USDC');
+console.log('Protocol fee:', quote.protocol_fee);
+```
+
+### Arkade to Polygon Swap (with Gelato Auto-Redeem)
+
+This example shows how to swap BTC from Arkade to USDC on Polygon. The swap uses Gelato relay for gasless claiming on
+the EVM side.
+
+```typescript
+import {
+  Client,
+  createDexieWalletStorage,
+  createDexieSwapStorage,
+} from '@lendasat/lendaswap-sdk';
+
+const walletStorage = createDexieWalletStorage();
+const swapStorage = createDexieSwapStorage();
+
+const client = await Client.create(
+  'https://apilendaswap.lendasat.com',
+  walletStorage,
+  swapStorage,
+  'bitcoin',
+  'https://arkade.computer'
+);
+
+await client.init();
+
+// Create Arkade → USDC (Polygon) swap
+const swap = await client.createArkadeToEvmSwap(
+  {
+    target_address: '0xYourPolygonAddress',
+    target_amount: 10, // 10 USDC
+    target_token: 'usdc_pol',
+  },
+  'polygon'
+);
+
+console.log('Swap created:', swap.swap_id);
+console.log('Send BTC to Arkade VHTLC to proceed');
+
+// After sending BTC, claim via Gelato (gasless)
+// The secret is automatically derived from your wallet
+await client.claimGelato(swap.swap_id);
+console.log('Swap claimed via Gelato relay!');
+```
+
+### USDC (Ethereum) to Lightning Swap
+
+This example shows how to swap USDC on Ethereum to Bitcoin via Lightning. You'll need to sign the EVM transaction using
+a wallet like MetaMask.
+
+We recommend using [wagmi](https://wagmi.sh/) with [viem](https://viem.sh/) for React apps,
+or [ethers.js](https://docs.ethers.org/) for vanilla JS/TS.
+
+```typescript
+import {
+  Client,
+  createDexieWalletStorage,
+  createDexieSwapStorage,
+} from '@lendasat/lendaswap-sdk';
+
+const walletStorage = createDexieWalletStorage();
+const swapStorage = createDexieSwapStorage();
+
+const client = await Client.create(
+  'https://apilendaswap.lendasat.com',
+  walletStorage,
+  swapStorage,
+  'bitcoin',
+  'https://arkade.computer'
+);
+
+await client.init();
+
+// Create USDC (Ethereum) → Lightning swap
+const swap = await client.createEvmToLightningSwap(
+  {
+    bolt11_invoice: 'lnbc...', // Your Lightning invoice
+    user_address: '0xYourEthereumAddress', // Your connected wallet address
+    source_token: 'usdc_eth',
+  },
+  'ethereum'
+);
+
+console.log('Swap created:', swap.swap_id);
+console.log('Contract address:', swap.contract_address);
+console.log('Amount to send:', swap.source_amount);
+
+// Now use your wallet to send the transaction to the HTLC contract
+// Example with wagmi/viem:
+//
+// import { useWriteContract } from 'wagmi';
+// const { writeContract } = useWriteContract();
+//
+// await writeContract({
+//   address: swap.contract_address,
+//   abi: htlcAbi,
+//   functionName: 'deposit',
+//   args: [swap.hash_lock, swap.timelock, ...],
+//   value: swap.source_amount,
+// });
+//
+// Example with ethers.js:
+//
+// const signer = await provider.getSigner();
+// const contract = new ethers.Contract(swap.contract_address, htlcAbi, signer);
+// await contract.deposit(swap.hash_lock, swap.timelock, ...);
+```
+
+### Real-time Price Feed (WebSocket)
+
+Subscribe to real-time price updates via WebSocket:
+
+```typescript
+import {PriceFeedService} from '@lendasat/lendaswap-sdk';
+
+const priceFeed = new PriceFeedService('https://apilendaswap.lendasat.com');
+
+// Subscribe to price updates
+const unsubscribe = priceFeed.subscribe((update) => {
+  console.log('Timestamp:', update.timestamp);
+
+  for (const pair of update.pairs) {
+    console.log(`${pair.pair}:`);
+    console.log(`  < $100:   ${pair.tiers.usd_1}`);
+    console.log(`  $100-999: ${pair.tiers.usd_100}`);
+    console.log(`  $1k-5k:   ${pair.tiers.usd_1000}`);
+    console.log(`  > $5k:    ${pair.tiers.usd_5000}`);
+  }
+});
+
+// Check connection status
+console.log('Connected:', priceFeed.isConnected());
+console.log('Listeners:', priceFeed.listenerCount());
+
+// Unsubscribe when done
+unsubscribe();
 ```
 
 ## Features
 
-- **API Client** - Full-featured client for the Lendaswap REST API
+- **Client** - Full-featured client for the Lendaswap API with WASM-powered cryptography
 - **Wallet Management** - HD wallet derivation for swap parameters
-- **Price Feed** - Real-time WebSocket price updates
-- **Storage Providers** - LocalStorage, IndexedDB, and in-memory options
+- **Price Feed** - Real-time WebSocket price updates with auto-reconnection
+- **Storage Providers** - Dexie (IndexedDB) storage for wallet and swap data
 
 ## API Reference
 
-### ApiClient
+### Client
 
 ```typescript
-const api = await ApiClient.create(baseUrl);
+const client = await Client.create(
+  baseUrl,
+  walletStorage,
+  swapStorage,
+  network,
+  arkadeUrl
+);
+
+// Initialize wallet
+await client.init();
+await client.init('your mnemonic phrase'); // Or with existing mnemonic
 
 // Trading pairs and quotes
-await api.getAssetPairs();
-await api.getQuote(from, to, amount);
+await client.getAssetPairs();
+await client.getQuote(from, to, amount);
 
 // Swap operations
-await api.createArkadeToEvmSwap(request, network);
-await api.createEvmToArkadeSwap(request, network);
-await api.createEvmToLightningSwap(request, network);
-await api.getSwap(id);
-await api.claimGelato(swapId, secret);
+await client.createArkadeToEvmSwap(request, targetNetwork);
+await client.createEvmToArkadeSwap(request, sourceNetwork);
+await client.createEvmToLightningSwap(request, sourceNetwork);
+await client.getSwap(id);
+await client.listAllSwaps();
+
+// Claiming and refunding
+await client.claimGelato(swapId);        // Gasless EVM claim via Gelato
+await client.claimVhtlc(swapId);         // Claim Arkade VHTLC
+await client.refundVhtlc(swapId, addr);  // Refund expired VHTLC
 
 // Recovery
-await api.recoverSwaps(xpub);
+await client.recoverSwaps();
+
+// Wallet info
+await client.getMnemonic();
+await client.getUserIdXpub();
 ```
 
-### Wallet
+### Storage Providers
 
 ```typescript
-import { Wallet, LocalStorageProvider } from '@lendaswap/sdk';
+import {
+  createDexieWalletStorage,
+  createDexieSwapStorage,
+} from '@lendasat/lendaswap-sdk';
 
-const storage = new LocalStorageProvider();
-const wallet = await Wallet.create(storage, 'bitcoin');
+// Pre-built Dexie (IndexedDB) storage providers
+const walletStorage = createDexieWalletStorage();
+const swapStorage = createDexieSwapStorage();
+```
 
-// Generate or retrieve mnemonic
-const mnemonic = await wallet.generateOrGetMnemonic();
+Or implement custom storage:
 
-// Derive swap parameters (preimage, hash lock, keys)
-const params = await wallet.deriveSwapParams();
+```typescript
+import type {
+  WalletStorageProvider,
+  SwapStorageProvider,
+} from '@lendasat/lendaswap-sdk';
+
+const walletStorage: WalletStorageProvider = {
+  getMnemonic: async () => localStorage.getItem('mnemonic'),
+  setMnemonic: async (m) => localStorage.setItem('mnemonic', m),
+  getKeyIndex: async () => parseInt(localStorage.getItem('idx') ?? '0'),
+  setKeyIndex: async (i) => localStorage.setItem('idx', i.toString()),
+};
+
+const swapStorage: SwapStorageProvider = {
+  get: async (id) => /* fetch from your storage */,
+  store: async (id, data) => /* store to your storage */,
+  delete: async (id) => /* delete from your storage */,
+  list: async () => /* return all swap IDs */,
+  getAll: async () => /* return all swap data */,
+};
 ```
 
 ### PriceFeedService
 
 ```typescript
-import { PriceFeedService } from '@lendaswap/sdk';
+import {PriceFeedService} from '@lendasat/lendaswap-sdk';
 
 const priceFeed = new PriceFeedService('https://apilendaswap.lendasat.com');
 
-priceFeed.subscribe((prices) => {
+// Subscribe (auto-connects)
+const unsubscribe = priceFeed.subscribe((prices) => {
   console.log('Price update:', prices);
 });
 
-priceFeed.connect();
+// Status
+priceFeed.isConnected();
+priceFeed.listenerCount();
+
+// Cleanup
+unsubscribe();
 ```
 
 ## Supported Tokens
 
 | Token | Chain     | ID              |
-| ----- | --------- | --------------- |
+|-------|-----------|-----------------|
 | BTC   | Lightning | `btc_lightning` |
 | BTC   | Arkade    | `btc_arkade`    |
 | USDC  | Polygon   | `usdc_pol`      |
