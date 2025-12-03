@@ -226,6 +226,7 @@ pub mod tests {
     use crate::ApiClient;
     use crate::api::{QuoteRequest, TokenId};
 
+    #[ignore]
     #[tokio::test]
     pub async fn manual_api_checks() {
         let client = ApiClient::new("http://localhost:3333");
