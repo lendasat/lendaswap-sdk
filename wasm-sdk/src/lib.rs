@@ -52,15 +52,96 @@ use lendaswap_core::api as core_api;
 /// Initialize the WASM module.
 ///
 /// This sets up logging and panic hooks for better debugging.
+/// Log level can be configured via localStorage key "lendaswap_log_level".
+/// Valid values: "trace", "debug", "info", "warn", "error" (case-insensitive).
+/// Default is "warn" if not set or invalid.
 #[wasm_bindgen(start)]
 pub fn initialize() {
     // Set up panic hook for better error messages
     #[cfg(feature = "console_error_panic_hook")]
     console_error_panic_hook::set_once();
 
-    // Initialize logging
-    console_log::init_with_level(log::Level::Debug).ok();
-    log::info!("Lendaswap SDK initialized");
+    // Initialize logging with level from localStorage
+    let log_level = get_log_level_from_storage();
+    console_log::init_with_level(log_level).ok();
+    log::info!("Lendaswap SDK initialized with log level: {:?}", log_level);
+}
+
+/// Get log level from localStorage.
+/// Reads "lendaswap_log_level" key and parses it.
+/// Returns Warn if not set or invalid.
+fn get_log_level_from_storage() -> log::Level {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return log::Level::Warn,
+    };
+
+    let storage = match window.local_storage() {
+        Ok(Some(s)) => s,
+        _ => return log::Level::Warn,
+    };
+
+    let level_str = match storage.get_item("lendaswap_log_level") {
+        Ok(Some(s)) => s,
+        _ => return log::Level::Warn,
+    };
+
+    match level_str.to_lowercase().as_str() {
+        "trace" => log::Level::Trace,
+        "debug" => log::Level::Debug,
+        "info" => log::Level::Info,
+        "warn" => log::Level::Warn,
+        "error" => log::Level::Error,
+        _ => log::Level::Warn,
+    }
+}
+
+/// Set the log level at runtime.
+/// This updates localStorage and reinitializes the logger.
+///
+/// Valid values: "trace", "debug", "info", "warn", "error" (case-insensitive).
+#[wasm_bindgen(js_name = "setLogLevel")]
+pub fn set_log_level(level: &str) -> Result<(), JsValue> {
+    let log_level = match level.to_lowercase().as_str() {
+        "trace" => log::Level::Trace,
+        "debug" => log::Level::Debug,
+        "info" => log::Level::Info,
+        "warn" => log::Level::Warn,
+        "error" => log::Level::Error,
+        _ => {
+            return Err(JsValue::from_str(
+                "Invalid log level. Use: trace, debug, info, warn, error",
+            ));
+        }
+    };
+
+    // Store in localStorage for persistence
+    if let Some(window) = web_sys::window() {
+        if let Ok(Some(storage)) = window.local_storage() {
+            storage
+                .set_item("lendaswap_log_level", level)
+                .map_err(|e| JsValue::from_str(&format!("Failed to save log level: {:?}", e)))?;
+        }
+    }
+
+    // Update the max log level filter
+    log::set_max_level(log_level.to_level_filter());
+    log::info!("Log level changed to: {:?}", log_level);
+
+    Ok(())
+}
+
+/// Get the current log level.
+#[wasm_bindgen(js_name = "getLogLevel")]
+pub fn get_log_level() -> String {
+    match log::max_level() {
+        log::LevelFilter::Trace => "trace".to_string(),
+        log::LevelFilter::Debug => "debug".to_string(),
+        log::LevelFilter::Info => "info".to_string(),
+        log::LevelFilter::Warn => "warn".to_string(),
+        log::LevelFilter::Error => "error".to_string(),
+        log::LevelFilter::Off => "off".to_string(),
+    }
 }
 
 /// Serialize a value to JsValue as a plain object (not a Map).

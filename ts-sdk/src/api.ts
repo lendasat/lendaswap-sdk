@@ -10,6 +10,8 @@ import init, {
   JsSwapStorageProvider,
   JsWalletStorageProvider,
   Client as WasmClient,
+  setLogLevel as wasmSetLogLevel,
+  getLogLevel as wasmGetLogLevel,
 } from "../wasm/lendaswap_wasm_sdk.js";
 import type { VhtlcAmounts } from "./types.js";
 
@@ -668,4 +670,43 @@ export class Client {
   async deleteSwap(id: string): Promise<void> {
     return await this.client.deleteSwap(id);
   }
+}
+
+/**
+ * Log level type for SDK logging configuration.
+ */
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+
+/**
+ * Set the SDK log level.
+ *
+ * This configures the log level for all Rust/WASM code in the SDK.
+ * The level is persisted in localStorage under key "lendaswap_log_level",
+ * so it will be used on page reload.
+ *
+ * @param level - Log level: "trace", "debug", "info", "warn", "error"
+ *
+ * @example
+ * ```typescript
+ * import { setLogLevel } from '@lendasat/lendaswap-sdk';
+ *
+ * // Enable debug logging
+ * setLogLevel('debug');
+ *
+ * // Or set via localStorage directly (for debugging in browser console)
+ * localStorage.setItem('lendaswap_log_level', 'debug');
+ * // Then reload the page
+ * ```
+ */
+export function setLogLevel(level: LogLevel): void {
+  wasmSetLogLevel(level);
+}
+
+/**
+ * Get the current SDK log level.
+ *
+ * @returns Current log level
+ */
+export function getLogLevel(): LogLevel {
+  return wasmGetLogLevel() as LogLevel;
 }

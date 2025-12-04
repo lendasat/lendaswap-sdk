@@ -67,6 +67,10 @@ export {
   type SwapStatus,
   TokenId,
   type TokenIdString,
+  // Logging
+  type LogLevel,
+  setLogLevel,
+  getLogLevel,
 } from "./api.js";
 // Price feed
 export {

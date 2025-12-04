@@ -196,6 +196,7 @@ unsubscribe();
 - **Wallet Management** - HD wallet derivation for swap parameters
 - **Price Feed** - Real-time WebSocket price updates with auto-reconnection
 - **Storage Providers** - Dexie (IndexedDB) storage for wallet and swap data
+- **Configurable Logging** - Set log level via code or localStorage
 
 ## API Reference
 
@@ -295,10 +296,26 @@ priceFeed.listenerCount();
 unsubscribe();
 ```
 
+### Logging
+
+```typescript
+import { setLogLevel, getLogLevel } from '@lendasat/lendaswap-sdk';
+
+// Set log level programmatically
+setLogLevel('debug'); // 'trace' | 'debug' | 'info' | 'warn' | 'error'
+
+// Get current log level
+console.log('Current level:', getLogLevel());
+
+// Or set via localStorage (persists across page reloads)
+localStorage.setItem('lendaswap_log_level', 'debug');
+// Reload page for changes to take effect
+```
+
 ## Supported Tokens
 
 | Token | Chain     | ID              |
-|-------|-----------|-----------------|
+| ----- | --------- | --------------- |
 | BTC   | Lightning | `btc_lightning` |
 | BTC   | Arkade    | `btc_arkade`    |
 | USDC  | Polygon   | `usdc_pol`      |
