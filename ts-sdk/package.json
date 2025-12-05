@@ -1,5 +1,5 @@
 {
-  "name": "@lendasat/lendaswap-sdk",
+  "name": "@lendaswap/sdk",
   "version": "0.1.1",
   "description": "Lendaswap Client SDK for TypeScript/JavaScript",
   "type": "module",
