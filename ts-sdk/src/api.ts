@@ -89,7 +89,8 @@ export type TokenIdString =
   | "usdc_pol"
   | "usdt0_pol"
   | "usdc_eth"
-  | "usdt_eth";
+  | "usdt_eth"
+  | "xaut_eth";
 
 /**
  * Blockchain network.
