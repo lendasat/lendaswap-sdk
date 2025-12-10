@@ -6,7 +6,6 @@
 use crate::SwapParams;
 use crate::error::{Error, Result};
 use crate::types::{Network, SwapData, VhtlcAmounts};
-use ark_rs::core::ArkAddress;
 use ark_rs::core::VTXO_CONDITION_KEY;
 use ark_rs::core::send::{
     OffchainTransactions, VtxoInput, build_offchain_transactions, sign_ark_transaction,
@@ -14,6 +13,7 @@ use ark_rs::core::send::{
 };
 use ark_rs::core::server::{GetVtxosRequest, parse_sequence_number};
 use ark_rs::core::vhtlc::{VhtlcOptions, VhtlcScript};
+use ark_rs::core::{ArkAddress, VtxoList};
 use bitcoin::absolute::LockTime;
 use bitcoin::consensus::Encodable;
 use bitcoin::hashes::Hash;
@@ -97,11 +97,12 @@ pub async fn claim(
         .map_err(|e| Error::Arkade(format!("Failed to get server info: {}", e)))?;
 
     // Fetch VTXOs
-    let request = GetVtxosRequest::new_for_addresses(&[vhtlc_address]);
-    let list = rest_client
+    let request = GetVtxosRequest::new_for_addresses(std::iter::once(vhtlc_address));
+    let virtual_tx_outpoints = rest_client
         .list_vtxos(request)
         .await
         .map_err(|e| Error::Arkade(format!("Failed to fetch VTXOs: {}", e)))?;
+    let vtxo_list = VtxoList::new(server_info.dust, virtual_tx_outpoints);
 
     let spend_info = vhtlc.taproot_spend_info();
     let script_ver = (vhtlc.claim_script(), LeafVersion::TapScript);
@@ -109,9 +110,8 @@ pub async fn claim(
         .control_block(&script_ver)
         .ok_or_else(|| Error::Vhtlc("Missing control block".into()))?;
 
-    let total_amount = list
-        .spendable()
-        .iter()
+    let total_amount = vtxo_list
+        .spendable_offchain()
         .fold(Amount::ZERO, |acc, x| acc + x.amount);
 
     if total_amount == Amount::ZERO {
@@ -121,9 +121,8 @@ pub async fn claim(
     let script_pubkey = vhtlc.script_pubkey();
     let tapscripts = vhtlc.tapscripts();
 
-    let vhtlc_inputs: Vec<VtxoInput> = list
-        .spendable()
-        .iter()
+    let vhtlc_inputs: Vec<VtxoInput> = vtxo_list
+        .spendable_offchain()
         .map(|v| {
             VtxoInput::new(
                 script_ver.0.clone(),
@@ -146,33 +145,35 @@ pub async fn claim(
         .map_err(|e| Error::Vhtlc(format!("Failed to build offchain TXs: {}", e)))?;
 
     // Sign function that adds preimage witness
-    let sign_fn =
-        |input: &mut psbt::Input,
-         msg: secp256k1::Message|
-         -> std::result::Result<(schnorr::Signature, XOnlyPublicKey), ark_rs::core::Error> {
-            // Add preimage to PSBT input
-            {
-                let mut bytes = vec![1]; // One witness element
-                let length = VarInt::from(preimage.len() as u64);
-                length
-                    .consensus_encode(&mut bytes)
-                    .expect("valid length encoding");
-                bytes.extend_from_slice(&preimage);
+    let sign_fn = |input: &mut psbt::Input,
+                   msg: secp256k1::Message|
+     -> std::result::Result<
+        Vec<(schnorr::Signature, XOnlyPublicKey)>,
+        ark_rs::core::Error,
+    > {
+        // Add preimage to PSBT input
+        {
+            let mut bytes = vec![1]; // One witness element
+            let length = VarInt::from(preimage.len() as u64);
+            length
+                .consensus_encode(&mut bytes)
+                .expect("valid length encoding");
+            bytes.extend_from_slice(&preimage);
 
-                input.unknown.insert(
-                    psbt::raw::Key {
-                        type_value: 222,
-                        key: VTXO_CONDITION_KEY.to_vec(),
-                    },
-                    bytes,
-                );
-            }
+            input.unknown.insert(
+                psbt::raw::Key {
+                    type_value: 222,
+                    key: VTXO_CONDITION_KEY.to_vec(),
+                },
+                bytes,
+            );
+        }
 
-            let sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &own_kp);
-            let pk = own_kp.public_key().into();
+        let sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &own_kp);
+        let pk = own_kp.public_key().into();
 
-            Ok((sig, pk))
-        };
+        Ok(vec![(sig, pk)])
+    };
 
     sign_ark_transaction(sign_fn, &mut ark_tx, 0)
         .map_err(|e| Error::Vhtlc(format!("Failed to sign ark transaction: {}", e)))?;
@@ -274,11 +275,12 @@ pub async fn refund(
         .map_err(|e| Error::Arkade(format!("Failed to get server info: {}", e)))?;
 
     // Fetch VTXOs
-    let request = GetVtxosRequest::new_for_addresses(&[vhtlc_address]);
-    let list = rest_client
+    let request = GetVtxosRequest::new_for_addresses(std::iter::once(vhtlc_address));
+    let virtual_tx_outpoints = rest_client
         .list_vtxos(request)
         .await
         .map_err(|e| Error::Arkade(format!("Failed to fetch VTXOs: {}", e)))?;
+    let vtxo_list = VtxoList::new(server_info.dust, virtual_tx_outpoints);
 
     let spend_info = vhtlc.taproot_spend_info();
     let script_ver = (
@@ -289,9 +291,8 @@ pub async fn refund(
         .control_block(&script_ver)
         .ok_or_else(|| Error::Vhtlc("Missing control block".into()))?;
 
-    let total_amount = list
-        .spendable()
-        .iter()
+    let total_amount = vtxo_list
+        .spendable_offchain()
         .fold(Amount::ZERO, |acc, x| acc + x.amount);
 
     if total_amount == Amount::ZERO {
@@ -302,9 +303,8 @@ pub async fn refund(
     let tapscripts = vhtlc.tapscripts();
 
     let refund_locktime = swap_data.refund_locktime;
-    let vhtlc_inputs: std::result::Result<Vec<VtxoInput>, Error> = list
-        .spendable()
-        .iter()
+    let vhtlc_inputs: std::result::Result<Vec<VtxoInput>, Error> = vtxo_list
+        .spendable_offchain()
         .map(|v| {
             let locktime = LockTime::from_time(refund_locktime)
                 .map_err(|e| Error::Vhtlc(format!("Invalid locktime: {}", e)))?;
@@ -330,15 +330,17 @@ pub async fn refund(
         .map_err(|e| Error::Vhtlc(format!("Failed to build offchain TXs: {}", e)))?;
 
     // Sign function (no preimage needed for refund)
-    let sign_fn =
-        |_: &mut psbt::Input,
-         msg: secp256k1::Message|
-         -> std::result::Result<(schnorr::Signature, XOnlyPublicKey), ark_rs::core::Error> {
-            let sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &own_kp);
-            let pk = own_kp.public_key().into();
+    let sign_fn = |_: &mut psbt::Input,
+                   msg: secp256k1::Message|
+     -> std::result::Result<
+        Vec<(schnorr::Signature, XOnlyPublicKey)>,
+        ark_rs::core::Error,
+    > {
+        let sig = Secp256k1::new().sign_schnorr_no_aux_rand(&msg, &own_kp);
+        let pk = own_kp.public_key().into();
 
-            Ok((sig, pk))
-        };
+        Ok(vec![(sig, pk)])
+    };
 
     sign_ark_transaction(sign_fn, &mut ark_tx, 0)
         .map_err(|e| Error::Vhtlc(format!("Failed to sign ark transaction: {}", e)))?;
@@ -370,32 +372,34 @@ pub async fn refund(
 ///
 /// Queries the Arkade server for the current state of the VHTLC.
 pub async fn amounts(ark_server_url: &str, swap_data: SwapData) -> Result<VhtlcAmounts> {
+    let server_info = ark_rest::Client::new(ark_server_url.to_string())
+        .get_info()
+        .await
+        .map_err(|e| Error::Arkade(format!("Failed to get Arkade server info: {}", e)))?;
+
     let vhtlc_address = ArkAddress::decode(&swap_data.vhtlc_address)
         .map_err(|e| Error::Parse(format!("Invalid VHTLC address: {}", e)))?;
 
-    let request = GetVtxosRequest::new_for_addresses(&[vhtlc_address]);
-
-    let list = ark_rest::Client::new(ark_server_url.to_string())
+    let request = GetVtxosRequest::new_for_addresses(std::iter::once(vhtlc_address));
+    let virtual_tx_outpoints = ark_rest::Client::new(ark_server_url.to_string())
         .list_vtxos(request)
         .await
         .map_err(|e| Error::Arkade(format!("Failed to fetch VTXOs: {}", e)))?;
+    let vtxo_list = VtxoList::new(server_info.dust, virtual_tx_outpoints);
 
-    let all = list.all();
-
-    let spendable = all
-        .iter()
-        .filter(|v| !v.is_spent && !v.is_recoverable())
+    let spendable = vtxo_list
+        .spendable_offchain()
         .fold(Amount::ZERO, |acc, v| acc + v.amount);
 
-    let spent = all
-        .iter()
-        .filter(|v| v.is_spent)
+    let spent = vtxo_list
+        .spent()
         .fold(Amount::ZERO, |acc, v| acc + v.amount);
 
-    let recoverable = all
-        .iter()
-        .filter(|v| v.is_recoverable())
+    let recoverable = vtxo_list
+        .recoverable()
         .fold(Amount::ZERO, |acc, v| acc + v.amount);
+
+    // TODO: We could add more info now e.g. expired.
 
     Ok(VhtlcAmounts {
         spendable: spendable.to_sat(),
