@@ -19,26 +19,6 @@ pub enum TokenId {
 }
 
 impl TokenId {
-    /// Create a USDC on Polygon token ID.
-    pub fn usdc_pol() -> Self {
-        TokenId::Coin("usdc_pol".to_string())
-    }
-
-    /// Create a USDT0 on Polygon token ID.
-    pub fn usdt0_pol() -> Self {
-        TokenId::Coin("usdt0_pol".to_string())
-    }
-
-    /// Create a USDC on Ethereum token ID.
-    pub fn usdc_eth() -> Self {
-        TokenId::Coin("usdc_eth".to_string())
-    }
-
-    /// Create a USDT on Ethereum token ID.
-    pub fn usdt_eth() -> Self {
-        TokenId::Coin("usdt_eth".to_string())
-    }
-
     /// Get the string representation of the token ID.
     pub fn as_str(&self) -> &str {
         match self {
@@ -87,13 +67,17 @@ pub struct PriceResponse {
     pub usd_per_btc: f64,
 }
 
-/// Price tiers for different USD amounts.
+/// Price tiers for different quote asset amounts.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PriceTiers {
-    pub usd_1: f64,
-    pub usd_100: f64,
-    pub usd_1000: f64,
-    pub usd_5000: f64,
+    /// Price per BTC when swapping 1 unit of the quote asset
+    pub tier_1: f64,
+    /// Price per BTC when swapping 100 units of the quote asset
+    pub tier_100: f64,
+    /// Price per BTC when swapping 1,000 units of the quote asset
+    pub tier_1000: f64,
+    /// Price per BTC when swapping 5,000 units of the quote asset
+    pub tier_5000: f64,
 }
 
 /// Trading pair prices with tiers.
@@ -305,8 +289,8 @@ pub struct SwapCommonFields {
     pub hash_lock: String,
     /// Protocol fee amount in satoshis
     pub fee_sats: i64,
-    /// USD amount for the swap
-    pub usd_amount: f64,
+    /// Asset amount for the swap, i.e. for EVM-to-BTC it's the EVM's asset's amount
+    pub asset_amount: f64,
     /// Client's public key (refund_pk or claim_pk)
     pub sender_pk: String,
     /// Lendaswap's public key

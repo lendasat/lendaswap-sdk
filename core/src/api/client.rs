@@ -89,7 +89,6 @@ impl ApiClient {
         target_network: EvmChain,
     ) -> Result<BtcToEvmSwapResponse> {
         let url = format!("{}/swap/arkade/{}", self.base_url, target_network);
-        dbg!(&url);
         self.post_json(&url, request).await
     }
 
@@ -240,7 +239,7 @@ pub mod tests {
         client
             .get_quote(&QuoteRequest {
                 from: TokenId::BtcLightning,
-                to: TokenId::usdc_eth(),
+                to: TokenId::Coin("USDC_ETH".to_string()),
                 base_amount: 10000,
             })
             .await

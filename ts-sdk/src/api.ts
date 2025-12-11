@@ -9,9 +9,12 @@
 import init, {
   JsSwapStorageProvider,
   JsWalletStorageProvider,
+  TokenInfo as WasmTokenInfo,
+  AssetPair as WasmAssetPair,
+  Chain as WasmChain,
   Client as WasmClient,
-  setLogLevel as wasmSetLogLevel,
   getLogLevel as wasmGetLogLevel,
+  setLogLevel as wasmSetLogLevel,
 } from "../wasm/lendaswap_wasm_sdk.js";
 import type { VhtlcAmounts } from "./types.js";
 
@@ -81,7 +84,9 @@ export {
 } from "../wasm/lendaswap_wasm_sdk.js";
 
 /**
- * Token identifier for supported assets.
+ * Known token identifiers.
+ * Add new tokens here as they become supported.
+ * Uses (string & {}) to allow unknown tokens while preserving autocomplete.
  */
 export type TokenIdString =
   | "btc_lightning"
@@ -90,19 +95,26 @@ export type TokenIdString =
   | "usdt0_pol"
   | "usdc_eth"
   | "usdt_eth"
-  | "xaut_eth";
+  | "xaut_eth"
+  | "pol_pol"
+  | (string & {});
 
 /**
  * Blockchain network.
+ * Uses (string & {}) to allow unknown chains while preserving autocomplete.
  */
-export type Chain = "Bitcoin" | "Polygon" | "Ethereum" | "Lightning" | "Arkade";
+export type Chain =
+  | "Arkade"
+  | "Lightning"
+  | "Polygon"
+  | "Ethereum"
+  | (string & {});
 
 /**
- * Token information returned from the API.
- * Note: serde serializes with snake_case, so we use snake_case here.
+ * Token information with typed token ID.
  */
 export interface TokenInfo {
-  token_id: TokenIdString;
+  tokenId: TokenIdString;
   symbol: string;
   chain: Chain;
   name: string;
@@ -110,11 +122,52 @@ export interface TokenInfo {
 }
 
 /**
- * Asset pair for trading.
+ * Asset pair with typed token info.
  */
 export interface AssetPair {
   source: TokenInfo;
   target: TokenInfo;
+}
+
+/**
+ * Map WASM Chain enum to our Chain type.
+ */
+function mapChain(wasmChain: WasmChain): Chain {
+  switch (wasmChain) {
+    case WasmChain.Arkade:
+      return "Arkade";
+    case WasmChain.Lightning:
+      return "Lightning";
+    case WasmChain.Polygon:
+      return "Polygon";
+    case WasmChain.Ethereum:
+      return "Ethereum";
+    default:
+      return String(wasmChain);
+  }
+}
+
+/**
+ * Map WASM TokenInfo to our typed TokenInfo.
+ */
+function mapTokenInfo(wasmToken: WasmTokenInfo): TokenInfo {
+  return {
+    tokenId: wasmToken.tokenId as TokenIdString,
+    symbol: wasmToken.symbol,
+    chain: mapChain(wasmToken.chain),
+    name: wasmToken.name,
+    decimals: wasmToken.decimals,
+  };
+}
+
+/**
+ * Map WASM AssetPair to our typed AssetPair.
+ */
+function mapAssetPair(wasmPair: WasmAssetPair): AssetPair {
+  return {
+    source: mapTokenInfo(wasmPair.source),
+    target: mapTokenInfo(wasmPair.target),
+  };
 }
 
 /**
@@ -145,7 +198,7 @@ export interface SwapCommonFields {
   status: SwapStatus;
   hash_lock: string;
   fee_sats: number;
-  usd_amount: number;
+  asset_amount: number;
   sender_pk: string;
   receiver_pk: string;
   server_pk: string;
@@ -535,8 +588,14 @@ export class Client {
     return { ...obj, direction: "evm_to_btc" };
   }
 
-  async getAssetPairs() {
-    return (await this.client.getAssetPairs()) as AssetPair[];
+  async getAssetPairs(): Promise<AssetPair[]> {
+    const wasmPairs = await this.client.getAssetPairs();
+    return wasmPairs.map(mapAssetPair);
+  }
+
+  async getTokens(): Promise<TokenInfo[]> {
+    const wasmTokens = await this.client.getTokens();
+    return wasmTokens.map(mapTokenInfo);
   }
 
   /**

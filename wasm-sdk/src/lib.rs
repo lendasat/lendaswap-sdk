@@ -162,36 +162,6 @@ pub struct TokenId(core_api::TokenId);
 
 #[wasm_bindgen]
 impl TokenId {
-    #[wasm_bindgen(js_name = "btcLightning")]
-    pub fn btc_lightning() -> TokenId {
-        TokenId(core_api::TokenId::BtcLightning)
-    }
-
-    #[wasm_bindgen(js_name = "btcArkade")]
-    pub fn btc_arkade() -> TokenId {
-        TokenId(core_api::TokenId::BtcArkade)
-    }
-
-    #[wasm_bindgen(js_name = "usdcPol")]
-    pub fn usdc_pol() -> TokenId {
-        TokenId(core_api::TokenId::usdc_pol())
-    }
-
-    #[wasm_bindgen(js_name = "usdt0Pol")]
-    pub fn usdt0_pol() -> TokenId {
-        TokenId(core_api::TokenId::usdt0_pol())
-    }
-
-    #[wasm_bindgen(js_name = "usdcEth")]
-    pub fn usdc_eth() -> TokenId {
-        TokenId(core_api::TokenId::usdc_eth())
-    }
-
-    #[wasm_bindgen(js_name = "usdtEth")]
-    pub fn usdt_eth() -> TokenId {
-        TokenId(core_api::TokenId::usdt_eth())
-    }
-
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_js_string(&self) -> String {
         self.0.to_string()

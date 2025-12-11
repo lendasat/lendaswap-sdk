@@ -202,7 +202,7 @@ async fn test_get_quote() {
 
     let request = QuoteRequest {
         from: TokenId::BtcArkade,
-        to: TokenId::usdc_pol(),
+        to: TokenId::Coin("USDC_POL".to_string()),
         base_amount: 100_000, // 100,000 sats
     };
 

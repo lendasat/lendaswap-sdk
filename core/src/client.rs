@@ -1,7 +1,7 @@
 use crate::api::{
     AssetPair, BtcToEvmSwapResponse, EvmChain, EvmToArkadeSwapRequest, EvmToBtcSwapResponse,
     EvmToLightningSwapRequest, GetSwapResponse, QuoteRequest, QuoteResponse, SwapRequest, TokenId,
-    Version,
+    TokenInfo, Version,
 };
 use crate::storage::{SwapStorage, WalletStorage};
 use crate::types::SwapData;
@@ -194,6 +194,11 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
     pub async fn get_asset_pairs(&self) -> crate::Result<Vec<AssetPair>> {
         let asset_pairs = self.api_client.get_asset_pairs().await?;
         Ok(asset_pairs)
+    }
+
+    pub async fn get_tokens(&self) -> crate::Result<Vec<TokenInfo>> {
+        let tokens = self.api_client.get_tokens().await?;
+        Ok(tokens)
     }
 
     /// Get swap details by ID.

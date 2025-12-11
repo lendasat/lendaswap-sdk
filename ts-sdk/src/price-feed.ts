@@ -21,18 +21,18 @@
  */
 
 /**
- * Price tiers for different USD amounts.
- * Different rates apply based on swap volume.
+ * Price tiers for different quote asset amounts.
+ * Different rates apply based on swap volume (in units of the quote asset).
  */
 export interface PriceTiers {
-  /** Rate for amounts < $100 */
-  usd_1: number;
-  /** Rate for amounts $100-$999 */
-  usd_100: number;
-  /** Rate for amounts $1000-$4999 */
-  usd_1000: number;
-  /** Rate for amounts >= $5000 */
-  usd_5000: number;
+  /** Rate when swapping 1 unit of the quote asset */
+  tier_1: number;
+  /** Rate when swapping 100 units of the quote asset */
+  tier_100: number;
+  /** Rate when swapping 1,000 units of the quote asset */
+  tier_1000: number;
+  /** Rate when swapping 5,000 units of the quote asset */
+  tier_5000: number;
 }
 
 /**

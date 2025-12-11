@@ -59,20 +59,18 @@ export {
   type GelatoSubmitRequest,
   type GelatoSubmitResponse,
   type GetSwapResponse,
+  getLogLevel,
+  type LogLevel,
   type QuoteRequest,
   type RecoveredSwap,
   type RecoverSwapsResponse,
   type SwapCommonFields,
   type SwapRequest,
   type SwapStatus,
+  setLogLevel,
   TokenId,
   type TokenIdString,
-  // Logging
-  type LogLevel,
-  setLogLevel,
-  getLogLevel,
 } from "./api.js";
-// Price feed
 export {
   PriceFeedService,
   type PriceTiers,
@@ -90,5 +88,4 @@ export {
   DexieWalletStorageProvider,
   STORAGE_KEYS,
 } from "./storage/index.js";
-// Types
 export type { Network, SwapData, SwapParams, VhtlcAmounts } from "./types.js";

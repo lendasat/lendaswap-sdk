@@ -175,10 +175,10 @@ const unsubscribe = priceFeed.subscribe((update) => {
 
   for (const pair of update.pairs) {
     console.log(`${pair.pair}:`);
-    console.log(`  < $100:   ${pair.tiers.usd_1}`);
-    console.log(`  $100-999: ${pair.tiers.usd_100}`);
-    console.log(`  $1k-5k:   ${pair.tiers.usd_1000}`);
-    console.log(`  > $5k:    ${pair.tiers.usd_5000}`);
+    console.log(`  1 unit:      ${pair.tiers.tier_1}`);
+    console.log(`  100 units:   ${pair.tiers.tier_100}`);
+    console.log(`  1,000 units: ${pair.tiers.tier_1000}`);
+    console.log(`  5,000 units: ${pair.tiers.tier_5000}`);
   }
 });
 

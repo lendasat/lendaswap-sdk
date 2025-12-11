@@ -12,6 +12,67 @@ use rust_decimal::prelude::FromPrimitive;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::prelude::wasm_bindgen;
 
+/// Chain type for token information.
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy)]
+pub enum Chain {
+    Arkade,
+    Lightning,
+    Polygon,
+    Ethereum,
+}
+
+impl From<core_api::Chain> for Chain {
+    fn from(c: core_api::Chain) -> Self {
+        match c {
+            core_api::Chain::Arkade => Chain::Arkade,
+            core_api::Chain::Lightning => Chain::Lightning,
+            core_api::Chain::Polygon => Chain::Polygon,
+            core_api::Chain::Ethereum => Chain::Ethereum,
+        }
+    }
+}
+
+/// Token information.
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct TokenInfo {
+    #[wasm_bindgen(js_name = "tokenId")]
+    pub token_id: String,
+    pub symbol: String,
+    pub chain: Chain,
+    pub name: String,
+    pub decimals: u8,
+}
+
+impl From<core_api::TokenInfo> for TokenInfo {
+    fn from(t: core_api::TokenInfo) -> Self {
+        TokenInfo {
+            token_id: t.token_id.to_string(),
+            symbol: t.symbol,
+            chain: t.chain.into(),
+            name: t.name,
+            decimals: t.decimals,
+        }
+    }
+}
+/// Token information.
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct AssetPair {
+    pub source: TokenInfo,
+    pub target: TokenInfo,
+}
+
+impl From<core_api::AssetPair> for AssetPair {
+    fn from(t: core_api::AssetPair) -> Self {
+        AssetPair {
+            source: t.source.into(),
+            target: t.target.into(),
+        }
+    }
+}
+
 /// Quote response from the API.
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone)]
@@ -210,14 +271,28 @@ impl Client {
     }
 
     #[wasm_bindgen(js_name = "getAssetPairs")]
-    pub async fn get_asset_pairs(&self) -> Result<JsValue, JsValue> {
+    pub async fn get_asset_pairs(&self) -> Result<Vec<AssetPair>, JsValue> {
         let pairs = self
             .inner
             .get_asset_pairs()
             .await
             .map_err(|e| JsValue::from_str(&format!("{:#}", e)))?;
 
-        to_js_value(&pairs)
+        let pairs: Vec<AssetPair> = pairs.into_iter().map(|t| t.into()).collect();
+
+        Ok(pairs)
+    }
+
+    #[wasm_bindgen(js_name = "getTokens")]
+    pub async fn get_tokens(&self) -> Result<Vec<TokenInfo>, JsValue> {
+        let tokens = self
+            .inner
+            .get_tokens()
+            .await
+            .map_err(|e| JsValue::from_str(&format!("{:#}", e)))?;
+
+        let tokens: Vec<TokenInfo> = tokens.into_iter().map(|t| t.into()).collect();
+        Ok(tokens)
     }
 
     /// Get a quote.
