@@ -89,3 +89,11 @@ export {
   STORAGE_KEYS,
 } from "./storage/index.js";
 export type { Network, SwapData, SwapParams, VhtlcAmounts } from "./types.js";
+export {
+  type GetUsdPriceOptions,
+  getCoinGeckoId,
+  getSupportedTokensForUsdPrice,
+  getUsdPrice,
+  getUsdPrices,
+  type UsdPriceResult,
+} from "./usd-price.js";
