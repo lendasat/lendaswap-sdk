@@ -96,7 +96,6 @@ export type TokenIdString =
   | "usdc_eth"
   | "usdt_eth"
   | "xaut_eth"
-  | "pol_pol"
   | (string & {});
 
 /**
