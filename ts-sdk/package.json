@@ -1,6 +1,6 @@
 {
   "name": "@lendasat/lendaswap-sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Lendaswap Client SDK for TypeScript/JavaScript",
   "type": "module",
   "main": "dist/index.js",
@@ -49,8 +49,8 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lendasat/lendaswap.git",
-    "directory": "client-sdk/ts-sdk"
+    "url": "https://github.com/lendasat/lendaswap-sdk.git",
+    "directory": "ts-sdk"
   },
   "publishConfig": {
     "access": "public"
