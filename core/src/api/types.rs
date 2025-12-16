@@ -538,3 +538,116 @@ pub struct RecoverSwapsResponse {
 pub struct ApiError {
     pub error: String,
 }
+
+// ============================================================================
+// VTXO Swap Types
+// ============================================================================
+
+/// VTXO swap status for BTC-to-BTC (Arkade refresh) swaps.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum VtxoSwapStatus {
+    /// Initial state. Waiting for client to fund their VHTLC.
+    Pending,
+    /// Client has funded their VHTLC. Server should fund now.
+    ClientFunded,
+    /// Server has funded their VHTLC. Client can claim.
+    ServerFunded,
+    /// Client has claimed server's VHTLC (preimage revealed).
+    ClientRedeemed,
+    /// Server has claimed client's VHTLC. Swap complete.
+    ServerRedeemed,
+    /// Client refunded before server funded.
+    ClientRefunded,
+    /// Server refunded after timeout (client funded but didn't claim).
+    ClientFundedServerRefunded,
+    /// Swap expired (no client funding).
+    Expired,
+}
+
+/// Request to estimate VTXO swap fee.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EstimateVtxoSwapRequest {
+    /// List of VTXO outpoints to refresh ("txid:vout" format)
+    pub vtxos: Vec<String>,
+}
+
+/// Response from VTXO swap estimation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EstimateVtxoSwapResponse {
+    /// Total fee in satoshis
+    pub fee_sats: i64,
+    /// Total input amount in satoshis
+    pub total_input_sats: i64,
+    /// Amount user will receive (total_input_sats - fee_sats)
+    pub output_sats: i64,
+    /// Number of VTXOs being refreshed
+    pub vtxo_count: usize,
+}
+
+/// Request to create a VTXO swap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateVtxoSwapRequest {
+    /// List of VTXO outpoints to refresh
+    pub vtxos: Vec<String>,
+    /// SHA256(preimage) - client generates the secret
+    pub preimage_hash: String,
+    /// Client's public key for the VHTLC
+    pub client_pk: String,
+    /// User ID for recovery purposes
+    pub user_id: String,
+}
+
+/// Response from creating/getting a VTXO swap.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VtxoSwapResponse {
+    /// Swap ID
+    pub id: Uuid,
+    /// Swap status
+    pub status: VtxoSwapStatus,
+    /// Creation timestamp
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+
+    // Client VHTLC params (client funds this first)
+    /// Client's VHTLC address
+    pub client_vhtlc_address: String,
+    /// Amount client should fund in satoshis
+    pub client_fund_amount_sats: i64,
+    /// Client's public key
+    pub client_pk: String,
+    /// Client VHTLC locktime (Unix timestamp)
+    pub client_locktime: u64,
+    /// Client claim delay in seconds
+    pub client_unilateral_claim_delay: i64,
+    /// Client refund delay in seconds
+    pub client_unilateral_refund_delay: i64,
+    /// Client refund without receiver delay in seconds
+    pub client_unilateral_refund_without_receiver_delay: i64,
+
+    // Server VHTLC params (server funds after client)
+    /// Server's VHTLC address
+    pub server_vhtlc_address: String,
+    /// Amount server will fund in satoshis
+    pub server_fund_amount_sats: i64,
+    /// Server's public key
+    pub server_pk: String,
+    /// Server VHTLC locktime (Unix timestamp)
+    pub server_locktime: u64,
+    /// Server claim delay in seconds
+    pub server_unilateral_claim_delay: i64,
+    /// Server refund delay in seconds
+    pub server_unilateral_refund_delay: i64,
+    /// Server refund without receiver delay in seconds
+    pub server_unilateral_refund_without_receiver_delay: i64,
+
+    // Common params
+    /// Arkade server's public key
+    pub arkade_server_pk: String,
+    /// The preimage hash (SHA256)
+    pub preimage_hash: String,
+    /// Fee in satoshis
+    pub fee_sats: i64,
+    /// Bitcoin network
+    pub network: String,
+}

@@ -28,10 +28,11 @@ pub mod hd_wallet;
 pub mod storage;
 pub mod types;
 pub mod vhtlc;
+pub mod vtxo_swap;
 pub mod wallet;
 
 pub use api::ApiClient;
-pub use client::{Client, ExtendedSwapStorageData};
+pub use client::{Client, ExtendedSwapStorageData, ExtendedVtxoSwapStorageData};
 pub use error::{Error, Result};
 pub use hd_wallet::HdWallet;
 pub use storage::{StorageFuture, SwapStorage, WalletStorage, WalletStorageExt};

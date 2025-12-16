@@ -1,11 +1,11 @@
 use crate::api::{
-    AssetPair, BtcToEvmSwapResponse, EvmChain, EvmToArkadeSwapRequest, EvmToBtcSwapResponse,
-    EvmToLightningSwapRequest, GetSwapResponse, QuoteRequest, QuoteResponse, SwapRequest, TokenId,
-    TokenInfo, Version,
+    AssetPair, BtcToEvmSwapResponse, CreateVtxoSwapRequest, EstimateVtxoSwapResponse, EvmChain,
+    EvmToArkadeSwapRequest, EvmToBtcSwapResponse, EvmToLightningSwapRequest, GetSwapResponse,
+    QuoteRequest, QuoteResponse, SwapRequest, TokenId, TokenInfo, Version, VtxoSwapResponse,
 };
 use crate::storage::{SwapStorage, WalletStorage};
 use crate::types::SwapData;
-use crate::{ApiClient, Network, SwapParams, VhtlcAmounts, Wallet, vhtlc};
+use crate::{ApiClient, Network, SwapParams, VhtlcAmounts, Wallet, vhtlc, vtxo_swap};
 use ark_rs::core::ArkAddress;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,15 @@ pub struct ExtendedSwapStorageData {
     pub response: GetSwapResponse,
     /// Client-side swap parameters (keys, preimage, etc.).
     /// Sometimes not relevant, e.g. for evm-to-lightning swaps.
+    pub swap_params: SwapParams,
+}
+
+/// Extended VTXO swap data that combines the API response with client-side swap parameters.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExtendedVtxoSwapStorageData {
+    /// The VTXO swap response from the API.
+    pub response: VtxoSwapResponse,
+    /// Client-side swap parameters (keys, preimage, etc.).
     pub swap_params: SwapParams,
 }
 
@@ -442,5 +451,116 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
     pub async fn delete_swap(&self, id: String) -> crate::Result<()> {
         self.swap_storage.delete(&id).await?;
         Ok(())
+    }
+
+    // =========================================================================
+    // VTXO Swap Methods
+    // =========================================================================
+
+    /// Estimate the fee for a VTXO swap.
+    ///
+    /// # Arguments
+    /// * `vtxos` - List of VTXO outpoints to refresh ("txid:vout" format)
+    pub async fn estimate_vtxo_swap(
+        &self,
+        vtxos: Vec<String>,
+    ) -> crate::Result<EstimateVtxoSwapResponse> {
+        let response = self.api_client.estimate_vtxo_swap(vtxos).await?;
+        Ok(response)
+    }
+
+    /// Create a VTXO swap for refreshing VTXOs.
+    ///
+    /// This creates a swap where the client will fund their VHTLC first,
+    /// then the server funds their VHTLC, and the client claims the server's
+    /// VHTLC to complete the swap.
+    ///
+    /// # Arguments
+    /// * `vtxos` - List of VTXO outpoints to refresh ("txid:vout" format)
+    pub async fn create_vtxo_swap(
+        &self,
+        vtxos: Vec<String>,
+    ) -> crate::Result<(VtxoSwapResponse, SwapParams)> {
+        let swap_params = self.wallet.derive_swap_params().await?;
+
+        let request = CreateVtxoSwapRequest {
+            vtxos,
+            preimage_hash: format!("0x{}", hex::encode(swap_params.preimage_hash)),
+            client_pk: hex::encode(swap_params.public_key.serialize()),
+            user_id: hex::encode(swap_params.user_id.serialize()),
+        };
+
+        let response = self.api_client.create_vtxo_swap(&request).await?;
+
+        let swap_id = response.id.to_string();
+        log::info!("Created VTXO swap {}", swap_id);
+
+        Ok((response, swap_params))
+    }
+
+    /// Get VTXO swap details by ID.
+    pub async fn get_vtxo_swap(&self, id: &str) -> crate::Result<VtxoSwapResponse> {
+        let response = self.api_client.get_vtxo_swap(id).await?;
+        Ok(response)
+    }
+
+    /// Claim the server's VHTLC in a VTXO swap.
+    ///
+    /// This should be called after the server has funded their VHTLC.
+    /// The client reveals the preimage to claim the fresh VTXOs.
+    ///
+    /// # Arguments
+    /// * `swap` - The VTXO swap response
+    /// * `swap_params` - The client's swap parameters (containing preimage)
+    /// * `claim_address` - The Arkade address to receive the claimed funds
+    pub async fn claim_vtxo_swap(
+        &self,
+        swap: &VtxoSwapResponse,
+        swap_params: SwapParams,
+        claim_address: &str,
+    ) -> crate::Result<String> {
+        let claim_ark_address = ArkAddress::from_str(claim_address)
+            .map_err(|e| crate::Error::Parse(format!("Invalid claim ark address: {}", e)))?;
+
+        let txid = vtxo_swap::claim_server_vhtlc(
+            &self.arkade_url,
+            claim_ark_address,
+            swap,
+            swap_params,
+            self.wallet.network(),
+        )
+        .await?;
+
+        Ok(txid.to_string())
+    }
+
+    /// Refund the client's VHTLC in a VTXO swap.
+    ///
+    /// This can be called if the swap fails (e.g., server doesn't fund)
+    /// and the client's locktime has expired.
+    ///
+    /// # Arguments
+    /// * `swap` - The VTXO swap response
+    /// * `swap_params` - The client's swap parameters
+    /// * `refund_address` - The Arkade address to receive the refunded funds
+    pub async fn refund_vtxo_swap(
+        &self,
+        swap: &VtxoSwapResponse,
+        swap_params: SwapParams,
+        refund_address: &str,
+    ) -> crate::Result<String> {
+        let refund_ark_address = ArkAddress::from_str(refund_address)
+            .map_err(|e| crate::Error::Parse(format!("Invalid refund ark address: {}", e)))?;
+
+        let txid = vtxo_swap::refund_client_vhtlc(
+            &self.arkade_url,
+            refund_ark_address,
+            swap,
+            swap_params,
+            self.wallet.network(),
+        )
+        .await?;
+
+        Ok(txid.to_string())
     }
 }

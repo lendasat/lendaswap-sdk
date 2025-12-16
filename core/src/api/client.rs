@@ -160,6 +160,38 @@ impl ApiClient {
         self.post_json(&url, &request).await
     }
 
+    // =========================================================================
+    // VTXO Swap API
+    // =========================================================================
+
+    /// Estimate the fee for a VTXO swap.
+    ///
+    /// # Arguments
+    /// * `vtxos` - List of VTXO outpoints to refresh ("txid:vout" format)
+    pub async fn estimate_vtxo_swap(&self, vtxos: Vec<String>) -> Result<EstimateVtxoSwapResponse> {
+        let url = format!("{}/api/vtxo-swap/estimate", self.base_url);
+        let request = EstimateVtxoSwapRequest { vtxos };
+        self.post_json(&url, &request).await
+    }
+
+    /// Create a VTXO swap.
+    ///
+    /// # Arguments
+    /// * `request` - VTXO swap request parameters
+    pub async fn create_vtxo_swap(
+        &self,
+        request: &CreateVtxoSwapRequest,
+    ) -> Result<VtxoSwapResponse> {
+        let url = format!("{}/api/vtxo-swap", self.base_url);
+        self.post_json(&url, request).await
+    }
+
+    /// Get VTXO swap details by ID.
+    pub async fn get_vtxo_swap(&self, id: &str) -> Result<VtxoSwapResponse> {
+        let url = format!("{}/api/vtxo-swap/{}", self.base_url, id);
+        self.get_json(&url).await
+    }
+
     // Helper methods
 
     async fn get_json<T: serde::de::DeserializeOwned>(&self, url: &str) -> Result<T> {
