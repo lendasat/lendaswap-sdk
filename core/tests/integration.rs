@@ -269,95 +269,6 @@ async fn test_get_version() {
 
 const ARKADE_URL: &str = "http://localhost:7070";
 
-#[tokio::test]
-#[ignore] // Run manually: cargo test --test integration test_vtxo_swap_estimate -- --nocapture --ignored
-async fn test_vtxo_swap_estimate() {
-    let client = ApiClient::new(API_URL);
-
-    // Use test outpoints - these should be real VTXOs in your test environment
-    let vtxos =
-        vec!["0000000000000000000000000000000000000000000000000000000000000001:0".to_string()];
-
-    match client.estimate_vtxo_swap(vtxos).await {
-        Ok(estimate) => {
-            println!("VTXO Swap Estimate:");
-            println!("  Fee: {} sats", estimate.fee_sats);
-            println!("  Total input: {} sats", estimate.total_input_sats);
-            println!("  Output: {} sats", estimate.output_sats);
-            println!("  VTXO count: {}", estimate.vtxo_count);
-        }
-        Err(e) => println!("Failed to estimate VTXO swap: {:#}", e),
-    }
-}
-
-#[tokio::test]
-#[ignore] // Run manually: cargo test --test integration test_vtxo_swap_create -- --nocapture --ignored
-async fn test_vtxo_swap_create() {
-    let wallet_storage = InMemoryWalletStorage::new();
-    let swap_storage = InMemorySwapStorage::new();
-
-    let client = Client::new(
-        API_URL,
-        wallet_storage,
-        swap_storage,
-        Network::Mutinynet,
-        ARKADE_URL.to_string(),
-    );
-
-    // Initialize wallet with a test mnemonic
-    client.init(None).await.expect("Failed to init wallet");
-
-    // Use test outpoints - these should be real VTXOs in your test environment
-    let vtxos =
-        vec!["0000000000000000000000000000000000000000000000000000000000000001:0".to_string()];
-
-    match client.create_vtxo_swap(vtxos).await {
-        Ok((swap, swap_params)) => {
-            println!("VTXO Swap Created:");
-            println!("  ID: {}", swap.id);
-            println!("  Status: {:?}", swap.status);
-            println!("  Client VHTLC: {}", swap.client_vhtlc_address);
-            println!(
-                "  Client fund amount: {} sats",
-                swap.client_fund_amount_sats
-            );
-            println!("  Server VHTLC: {}", swap.server_vhtlc_address);
-            println!(
-                "  Server fund amount: {} sats",
-                swap.server_fund_amount_sats
-            );
-            println!("  Fee: {} sats", swap.fee_sats);
-            println!("  Client locktime: {}", swap.client_locktime);
-            println!("  Server locktime: {}", swap.server_locktime);
-            println!("  Preimage hash: {}", swap.preimage_hash);
-            println!("\nSwap Params (client stores these for claiming):");
-            println!("  Key index: {}", swap_params.key_index);
-            println!("  Preimage: 0x{}", hex::encode(swap_params.preimage));
-        }
-        Err(e) => println!("Failed to create VTXO swap: {:#}", e),
-    }
-}
-
-#[tokio::test]
-#[ignore] // Run manually: cargo test --test integration test_vtxo_swap_get -- --nocapture --ignored
-async fn test_vtxo_swap_get() {
-    let client = ApiClient::new(API_URL);
-
-    let swap_id = "your-vtxo-swap-id-here";
-
-    match client.get_vtxo_swap(swap_id).await {
-        Ok(swap) => {
-            println!("VTXO Swap Details:");
-            println!("  ID: {}", swap.id);
-            println!("  Status: {:?}", swap.status);
-            println!("  Client VHTLC: {}", swap.client_vhtlc_address);
-            println!("  Server VHTLC: {}", swap.server_vhtlc_address);
-            println!("  Fee: {} sats", swap.fee_sats);
-        }
-        Err(e) => println!("Failed to get VTXO swap: {:#}", e),
-    }
-}
-
 /// Full E2E test for VTXO swap happy path.
 ///
 /// This test requires:
@@ -382,7 +293,7 @@ async fn test_vtxo_swap_e2e_happy_path() {
         API_URL,
         wallet_storage,
         swap_storage,
-        Network::Mutinynet,
+        Network::Regtest,
         ARKADE_URL.to_string(),
     );
 
@@ -391,7 +302,8 @@ async fn test_vtxo_swap_e2e_happy_path() {
 
     // Step 1: Create VTXO swap
     // Replace with actual VTXO outpoints from your test environment
-    let vtxos = vec!["replace_with_real_txid:0".to_string()];
+    let vtxos =
+        vec!["eb75150aeab59574ace92e921570f3199f43473d47ef902f9deb9582150835eb:0".to_string()];
 
     println!("Step 1: Creating VTXO swap...");
     let (swap, swap_params) = client
@@ -443,7 +355,7 @@ async fn test_vtxo_swap_e2e_happy_path() {
     println!("\nStep 4: Claiming server's VHTLC...");
 
     // Get a claim address - in real use, this would be the user's Arkade address
-    let claim_address = "ark1qq..."; // Replace with actual address
+    let claim_address = "tark1qpt0syx7j0jspe69kldtljet0x9jz6ns4xw70m0w0xl30yfhn0mz6ewavea7k58gk987srkn3sale5r9plldtq2m7zmd4sqm4ekuxg058tftg7"; // Replace with actual address
 
     let txid = client
         .claim_vtxo_swap(&swap, swap_params, claim_address)
