@@ -381,3 +381,110 @@ async fn test_vtxo_swap_e2e_happy_path() {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 }
+
+/// Full E2E test for VTXO swap refund path.
+///
+/// This test requires:
+/// 1. Running Lendaswap server at localhost:3333
+/// 2. Running Arkade server at localhost:7070
+/// 3. Client has VTXOs to refresh
+///
+/// Steps:
+/// 1. Create VTXO swap (client gets addresses)
+/// 2. Fund client's VHTLC manually (use ark-cli send)
+/// 3. Wait for server to fund
+/// 4. Refund own VHTLC
+#[tokio::test]
+#[ignore] // Run manually: cargo test --test integration test_vtxo_swap_e2e_client_refund -- --nocapture --ignored
+async fn test_vtxo_swap_client_refund() {
+    use lendaswap_core::api::VtxoSwapStatus;
+
+    let wallet_storage = InMemoryWalletStorage::new();
+    let swap_storage = InMemorySwapStorage::new();
+
+    let client = Client::new(
+        API_URL,
+        wallet_storage,
+        swap_storage,
+        Network::Regtest,
+        ARKADE_URL.to_string(),
+    );
+
+    // Initialize wallet
+    client.init(None).await.expect("Failed to init wallet");
+
+    // Step 1: Create VTXO swap
+    // Replace with actual VTXO outpoints from your test environment
+    let vtxos =
+        vec!["3e1de0735ca02f1223b753b11c3c531e2da19a0e516bf02b1dcec0e93ec366e7:0".to_string()];
+
+    println!("Step 1: Creating VTXO swap...");
+    let (swap, swap_params) = client
+        .create_vtxo_swap(vtxos)
+        .await
+        .expect("Failed to create swap");
+    println!("  Swap ID: {}", swap.id);
+    println!("  Client VHTLC address: {}", swap.client_vhtlc_address);
+    println!(
+        "  Client should fund: {} sats",
+        swap.client_fund_amount_sats
+    );
+
+    // Step 2: Fund client's VHTLC
+    // This needs to be done manually using ark-cli:
+    // ark-cli send --to <client_vhtlc_address> --amount <amount>
+    println!("\nStep 2: Fund client's VHTLC manually:");
+    println!(
+        "  ark-cli send --to {} --amount {}",
+        swap.client_vhtlc_address, swap.client_fund_amount_sats
+    );
+    println!("  Press Enter after funding...");
+
+    // In a real test, you'd wait for user input or automate the funding
+    // For now, we'll poll the API waiting for status change
+
+    // Step 3: Wait for server to fund
+    println!("\nStep 3: Waiting for server to fund...");
+    loop {
+        let updated_swap = client
+            .get_vtxo_swap(&swap.id.to_string())
+            .await
+            .expect("Failed to get swap");
+        println!("  Current status: {:?}", updated_swap.status);
+
+        if updated_swap.status == VtxoSwapStatus::ServerFunded {
+            println!("  Server funded! Ready to claim.");
+            break;
+        }
+
+        if updated_swap.status == VtxoSwapStatus::Expired {
+            panic!("Swap expired!");
+        }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    }
+
+    // Step 4: Refund own VHTLC
+    println!("\nStep 4: Refunding own VHTLC... You will have to mine some blocks");
+    println!("  Mine some blocks with: nigiri rpc --generate 10");
+
+    // Get a refund address - in real use, this would be the user's Arkade address
+    let refund_address = "tark1qpt0syx7j0jspe69kldtljet0x9jz6ns4xw70m0w0xl30yfhn0mz6ewavea7k58gk987srkn3sale5r9plldtq2m7zmd4sqm4ekuxg058tftg7"; // Replace with actual address
+
+    loop {
+        match client
+            .refund_vtxo_swap(&swap, swap_params.clone(), refund_address)
+            .await
+        {
+            Ok(txid) => {
+                println!("  Refunded! Transaction: {}", txid);
+                break;
+            }
+            Err(e) => {
+                println!("  Failed to refund own VHTLC: {e}. Retrying...");
+            }
+        };
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    }
+}
