@@ -52,6 +52,8 @@ export {
   type BtcToEvmSwapResponse,
   type Chain,
   Client,
+  CreateVtxoSwapResult,
+  EstimateVtxoSwapResponse,
   type EvmToArkadeSwapRequest,
   type EvmToBtcSwapResponse,
   type EvmToLightningSwapRequest,
@@ -70,6 +72,9 @@ export {
   setLogLevel,
   TokenId,
   type TokenIdString,
+  VtxoSwapParams,
+  VtxoSwapResponse,
+  type VtxoSwapStatus,
 } from "./api.js";
 export {
   PriceFeedService,

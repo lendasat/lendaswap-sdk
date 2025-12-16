@@ -7,12 +7,16 @@
 
 // Import WASM types for internal use
 import init, {
+  type CreateVtxoSwapResult,
+  type EstimateVtxoSwapResponse,
   JsSwapStorageProvider,
   JsWalletStorageProvider,
-  TokenInfo as WasmTokenInfo,
-  AssetPair as WasmAssetPair,
+  type SwapParams,
+  type VtxoSwapResponse,
+  type AssetPair as WasmAssetPair,
   Chain as WasmChain,
   Client as WasmClient,
+  type TokenInfo as WasmTokenInfo,
   getLogLevel as wasmGetLogLevel,
   setLogLevel as wasmSetLogLevel,
 } from "../wasm/lendaswap_wasm_sdk.js";
@@ -77,10 +81,14 @@ export async function initWasm(wasmPath?: string): Promise<void> {
 
 // Re-export WASM types directly
 export {
+  CreateVtxoSwapResult,
+  EstimateVtxoSwapResponse,
   QuoteResponse,
+  SwapParams as VtxoSwapParams,
   TokenId,
   Version,
   VhtlcAmounts,
+  VtxoSwapResponse,
 } from "../wasm/lendaswap_wasm_sdk.js";
 
 /**
@@ -260,25 +268,6 @@ export interface EvmToBtcSwapResponse extends SwapCommonFields {
 export type GetSwapResponse = BtcToEvmSwapResponse | EvmToBtcSwapResponse;
 
 /**
- * Swap parameters derived from the wallet for creating swaps.
- * Contains cryptographic keys and preimage data.
- */
-export interface SwapParams {
-  /** Secret key (hex-encoded) */
-  secret_key: string;
-  /** Public key (hex-encoded) */
-  public_key: string;
-  /** Preimage for the HTLC (32 bytes, hex-encoded) */
-  preimage: string;
-  /** Hash of the preimage (32 bytes, hex-encoded) */
-  preimage_hash: string;
-  /** User ID public key (hex-encoded) */
-  user_id: string;
-  /** Key derivation index */
-  key_index: number;
-}
-
-/**
  * Extended swap storage data that includes the swap response and optional secret.
  * Used for persisting swap data locally with the preimage secret.
  */
@@ -377,6 +366,26 @@ export interface QuoteResponseInfo {
   min_amount: number;
   max_amount: number;
 }
+
+// VTXO Swap Types are now re-exported from WASM:
+// - VtxoSwapResponse
+// - CreateVtxoSwapResult
+// - SwapParams
+// - EstimateVtxoSwapResponse
+
+/**
+ * VTXO swap status values.
+ * Note: WASM returns status as lowercase string (e.g., "pending", "clientfunded")
+ */
+export type VtxoSwapStatus =
+  | "pending"
+  | "clientfunded"
+  | "serverfunded"
+  | "clientredeemed"
+  | "serverredeemed"
+  | "clientrefunded"
+  | "clientfundedserverrefunded"
+  | "expired";
 
 /**
  * Convert a value from WASM (which may be a Map) to a plain object.
@@ -728,6 +737,82 @@ export class Client {
    */
   async deleteSwap(id: string): Promise<void> {
     return await this.client.deleteSwap(id);
+  }
+
+  // =========================================================================
+  // VTXO Swap Methods
+  // =========================================================================
+
+  /**
+   * Estimate the fee for a VTXO swap.
+   *
+   * @param vtxos - List of VTXO outpoints to refresh ("txid:vout" format)
+   * @returns Estimate response with fee and output amounts
+   */
+  async estimateVtxoSwap(vtxos: string[]): Promise<EstimateVtxoSwapResponse> {
+    return await this.client.estimateVtxoSwap(vtxos);
+  }
+
+  /**
+   * Create a VTXO swap for refreshing VTXOs.
+   *
+   * This creates a swap where the client will fund their VHTLC first,
+   * then the server funds their VHTLC, and the client claims the server's
+   * VHTLC to complete the swap.
+   *
+   * @param vtxos - List of VTXO outpoints to refresh ("txid:vout" format)
+   * @returns The swap response and swap parameters
+   */
+  async createVtxoSwap(vtxos: string[]): Promise<CreateVtxoSwapResult> {
+    return await this.client.createVtxoSwap(vtxos);
+  }
+
+  /**
+   * Get VTXO swap details by ID.
+   *
+   * @param id - The swap ID
+   * @returns The VTXO swap response
+   */
+  async getVtxoSwap(id: string): Promise<VtxoSwapResponse> {
+    return await this.client.getVtxoSwap(id);
+  }
+
+  /**
+   * Claim the server's VHTLC in a VTXO swap.
+   *
+   * This should be called after the server has funded their VHTLC.
+   * The client reveals the preimage to claim the fresh VTXOs.
+   *
+   * @param swap - The VTXO swap response
+   * @param swapParams - The client's swap parameters (containing preimage)
+   * @param claimAddress - The Arkade address to receive the claimed funds
+   * @returns The claim transaction ID
+   */
+  async claimVtxoSwap(
+    swap: VtxoSwapResponse,
+    swapParams: SwapParams,
+    claimAddress: string,
+  ): Promise<string> {
+    return await this.client.claimVtxoSwap(swap, swapParams, claimAddress);
+  }
+
+  /**
+   * Refund the client's VHTLC in a VTXO swap.
+   *
+   * This can be called if the swap fails (e.g., server doesn't fund)
+   * and the client's locktime has expired.
+   *
+   * @param swap - The VTXO swap response
+   * @param swapParams - The client's swap parameters
+   * @param refundAddress - The Arkade address to receive the refunded funds
+   * @returns The refund transaction ID
+   */
+  async refundVtxoSwap(
+    swap: VtxoSwapResponse,
+    swapParams: SwapParams,
+    refundAddress: string,
+  ): Promise<string> {
+    return await this.client.refundVtxoSwap(swap, swapParams, refundAddress);
   }
 }
 
