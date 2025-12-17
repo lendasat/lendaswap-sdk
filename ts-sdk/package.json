@@ -1,6 +1,6 @@
 {
   "name": "@lendasat/lendaswap-sdk",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Lendaswap Client SDK for TypeScript/JavaScript",
   "type": "module",
   "main": "dist/index.js",
@@ -17,8 +17,8 @@
     "wasm"
   ],
   "scripts": {
-    "build:wasm": "cd ../wasm-sdk && wasm-pack build --target web --out-dir ../ts-sdk/wasm",
-    "build:wasm:release": "cd ../wasm-sdk && wasm-pack build --target web --release --out-dir ../ts-sdk/wasm",
+    "build:wasm": "cd ../wasm-sdk && wasm-pack build --target web --out-dir ../ts-sdk/wasm && echo '# Allow npm to publish wasm files' > ../ts-sdk/wasm/.gitignore",
+    "build:wasm:release": "cd ../wasm-sdk && wasm-pack build --target web --release --out-dir ../ts-sdk/wasm && echo '# Allow npm to publish wasm files' > ../ts-sdk/wasm/.gitignore",
     "build:ts": "tsc",
     "build": "pnpm run build:wasm && pnpm run build:ts",
     "build:release": "pnpm run build:wasm:release && pnpm run build:ts",
