@@ -6,7 +6,8 @@
  */
 
 // Import WASM types for internal use
-import init, {
+// With --target bundler, WASM is automatically initialized via static import
+import {
   type CreateVtxoSwapResult,
   type EstimateVtxoSwapResponse,
   JsSwapStorageProvider,
@@ -21,63 +22,6 @@ import init, {
   setLogLevel as wasmSetLogLevel,
 } from "../wasm/lendaswap_wasm_sdk.js";
 import type { VhtlcAmounts } from "./types.js";
-
-// Cached initialization promise
-let initPromise: Promise<void> | null = null;
-
-/**
- * Initialize the WASM module.
- *
- * This is called automatically when creating a Wallet, but can be called
- * explicitly for eager initialization.
- *
- * @param wasmPath - Optional path to the WASM file (for Node.js environments)
- */
-export async function initWasm(wasmPath?: string): Promise<void> {
-  if (initPromise) {
-    return initPromise;
-  }
-
-  initPromise = (async () => {
-    // Check if we're in Node.js
-    const isNode =
-      typeof process !== "undefined" &&
-      process.versions != null &&
-      process.versions.node != null;
-
-    if (isNode && !wasmPath) {
-      // In Node.js, try to load the WASM file directly
-      const { readFile } = await import("fs/promises");
-      const { fileURLToPath } = await import("url");
-      const { dirname, join } = await import("path");
-
-      // Get the directory of the current module
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-
-      // The WASM file is in the wasm directory relative to src
-      const wasmFilePath = join(
-        __dirname,
-        "..",
-        "wasm",
-        "lendaswap_sdk_bg.wasm",
-      );
-      const wasmBuffer = await readFile(wasmFilePath);
-
-      await init(wasmBuffer);
-    } else if (wasmPath) {
-      // Custom path provided
-      const { readFile } = await import("fs/promises");
-      const wasmBuffer = await readFile(wasmPath);
-      await init(wasmBuffer);
-    } else {
-      // Browser environment - let init handle fetching
-      await init();
-    }
-  })();
-
-  return initPromise;
-}
 
 // Re-export WASM types directly
 export {
@@ -493,9 +437,7 @@ export class Client {
     swapStorage: SwapStorageProvider,
     network: Network,
     arkadeUrl: string,
-    wasmPath?: string,
   ): Promise<Client> {
-    await initWasm(wasmPath);
     // Bind wallet storage methods to preserve 'this' context when called from WASM
     const jsWalletStorageProvider = new JsWalletStorageProvider(
       walletStorage.getMnemonic.bind(walletStorage),

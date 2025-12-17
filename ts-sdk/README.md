@@ -15,6 +15,65 @@ npm install @lendasat/lendaswap-sdk
 pnpm add @lendasat/lendaswap-sdk
 ```
 
+## Bundler Setup
+
+This SDK uses WebAssembly (WASM) for cryptographic operations. Modern bundlers require plugins to handle WASM imports.
+
+### Vite
+
+```bash
+pnpm add -D vite-plugin-wasm vite-plugin-top-level-await
+```
+
+```typescript
+// vite.config.ts
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [wasm(), topLevelAwait()],
+});
+```
+
+### Webpack 5
+
+```bash
+pnpm add -D wasm-loader
+```
+
+```javascript
+// webpack.config.js
+module.exports = {
+  experiments: {
+    asyncWebAssembly: true,
+  },
+  module: {
+    rules: [
+      {
+        test: /\.wasm$/,
+        type: 'webassembly/async',
+      },
+    ],
+  },
+};
+```
+
+### Next.js
+
+```javascript
+// next.config.js
+module.exports = {
+  webpack: (config) => {
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+    };
+    return config;
+  },
+};
+```
+
 ## Quick Start
 
 ### Get Asset Pairs and Quote
