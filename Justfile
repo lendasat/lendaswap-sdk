@@ -7,6 +7,9 @@ release-wasm:
 build-sdk: build-wasm
     cd ts-sdk && pnpm install && pnpm run build:ts
 
+build-release: release-wasm
+    cd ts-sdk && pnpm install && pnpm run build:release
+
 test-sdk:
     cd ts-sdk && pnpm test
 
