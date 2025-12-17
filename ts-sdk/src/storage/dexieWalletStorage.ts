@@ -44,7 +44,7 @@ class WalletDatabase extends Dexie {
  *
  * @example
  * ```typescript
- * import { DexieWalletStorageProvider, Client } from '@lendaswap/sdk';
+ * import { DexieWalletStorageProvider, Client } from '@lendasat/lendaswap-sdk';
  *
  * const walletStorage = new DexieWalletStorageProvider();
  *
@@ -152,7 +152,7 @@ export class DexieWalletStorageProvider implements WalletStorageProvider {
  *
  * @example
  * ```typescript
- * import { createDexieWalletStorage, createDexieSwapStorage, Client } from '@lendaswap/sdk';
+ * import { createDexieWalletStorage, createDexieSwapStorage, Client } from '@lendasat/lendaswap-sdk';
  *
  * const walletStorage = createDexieWalletStorage();
  * const swapStorage = createDexieSwapStorage();

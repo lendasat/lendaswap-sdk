@@ -39,7 +39,7 @@ class LendaswapDatabase extends Dexie {
  *
  * @example
  * ```typescript
- * import { DexieSwapStorageProvider } from '@lendaswap/sdk';
+ * import { DexieSwapStorageProvider } from '@lendasat/lendaswap-sdk';
  *
  * const swapStorage = new DexieSwapStorageProvider();
  *
@@ -143,7 +143,7 @@ export class DexieSwapStorageProvider {
  *
  * @example
  * ```typescript
- * import { createDexieSwapStorage, Client } from '@lendaswap/sdk';
+ * import { createDexieSwapStorage, Client } from '@lendasat/lendaswap-sdk';
  *
  * const swapStorage = createDexieSwapStorage();
  * const client = await Client.create(

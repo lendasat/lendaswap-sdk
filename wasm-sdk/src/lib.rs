@@ -8,7 +8,7 @@
 //! # Usage from JavaScript/TypeScript
 //!
 //! ```javascript
-//! import init, { Wallet, JsWalletStorageProvider } from '@lendaswap/sdk';
+//! import init, { Wallet, JsWalletStorageProvider } from '@lendasat/lendaswap-sdk';
 //!
 //! // Initialize WASM
 //! await init();

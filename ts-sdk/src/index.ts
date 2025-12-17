@@ -10,7 +10,7 @@
  *   Client,
  *   createDexieWalletStorage,
  *   createDexieSwapStorage,
- * } from '@lendaswap/sdk';
+ * } from '@lendasat/lendaswap-sdk';
  *
  * // Create storage providers using Dexie (IndexedDB)
  * const walletStorage = createDexieWalletStorage();

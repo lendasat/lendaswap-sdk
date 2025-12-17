@@ -34,7 +34,7 @@ High-level TypeScript/JavaScript SDK:
 - HD wallet management for swap parameters
 - Storage providers (LocalStorage, IndexedDB, Memory)
 - Real-time WebSocket price feed
-- Published as `@lendaswap/sdk` on npm
+- Published as `@lendasat/lendaswap-sdk` on npm
 
 ## Architecture
 
@@ -43,7 +43,7 @@ High-level TypeScript/JavaScript SDK:
 │                   ts-sdk (TypeScript)               │
 │  - ApiClient, Wallet, PriceFeedService              │
 │  - Storage providers                                │
-│  - Published to npm as @lendaswap/sdk               │
+│  - Published to npm as @lendasat/lendaswap-sdk               │
 └─────────────────────┬───────────────────────────────┘
                       │ imports WASM
 ┌─────────────────────▼───────────────────────────────┐

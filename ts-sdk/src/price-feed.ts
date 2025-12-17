@@ -7,7 +7,7 @@
  *
  * @example
  * ```typescript
- * import { PriceFeedService, type PriceUpdateMessage } from '@lendaswap/sdk';
+ * import { PriceFeedService, type PriceUpdateMessage } from '@lendasat/lendaswap-sdk';
  *
  * const priceFeed = new PriceFeedService('wss://api.lendaswap.com');
  *

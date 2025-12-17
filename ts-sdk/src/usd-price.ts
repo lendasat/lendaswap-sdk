@@ -5,7 +5,7 @@
  *
  * @example
  * ```typescript
- * import { getUsdPrice, getUsdPrices, TokenId } from '@lendaswap/sdk';
+ * import { getUsdPrice, getUsdPrices, TokenId } from '@lendasat/lendaswap-sdk';
  *
  * // Get single token price
  * const btcPrice = await getUsdPrice('btc_lightning');
