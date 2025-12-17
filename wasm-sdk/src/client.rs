@@ -215,21 +215,26 @@ impl From<core_api::VtxoSwapResponse> for VtxoSwapResponse {
         VtxoSwapResponse {
             id: r.id.to_string(),
             status: format!("{:?}", r.status).to_lowercase(),
-            created_at: r.created_at.format(&time::format_description::well_known::Rfc3339).unwrap_or_default(),
+            created_at: r
+                .created_at
+                .format(&time::format_description::well_known::Rfc3339)
+                .unwrap_or_default(),
             client_vhtlc_address: r.client_vhtlc_address,
             client_fund_amount_sats: r.client_fund_amount_sats,
             client_pk: r.client_pk,
             client_locktime: r.client_locktime,
             client_unilateral_claim_delay: r.client_unilateral_claim_delay,
             client_unilateral_refund_delay: r.client_unilateral_refund_delay,
-            client_unilateral_refund_without_receiver_delay: r.client_unilateral_refund_without_receiver_delay,
+            client_unilateral_refund_without_receiver_delay: r
+                .client_unilateral_refund_without_receiver_delay,
             server_vhtlc_address: r.server_vhtlc_address,
             server_fund_amount_sats: r.server_fund_amount_sats,
             server_pk: r.server_pk,
             server_locktime: r.server_locktime,
             server_unilateral_claim_delay: r.server_unilateral_claim_delay,
             server_unilateral_refund_delay: r.server_unilateral_refund_delay,
-            server_unilateral_refund_without_receiver_delay: r.server_unilateral_refund_without_receiver_delay,
+            server_unilateral_refund_without_receiver_delay: r
+                .server_unilateral_refund_without_receiver_delay,
             arkade_server_pk: r.arkade_server_pk,
             preimage_hash: r.preimage_hash,
             fee_sats: r.fee_sats,
@@ -260,8 +265,11 @@ impl TryFrom<&VtxoSwapResponse> for core_api::VtxoSwapResponse {
             other => return Err(format!("Unknown status: {}", other)),
         };
 
-        let created_at = OffsetDateTime::parse(&r.created_at, &time::format_description::well_known::Rfc3339)
-            .map_err(|e| format!("Invalid timestamp: {}", e))?;
+        let created_at = OffsetDateTime::parse(
+            &r.created_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|e| format!("Invalid timestamp: {}", e))?;
 
         Ok(core_api::VtxoSwapResponse {
             id,
@@ -273,14 +281,16 @@ impl TryFrom<&VtxoSwapResponse> for core_api::VtxoSwapResponse {
             client_locktime: r.client_locktime,
             client_unilateral_claim_delay: r.client_unilateral_claim_delay,
             client_unilateral_refund_delay: r.client_unilateral_refund_delay,
-            client_unilateral_refund_without_receiver_delay: r.client_unilateral_refund_without_receiver_delay,
+            client_unilateral_refund_without_receiver_delay: r
+                .client_unilateral_refund_without_receiver_delay,
             server_vhtlc_address: r.server_vhtlc_address.clone(),
             server_fund_amount_sats: r.server_fund_amount_sats,
             server_pk: r.server_pk.clone(),
             server_locktime: r.server_locktime,
             server_unilateral_claim_delay: r.server_unilateral_claim_delay,
             server_unilateral_refund_delay: r.server_unilateral_refund_delay,
-            server_unilateral_refund_without_receiver_delay: r.server_unilateral_refund_without_receiver_delay,
+            server_unilateral_refund_without_receiver_delay: r
+                .server_unilateral_refund_without_receiver_delay,
             arkade_server_pk: r.arkade_server_pk.clone(),
             preimage_hash: r.preimage_hash.clone(),
             fee_sats: r.fee_sats,
@@ -734,9 +744,10 @@ impl Client {
         let core_swap: lendaswap_core::api::VtxoSwapResponse = swap
             .try_into()
             .map_err(|e: String| JsValue::from_str(&format!("Failed to convert swap: {}", e)))?;
-        let core_params: lendaswap_core::SwapParams = swap_params
-            .try_into()
-            .map_err(|e: String| JsValue::from_str(&format!("Failed to convert swap_params: {}", e)))?;
+        let core_params: lendaswap_core::SwapParams =
+            swap_params.try_into().map_err(|e: String| {
+                JsValue::from_str(&format!("Failed to convert swap_params: {}", e))
+            })?;
 
         let txid = self
             .inner
@@ -763,9 +774,10 @@ impl Client {
         let core_swap: lendaswap_core::api::VtxoSwapResponse = swap
             .try_into()
             .map_err(|e: String| JsValue::from_str(&format!("Failed to convert swap: {}", e)))?;
-        let core_params: lendaswap_core::SwapParams = swap_params
-            .try_into()
-            .map_err(|e: String| JsValue::from_str(&format!("Failed to convert swap_params: {}", e)))?;
+        let core_params: lendaswap_core::SwapParams =
+            swap_params.try_into().map_err(|e: String| {
+                JsValue::from_str(&format!("Failed to convert swap_params: {}", e))
+            })?;
 
         let txid = self
             .inner
