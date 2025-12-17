@@ -121,6 +121,9 @@ pub struct EstimateVtxoSwapResponse {
     /// Number of VTXOs being refreshed
     #[wasm_bindgen(js_name = "vtxoCount")]
     pub vtxo_count: u32,
+    /// Expected expiry timestamp (Unix) of the resulting VTXOs
+    #[wasm_bindgen(js_name = "expectedVtxoExpiry")]
+    pub expected_vtxo_expiry: i64,
 }
 
 impl From<core_api::EstimateVtxoSwapResponse> for EstimateVtxoSwapResponse {
@@ -130,6 +133,7 @@ impl From<core_api::EstimateVtxoSwapResponse> for EstimateVtxoSwapResponse {
             total_input_sats: r.total_input_sats,
             output_sats: r.output_sats,
             vtxo_count: r.vtxo_count as u32,
+            expected_vtxo_expiry: r.expected_vtxo_expiry,
         }
     }
 }

@@ -583,6 +583,9 @@ pub struct EstimateVtxoSwapResponse {
     pub output_sats: i64,
     /// Number of VTXOs being refreshed
     pub vtxo_count: usize,
+    /// Expected expiry timestamp (Unix) of the resulting VTXOs.
+    /// This is the minimum expiry among the server's VTXOs that will be used to fund the swap.
+    pub expected_vtxo_expiry: i64,
 }
 
 /// Request to create a VTXO swap.
