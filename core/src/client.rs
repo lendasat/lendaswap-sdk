@@ -485,7 +485,7 @@ impl<S: WalletStorage, SS: SwapStorage> Client<S, SS> {
 
         let request = CreateVtxoSwapRequest {
             vtxos,
-            preimage_hash: format!("0x{}", hex::encode(swap_params.preimage_hash)),
+            preimage_hash: hex::encode(swap_params.preimage_hash),
             client_pk: hex::encode(swap_params.public_key.serialize()),
             user_id: hex::encode(swap_params.user_id.serialize()),
         };
