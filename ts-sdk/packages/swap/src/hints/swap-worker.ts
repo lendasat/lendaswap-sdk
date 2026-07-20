@@ -99,16 +99,18 @@ export class SwapWorker {
   }
 
   #onActions(swapId: string, actions: SwapActions): void {
+    const recommended = actions.recommended;
+    // Terminal first: a finished swap needs no hints, and subscribing before
+    // dropping it would briefly consume a subscription slot (or queue behind the
+    // server cap) on a swap that is already done.
+    if (recommended === "none") {
+      this.#hintSource.unsubscribe([swapId]);
+      return;
+    }
     // Ensure the swap is on the hint feed (covers swaps whose first action only
     // appears after tracking started).
     this.#hintSource.subscribe([swapId]);
-
-    const recommended = actions.recommended;
     if (!recommended) return;
-    if (recommended === "none") {
-      this.#hintSource.unsubscribe([swapId]); // terminal — no more hints needed
-      return;
-    }
     if (AUTO_EXECUTABLE.has(recommended)) {
       this.#autoExecute(swapId, recommended);
       return;

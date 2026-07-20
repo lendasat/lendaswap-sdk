@@ -122,6 +122,69 @@ describe("WsStatusSource", () => {
     expect(subs.map((f) => (f.args as string[]).length)).toEqual([64, 6]);
   });
 
+  it("never subscribes more than the server's per-connection cap", () => {
+    const { src, last } = build();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // 300 > the 256 cap: the server would silently drop the overflow.
+    src.subscribe(Array.from({ length: 300 }, (_, i) => `id${i}`));
+    src.start();
+    last().open();
+
+    const sent = last()
+      .frames()
+      .filter((f) => f.op === "subscribe")
+      .flatMap((f) => f.args as string[]);
+    expect(sent).toHaveLength(256);
+    expect(new Set(sent).size).toBe(256); // no duplicates
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("queued"));
+    warn.mockRestore();
+  });
+
+  it("promotes a queued id into the slot freed by an unsubscribe", () => {
+    const { src, last } = build();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    src.subscribe(Array.from({ length: 256 }, (_, i) => `id${i}`));
+    src.start();
+    last().open();
+    src.subscribe(["overflow"]); // no slot — queued, not sent
+    expect(
+      last()
+        .frames()
+        .flatMap((f) => f.args as string[]),
+    ).not.toContain("overflow");
+
+    src.unsubscribe(["id0"]); // frees exactly one slot
+    expect(last().frames()).toContainEqual({
+      op: "subscribe",
+      channel: "swap_status",
+      args: ["overflow"],
+    });
+    vi.restoreAllMocks();
+  });
+
+  it("drains the whole queue as finalized swaps free their slots", () => {
+    const { src, last } = build();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const ids = Array.from({ length: 300 }, (_, i) => `id${i}`);
+    src.subscribe(ids); // 256 admitted, 44 queued
+    src.start();
+    last().open();
+
+    // Finalize the swaps holding the first 44 slots, one at a time — exactly what
+    // the worker does when each reaches a terminal action.
+    for (let i = 0; i < 44; i++) src.unsubscribe([`id${i}`]);
+
+    const subscribed = new Set(
+      last()
+        .frames()
+        .filter((f) => f.op === "subscribe")
+        .flatMap((f) => f.args as string[]),
+    );
+    // Every one of the 300 eventually made it onto the wire — nothing stranded.
+    for (const id of ids) expect(subscribed.has(id)).toBe(true);
+    vi.restoreAllMocks();
+  });
+
   it("unsubscribes and stops tracking an id", () => {
     const { src, last } = build();
     src.subscribe(["a", "b"]);

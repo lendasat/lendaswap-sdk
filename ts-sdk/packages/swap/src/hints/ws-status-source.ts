@@ -12,7 +12,9 @@
  *   → {"op":"subscribe","channel":"swap_status","args":[<uuid>,...]}   (≤64 ids/frame)
  *   ← {"channel":"swap_status","data":{"<uuid>":"<status>",...}}
  *   ← {"op":"subscribed",...} (ack)     ← {"op":...,"message":...} (error)
- * A single connection carries up to 256 subscriptions.
+ * A single connection carries up to 256 subscriptions; that cap is enforced
+ * client-side (see {@link WsStatusSource.subscribe}) because the server silently
+ * drops the overflow.
  */
 import type { SwapStatus } from "@lendasat/lendaswap-sdk-pure";
 
@@ -52,8 +54,18 @@ export class WsStatusSource {
   readonly #reconnectMinMs: number;
   readonly #reconnectMaxMs: number;
 
-  /** The swap ids we want subscribed — resent in full on every (re)connect. */
-  readonly #wanted = new Set<string>();
+  /**
+   * Ids actually subscribed on the wire — held at or below the server's
+   * per-connection cap, and resent in full on every (re)connect.
+   */
+  readonly #active = new Set<string>();
+  /**
+   * Ids we want but have no slot for. Promoted FIFO as slots free (the worker
+   * unsubscribes each swap when it reaches a terminal action, so they do free).
+   * A pending swap is not broken, only slower: it gets no hints, so it advances
+   * on the tracker's chain poll instead.
+   */
+  readonly #pending = new Set<string>();
   readonly #listeners = new Set<(update: SwapStatusUpdate) => void>();
 
   #ws: WebSocketLike | undefined;
@@ -93,23 +105,61 @@ export class WsStatusSource {
     return () => this.#listeners.delete(cb);
   }
 
-  /** Track these swap ids — subscribe on the socket now if open, else on next open. */
+  /**
+   * Track these swap ids — subscribe on the socket now if open, else on next open.
+   *
+   * Enforces the server's per-connection cap locally. The server silently stops
+   * adding once it is full (it breaks out of the loop but still acks every id),
+   * so sending more would leave us believing ids are subscribed that will never
+   * receive an update. Overflow is queued instead and promoted as slots free.
+   */
   subscribe(swapIds: string[]): void {
-    const fresh = swapIds.filter((id) => !this.#wanted.has(id));
-    for (const id of fresh) this.#wanted.add(id);
-    if (this.#wanted.size > MAX_SUBSCRIPTIONS)
+    const fresh = swapIds.filter(
+      (id) => !this.#active.has(id) && !this.#pending.has(id),
+    );
+    if (fresh.length === 0) return;
+
+    const admitted: string[] = [];
+    for (const id of fresh) {
+      if (this.#active.size < MAX_SUBSCRIPTIONS) {
+        this.#active.add(id);
+        admitted.push(id);
+      } else {
+        this.#pending.add(id);
+      }
+    }
+    if (this.#pending.size > 0)
       console.warn(
-        `WsStatusSource: ${this.#wanted.size} subscriptions exceed the server cap of ${MAX_SUBSCRIPTIONS} on one connection`,
+        `WsStatusSource: at the server cap of ${MAX_SUBSCRIPTIONS} subscriptions; ${this.#pending.size} swap(s) queued for a slot and will advance on the chain poll until then`,
       );
-    if (this.#open && fresh.length > 0) this.#sendFrame("subscribe", fresh);
+    if (this.#open && admitted.length > 0)
+      this.#sendFrame("subscribe", admitted);
   }
 
-  /** Stop tracking these swap ids. */
+  /** Stop tracking these swap ids, promoting queued ones into the freed slots. */
   unsubscribe(swapIds: string[]): void {
-    const present = swapIds.filter((id) => this.#wanted.has(id));
-    for (const id of present) this.#wanted.delete(id);
-    if (this.#open && present.length > 0)
-      this.#sendFrame("unsubscribe", present);
+    const dropped: string[] = [];
+    for (const id of swapIds) {
+      if (this.#active.delete(id)) dropped.push(id);
+      else this.#pending.delete(id);
+    }
+    if (this.#open && dropped.length > 0)
+      this.#sendFrame("unsubscribe", dropped);
+    this.#promotePending();
+  }
+
+  /** Move queued ids into any free slots, subscribing them if the socket is open. */
+  #promotePending(): void {
+    if (this.#pending.size === 0) return;
+    const promoted: string[] = [];
+    for (const id of this.#pending) {
+      if (this.#active.size >= MAX_SUBSCRIPTIONS) break;
+      this.#pending.delete(id);
+      this.#active.add(id);
+      promoted.push(id);
+    }
+    if (this.#open && promoted.length > 0)
+      this.#sendFrame("subscribe", promoted);
   }
 
   #connect(): void {
@@ -117,10 +167,13 @@ export class WsStatusSource {
     const ws = this.#factory(this.#url);
     this.#ws = ws;
     ws.onopen = () => {
-      this.#open = true;
       this.#backoffMs = this.#reconnectMinMs; // reset backoff on a good connection
-      if (this.#wanted.size > 0)
-        this.#sendFrame("subscribe", [...this.#wanted]);
+      // Promote while still marked closed, so the queued ids ride along in the
+      // single full resend below instead of being sent twice.
+      this.#promotePending();
+      this.#open = true;
+      if (this.#active.size > 0)
+        this.#sendFrame("subscribe", [...this.#active]);
     };
     ws.onmessage = (event) => this.#handleMessage(event.data);
     ws.onclose = () => this.#onDisconnect();
