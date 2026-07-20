@@ -96,9 +96,28 @@ export class SwapTracker {
     if (this.#swaps.has(swap.swapId) || this.#lastActions.has(swap.swapId))
       return;
     this.#swaps.set(swap.swapId, swap);
-    for (const leg of legsOf(swap)) await this.#managerFor(leg).register(leg);
+
+    const registered: HtlcRef[] = [];
+    try {
+      for (const leg of legsOf(swap)) {
+        await this.#managerFor(leg).register(leg);
+        registered.push(leg);
+      }
+    } catch (error) {
+      // Roll back a partial registration. Without this the swap stays latched in
+      // `#swaps` — so the guard above rejects every later retry — with one leg
+      // watched and the other not, deriving nothing until a full stop/start.
+      // A register failure is not self-healing (the poll can't set up a watch it
+      // never made), so undo it and let a later sync try again cleanly.
+      this.#swaps.delete(swap.swapId);
+      for (const leg of registered) void this.#managerFor(leg).unregister(leg);
+      throw error;
+    }
+
     // Seed/advance just the managers this swap touches (clock + observations),
-    // then derive its first action — mirrors startTracking's prime step.
+    // then derive its first action — mirrors startTracking's prime step. Unlike
+    // registration, a failure here IS self-healing: the swap is fully registered,
+    // so the poll tick retries the refresh and recomputes. Leave it tracked.
     const managers = new Set(legsOf(swap).map((leg) => this.#managerFor(leg)));
     await Promise.all([...managers].map((manager) => manager.refresh()));
     this.#recompute(swap);

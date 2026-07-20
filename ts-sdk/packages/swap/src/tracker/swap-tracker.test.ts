@@ -214,6 +214,40 @@ describe("SwapTracker", () => {
     expect(arkade.register).not.toHaveBeenCalled();
   });
 
+  it("track() rolls back a partial registration so a later attempt retries", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([]);
+    // The EVM leg fails to register, as an RPC/indexer hiccup would. The Arkade
+    // leg (registered first) must not be left watched-but-half-tracked.
+    const realRegister = evm.register;
+    evm.register = async () => {
+      throw new Error("rpc down");
+    };
+
+    await expect(tracker.track(swap)).rejects.toThrow(/rpc down/);
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(false);
+
+    // The swap must not have latched in #swaps — a later sync retries cleanly.
+    evm.register = realRegister;
+    await tracker.track(swap);
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(true);
+    expect(evm.registered.has(htlcKey(serverHtlc))).toBe(true);
+  });
+
+  it("track() keeps a registered swap when only the initial refresh fails", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([]);
+    // Refresh is transient and self-healing (the poll tick retries), so the swap
+    // stays registered rather than being rolled back.
+    evm.refresh = async () => {
+      throw new Error("rpc flaky");
+    };
+
+    await expect(tracker.track(swap)).rejects.toThrow(/rpc flaky/);
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(true);
+    expect(evm.registered.has(htlcKey(serverHtlc))).toBe(true);
+  });
+
   it("track() ignores a swap already seen through to terminal", async () => {
     const { arkade, evm, tracker } = setup();
     await tracker.startTracking([swap]);

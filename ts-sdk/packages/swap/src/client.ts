@@ -669,11 +669,21 @@ export class Client {
   async #syncTrackedFromStorage(): Promise<void> {
     const tracker = this.#tracker;
     if (!tracker) return;
+    let swaps: TrackedSwap[];
     try {
-      for (const swap of await this.#loadTrackedSwaps())
-        await tracker.track(swap);
+      swaps = await this.#loadTrackedSwaps();
     } catch (error) {
-      console.warn("Client: syncing new swaps into tracking failed:", error);
+      console.warn("Client: loading swaps to track failed:", error);
+      return;
+    }
+    // Isolate per swap: one that fails to register (and rolls itself back) must
+    // not stop the rest of the batch from being tracked.
+    for (const swap of swaps) {
+      try {
+        await tracker.track(swap);
+      } catch (error) {
+        console.warn(`Client: tracking swap ${swap.swapId} failed:`, error);
+      }
     }
   }
 
