@@ -54,6 +54,12 @@ export {
 export type * from "./contracts/types.js";
 export { htlcKey } from "./contracts/types.js";
 export {
+  SwapWorker,
+  type SwapWorkerOptions,
+  type WorkerHintSource,
+  type WorkerTracker,
+} from "./hints/swap-worker.js";
+export {
   type SwapStatusUpdate,
   type WebSocketLike,
   WsStatusSource,
