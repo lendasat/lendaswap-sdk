@@ -104,15 +104,22 @@ export class SwapWorker {
     this.#hintSource.subscribe([swapId]);
 
     const recommended = actions.recommended;
+    if (!recommended) return;
     if (recommended === "none") {
       this.#hintSource.unsubscribe([swapId]); // terminal — no more hints needed
       return;
     }
-    if (recommended && AUTO_EXECUTABLE.has(recommended)) {
+    if (AUTO_EXECUTABLE.has(recommended)) {
       this.#autoExecute(swapId, recommended);
       return;
     }
-    if (recommended) this.#onActionRequired?.(swapId, actions);
+    // Surface only actions that actually need the user — a `manual` fund or a
+    // refund to `confirm`. `wait` is an auto no-op: nothing to notify about.
+    const automation = actions.actions.find(
+      (a) => a.id === recommended,
+    )?.automation;
+    if (automation === "manual" || automation === "confirm")
+      this.#onActionRequired?.(swapId, actions);
   }
 
   #autoExecute(swapId: string, actionId: SwapActionId): void {

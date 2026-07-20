@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import type { SwapActionId, SwapActions } from "../actions/types.js";
+import type {
+  SwapActionAutomation,
+  SwapActionId,
+  SwapActions,
+} from "../actions/types.js";
 import {
   SwapWorker,
   type WorkerHintSource,
@@ -56,8 +60,32 @@ class FakeHintSource implements WorkerHintSource {
   }
 }
 
+/** Automation per action id — mirrors what `deriveSwapActions` assigns. */
+const AUTOMATION: Record<SwapActionId, SwapActionAutomation> = {
+  wait: "auto",
+  fund: "manual",
+  claim: "auto",
+  refund_collaborative: "confirm",
+  refund_unilateral: "confirm",
+  recover_cctp_claim: "confirm",
+  none: "auto",
+};
+
+/** A `SwapActions` whose recommended action carries its real automation. */
 const acts = (recommended?: SwapActionId): SwapActions =>
-  ({ recommended, actions: [] }) as SwapActions;
+  (recommended === undefined
+    ? { recommended, actions: [] }
+    : {
+        recommended,
+        actions: [
+          {
+            id: recommended,
+            recommended: true,
+            automation: AUTOMATION[recommended],
+            reason: "",
+          },
+        ],
+      }) as SwapActions;
 
 function setup(execute = vi.fn(async () => {})) {
   const tracker = new FakeTracker();
@@ -110,6 +138,14 @@ describe("SwapWorker", () => {
     tracker.emit("s1", acts("fund"));
     expect(execute).not.toHaveBeenCalled();
     expect(onActionRequired).toHaveBeenCalledWith("s1", acts("fund"));
+  });
+
+  it("does not surface 'wait' — an auto no-op needs no user action", () => {
+    const { tracker, worker, execute, onActionRequired } = setup();
+    worker.start();
+    tracker.emit("s1", acts("wait"));
+    expect(execute).not.toHaveBeenCalled();
+    expect(onActionRequired).not.toHaveBeenCalled();
   });
 
   it("does not double-run a claim while one is in flight", () => {
