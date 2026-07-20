@@ -185,6 +185,48 @@ describe("SwapTracker", () => {
     );
   });
 
+  it("track() picks up a swap created after start and derives its action", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([]); // start with nothing tracked
+    const sub = vi.fn();
+    tracker.subscribeToActions(sub);
+
+    // Both legs are already funded on-chain when the new swap shows up.
+    arkade.emit(clientHtlc, "confirmed");
+    evm.emit(serverHtlc, "confirmed");
+    expect(sub).not.toHaveBeenCalled(); // not tracked yet → nothing derived
+
+    await tracker.track(swap);
+
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(true);
+    expect(evm.registered.has(htlcKey(serverHtlc))).toBe(true);
+    expect(sub).toHaveBeenCalledWith(
+      "s1",
+      expect.objectContaining({ recommended: "claim" }),
+    );
+  });
+
+  it("track() is idempotent for an already-tracked swap", async () => {
+    const { arkade, tracker } = setup();
+    await tracker.startTracking([swap]);
+    arkade.register = vi.fn(arkade.register); // spy further registers
+    await tracker.track(swap);
+    expect(arkade.register).not.toHaveBeenCalled();
+  });
+
+  it("track() ignores a swap already seen through to terminal", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([swap]);
+    tracker.subscribeToActions(vi.fn());
+    arkade.emit(clientHtlc, "confirmed");
+    evm.emit(serverHtlc, "confirmed"); // claim
+    evm.emit(serverHtlc, "spent_claim"); // terminal none → untracked
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(false);
+
+    await tracker.track(swap); // rediscovered — must not resurrect it
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(false);
+  });
+
   it("applyHint is a no-op for an untracked swap", async () => {
     const { arkade, evm, tracker } = setup();
     await tracker.startTracking([swap]);

@@ -442,49 +442,59 @@ export class Client {
   createSwap(
     ...args: Parameters<LegacyClient["createSwap"]>
   ): ReturnType<LegacyClient["createSwap"]> {
-    return this.#legacy.createSwap(...args);
+    return this.#trackAfterCreate(this.#legacy.createSwap(...args));
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createArkadeToEvmSwapGeneric(
     ...args: Parameters<LegacyClient["createArkadeToEvmSwapGeneric"]>
   ): ReturnType<LegacyClient["createArkadeToEvmSwapGeneric"]> {
-    return this.#legacy.createArkadeToEvmSwapGeneric(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createArkadeToEvmSwapGeneric(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createLightningToEvmSwapGeneric(
     ...args: Parameters<LegacyClient["createLightningToEvmSwapGeneric"]>
   ): ReturnType<LegacyClient["createLightningToEvmSwapGeneric"]> {
-    return this.#legacy.createLightningToEvmSwapGeneric(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createLightningToEvmSwapGeneric(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createBitcoinToEvmSwap(
     ...args: Parameters<LegacyClient["createBitcoinToEvmSwap"]>
   ): ReturnType<LegacyClient["createBitcoinToEvmSwap"]> {
-    return this.#legacy.createBitcoinToEvmSwap(...args);
+    return this.#trackAfterCreate(this.#legacy.createBitcoinToEvmSwap(...args));
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createBitcoinToArkadeSwap(
     ...args: Parameters<LegacyClient["createBitcoinToArkadeSwap"]>
   ): ReturnType<LegacyClient["createBitcoinToArkadeSwap"]> {
-    return this.#legacy.createBitcoinToArkadeSwap(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createBitcoinToArkadeSwap(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createLightningToArkadeSwap(
     ...args: Parameters<LegacyClient["createLightningToArkadeSwap"]>
   ): ReturnType<LegacyClient["createLightningToArkadeSwap"]> {
-    return this.#legacy.createLightningToArkadeSwap(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createLightningToArkadeSwap(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createArkadeToLightningSwap(
     ...args: Parameters<LegacyClient["createArkadeToLightningSwap"]>
   ): ReturnType<LegacyClient["createArkadeToLightningSwap"]> {
-    return this.#legacy.createArkadeToLightningSwap(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createArkadeToLightningSwap(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
@@ -505,21 +515,25 @@ export class Client {
   createEvmToArkadeSwapGeneric(
     ...args: Parameters<LegacyClient["createEvmToArkadeSwapGeneric"]>
   ): ReturnType<LegacyClient["createEvmToArkadeSwapGeneric"]> {
-    return this.#legacy.createEvmToArkadeSwapGeneric(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createEvmToArkadeSwapGeneric(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createEvmToBitcoinSwap(
     ...args: Parameters<LegacyClient["createEvmToBitcoinSwap"]>
   ): ReturnType<LegacyClient["createEvmToBitcoinSwap"]> {
-    return this.#legacy.createEvmToBitcoinSwap(...args);
+    return this.#trackAfterCreate(this.#legacy.createEvmToBitcoinSwap(...args));
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
   createEvmToLightningSwapGeneric(
     ...args: Parameters<LegacyClient["createEvmToLightningSwapGeneric"]>
   ): ReturnType<LegacyClient["createEvmToLightningSwapGeneric"]> {
-    return this.#legacy.createEvmToLightningSwapGeneric(...args);
+    return this.#trackAfterCreate(
+      this.#legacy.createEvmToLightningSwapGeneric(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
@@ -615,11 +629,7 @@ export class Client {
         refreshIntervalMs: this.#tracking.refreshIntervalMs ?? 5_000,
       });
       this.#tracker = tracker;
-      const swaps = await this.listAllSwaps();
-      const tracked = swaps
-        .map(swapToTracked)
-        .filter((s): s is TrackedSwap => s !== undefined);
-      await tracker.startTracking(tracked);
+      await tracker.startTracking(await this.#loadTrackedSwaps());
       this.#startWorker(tracker);
     } catch (error) {
       // A partway failure (e.g. a ledger register/refresh erroring on an RPC or
@@ -632,6 +642,38 @@ export class Client {
       this.#tracker = undefined;
       this.#started = false;
       throw error;
+    }
+  }
+
+  /** Every stored swap whose ledgers are observable, mapped to a {@link TrackedSwap}. */
+  async #loadTrackedSwaps(): Promise<TrackedSwap[]> {
+    const swaps = await this.listAllSwaps();
+    return swaps
+      .map(swapToTracked)
+      .filter((s): s is TrackedSwap => s !== undefined);
+  }
+
+  /**
+   * Run a create, then fold any newly-stored swap into tracking. Fire-and-forget:
+   * a tracking hiccup must never fail or delay the create, and it is a no-op when
+   * tracking isn't running (a later {@link startTracking} loads it from storage
+   * anyway). This is how a swap created after start gets tracked without a restart.
+   */
+  async #trackAfterCreate<T>(op: Promise<T>): Promise<T> {
+    const result = await op;
+    if (this.#tracker) void this.#syncTrackedFromStorage();
+    return result;
+  }
+
+  /** Track every stored swap the tracker isn't already watching. */
+  async #syncTrackedFromStorage(): Promise<void> {
+    const tracker = this.#tracker;
+    if (!tracker) return;
+    try {
+      for (const swap of await this.#loadTrackedSwaps())
+        await tracker.track(swap);
+    } catch (error) {
+      console.warn("Client: syncing new swaps into tracking failed:", error);
     }
   }
 

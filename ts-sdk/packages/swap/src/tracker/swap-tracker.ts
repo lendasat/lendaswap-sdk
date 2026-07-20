@@ -82,6 +82,28 @@ export class SwapTracker {
       );
   }
 
+  /**
+   * Track one more swap after {@link startTracking} — register its on-chain
+   * leg(s), seed the managers they touch, and derive its first action. Idempotent:
+   * a swap already tracked, or one already seen through to a terminal action, is
+   * ignored. New swaps are picked up by the existing per-manager event listeners
+   * and poll timer, so nothing else needs re-wiring. Lets a swap created after
+   * start (e.g. via `createSwap`) be tracked without a restart.
+   */
+  async track(swap: TrackedSwap): Promise<void> {
+    // Already active, or already completed (lastActions is retained past
+    // terminal) — either way, don't re-register.
+    if (this.#swaps.has(swap.swapId) || this.#lastActions.has(swap.swapId))
+      return;
+    this.#swaps.set(swap.swapId, swap);
+    for (const leg of legsOf(swap)) await this.#managerFor(leg).register(leg);
+    // Seed/advance just the managers this swap touches (clock + observations),
+    // then derive its first action — mirrors startTracking's prime step.
+    const managers = new Set(legsOf(swap).map((leg) => this.#managerFor(leg)));
+    await Promise.all([...managers].map((manager) => manager.refresh()));
+    this.#recompute(swap);
+  }
+
   async #tick(): Promise<void> {
     await this.#refreshManagers();
     this.#recomputeAll();

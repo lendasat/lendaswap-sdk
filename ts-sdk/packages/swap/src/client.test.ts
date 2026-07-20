@@ -2,7 +2,7 @@ import {
   Client as LegacyClient,
   type StoredSwap,
 } from "@lendasat/lendaswap-sdk-pure";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HtlcObservation } from "./actions/types.js";
 import { Client } from "./client.js";
 import {
@@ -152,6 +152,33 @@ describe("Client tracking", () => {
     // Both legs released, so the managers stop watching this swap.
     expect(m.arkade.registered.size).toBe(0);
     expect(m.evm.registered.size).toBe(0);
+  });
+
+  it("tracks a swap created after startTracking (track-on-create)", async () => {
+    const m = managers();
+    // A legacy stand-in whose create persists to storage, as the real one does.
+    const swaps: StoredSwap[] = [];
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => swaps,
+      createArkadeToEvmSwapGeneric: async () => {
+        swaps.push(arkadeEvmSwap);
+        return { response: { id: "swap-1" } };
+      },
+    });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+    expect(m.arkade.registered.size).toBe(0); // nothing created yet
+
+    await client.createArkadeToEvmSwapGeneric(
+      {} as Parameters<Client["createArkadeToEvmSwapGeneric"]>[0],
+    );
+
+    // Tracking-sync is fire-and-forget (never blocks the create), so wait for it.
+    await vi.waitFor(() => {
+      expect(m.arkade.registered.size).toBe(1);
+      expect(m.evm.registered.size).toBe(1);
+    });
   });
 
   it("clears the partial tracker when startTracking fails partway", async () => {
