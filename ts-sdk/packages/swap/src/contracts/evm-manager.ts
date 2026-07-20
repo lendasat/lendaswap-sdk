@@ -122,6 +122,16 @@ export class EvmContractManager implements ContractManager {
     await Promise.all([...chainIds].map((c) => this.#reconcileChain(c)));
   }
 
+  async reconcile(ref: HtlcRef): Promise<void> {
+    if (ref.ledger !== "evm") return;
+    const tracked = this.#refs.get(htlcKey(ref));
+    if (!tracked) return;
+    const reader = this.#readers.get(tracked.chainId);
+    if (!reader) return;
+    this.#now.set(tracked.chainId, await reader.getBlockTimeMs());
+    await this.#reconcileRef(reader, tracked);
+  }
+
   dispose(): void {
     for (const unsub of this.#watchUnsubs.values()) unsub();
     this.#watchUnsubs.clear();

@@ -43,8 +43,19 @@ class FakeManager implements ContractManager {
   refresh = async (): Promise<void> => {
     if (this.#refreshNow !== undefined) this.#now = this.#refreshNow;
   };
+  reconciled: HtlcRef[] = [];
+  #reconcileState: HtlcObservation | undefined;
+  reconcile = async (ref: HtlcRef): Promise<void> => {
+    this.reconciled.push(ref);
+    if (this.#reconcileState !== undefined)
+      this.#states.set(htlcKey(ref), this.#reconcileState);
+  };
   dispose = (): void => {};
 
+  /** Make the next reconcile reveal `state` for the ref (as a fresh chain read). */
+  setReconcileState(state: HtlcObservation): void {
+    this.#reconcileState = state;
+  }
   setNow(now: number): void {
     this.#now = now;
   }
@@ -153,6 +164,33 @@ describe("SwapTracker", () => {
       recommended: "claim",
       actions: [expect.objectContaining({ id: "claim" })],
     });
+  });
+
+  it("applyHint reconciles the swap's legs, then recomputes from the fresh read", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([swap]);
+    const sub = vi.fn();
+    tracker.subscribeToActions(sub);
+
+    // A hint arrives; a fresh on-chain read now shows both legs funded.
+    arkade.setReconcileState("confirmed");
+    evm.setReconcileState("confirmed");
+    await tracker.applyHint("s1");
+
+    expect(arkade.reconciled).toContainEqual(clientHtlc);
+    expect(evm.reconciled).toContainEqual(serverHtlc);
+    expect(sub).toHaveBeenCalledWith(
+      "s1",
+      expect.objectContaining({ recommended: "claim" }),
+    );
+  });
+
+  it("applyHint is a no-op for an untracked swap", async () => {
+    const { arkade, evm, tracker } = setup();
+    await tracker.startTracking([swap]);
+    await tracker.applyHint("unknown");
+    expect(arkade.reconciled).toEqual([]);
+    expect(evm.reconciled).toEqual([]);
   });
 
   it("dedupes: an unchanged observation does not re-notify", async () => {

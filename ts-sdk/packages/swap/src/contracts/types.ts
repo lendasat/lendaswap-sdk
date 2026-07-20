@@ -133,6 +133,14 @@ export interface ContractManager {
   /** Force a reconcile from the ledger. */
   refresh(): Promise<void>;
 
+  /**
+   * Re-observe a single tracked HTLC from the ledger now — a targeted refresh, so
+   * a faster server hint can trigger an immediate on-chain verification of just
+   * that swap's legs without re-scanning every tracked HTLC. A no-op if the ref
+   * isn't tracked.
+   */
+  reconcile(ref: HtlcRef): Promise<void>;
+
   /** Tear down subscriptions and background work. */
   dispose(): void;
 }

@@ -29,6 +29,7 @@ class FakeManager implements ContractManager {
   chainNow = (_ref: HtlcRef): number | undefined => undefined;
   onEvent = (): (() => void) => () => {};
   refresh = async (): Promise<void> => {};
+  reconcile = async (): Promise<void> => {};
   dispose = (): void => {};
 }
 

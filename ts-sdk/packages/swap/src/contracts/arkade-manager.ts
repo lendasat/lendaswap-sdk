@@ -145,6 +145,14 @@ export class ArkadeContractManager implements ContractManager {
     );
   }
 
+  async reconcile(ref: HtlcRef): Promise<void> {
+    if (ref.ledger !== "arkade") return;
+    const tracked = this.#refs.get(ref.script);
+    if (!tracked) return;
+    if (this.#chainTime) this.#now = await this.#chainTime();
+    await this.#reconcileRef(tracked);
+  }
+
   dispose(): void {
     this.#listeners.clear();
   }

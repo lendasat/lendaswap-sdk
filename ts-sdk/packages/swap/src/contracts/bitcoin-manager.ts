@@ -106,6 +106,14 @@ export class BitcoinContractManager implements ContractManager {
     );
   }
 
+  async reconcile(ref: HtlcRef): Promise<void> {
+    if (ref.ledger !== "bitcoin") return;
+    const tracked = this.#refs.get(ref.address);
+    if (!tracked) return;
+    if (this.#chainTime) this.#now = await this.#chainTime();
+    await this.#reconcileRef(tracked);
+  }
+
   dispose(): void {
     this.#listeners.clear();
   }

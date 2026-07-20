@@ -106,6 +106,22 @@ export class SwapTracker {
     await Promise.all([...managers].map((manager) => manager.refresh()));
   }
 
+  /**
+   * Re-verify one swap against the chain right now — the hook a faster server
+   * status hint drives. Reconciles just that swap's legs (targeted, on the
+   * managers), then recomputes its action. The hint is only a *trigger*: the
+   * chain stays the source of truth, so a premature hint that the chain doesn't
+   * yet reflect changes nothing. A no-op for an untracked swap.
+   */
+  async applyHint(swapId: string): Promise<void> {
+    const swap = this.#swaps.get(swapId);
+    if (!swap) return;
+    await Promise.all(
+      legsOf(swap).map((leg) => this.#managerFor(leg).reconcile(leg)),
+    );
+    this.#recompute(swap);
+  }
+
   /** Notify `cb` of the current action for each tracked swap, then on every change. */
   subscribeToActions(cb: ActionSubscriber): () => void {
     this.#subscribers.add(cb);
