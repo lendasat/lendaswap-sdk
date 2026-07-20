@@ -12,6 +12,7 @@ import {
   Client as LegacyClient,
   type ClientBuilder as LegacyClientBuilder,
 } from "@lendasat/lendaswap-sdk-pure";
+import type { SwapActions } from "./actions/types.js";
 import { ArkadeContractManager } from "./contracts/arkade-manager.js";
 import { defaultArkadeServerUrl } from "./contracts/arkade-network.js";
 import { BitcoinContractManager } from "./contracts/bitcoin-manager.js";
@@ -19,12 +20,31 @@ import { DEFAULT_ESPLORA_URLS } from "./contracts/bitcoin-reader-esplora.js";
 import { EvmContractManager } from "./contracts/evm-manager.js";
 import { defaultEvmReaders } from "./contracts/evm-reader-viem.js";
 import type { ContractManager, Ledger } from "./contracts/types.js";
+import { SwapWorker } from "./hints/swap-worker.js";
+import { WsStatusSource } from "./hints/ws-status-source.js";
 import { swapToTracked } from "./tracker/from-swap.js";
 import {
   type ActionSubscriber,
   SwapTracker,
   type TrackedSwap,
 } from "./tracker/swap-tracker.js";
+
+/**
+ * Hint-driven auto-execution, opt-in via {@link ClientBuilder.withAutoClaim}.
+ *
+ * When set, tracking also opens the server status WebSocket (a faster trigger
+ * than the chain poll) and runs a {@link SwapWorker}: it auto-claims a swap the
+ * moment the chain confirms it is claimable, and surfaces the rest — a manual
+ * `fund`, or a refund the user must confirm — via {@link onActionRequired}.
+ */
+type AutoClaimConfig = {
+  /**
+   * Surface an action that needs the user rather than being auto-run — a manual
+   * `fund`, or a refund to confirm. The seam a frontend notification center
+   * plugs into. Omit to only auto-claim and ignore the rest.
+   */
+  onActionRequired?: (swapId: string, actions: SwapActions) => void;
+};
 
 /** How the client should set up observe-mode tracking. */
 type TrackingConfig = {
@@ -40,6 +60,8 @@ type TrackingConfig = {
   esploraUrl?: string;
   /** Poll interval (ms) for advancing observations/clocks; defaults to 5s. */
   refreshIntervalMs?: number;
+  /** Opt-in hint-driven auto-claim; unset leaves tracking observe-only. */
+  autoClaim?: AutoClaimConfig;
 };
 
 export class Client {
@@ -50,6 +72,8 @@ export class Client {
   /** Per-ledger monitors, resolved once from {@link #tracking}. */
   #managers: Map<Ledger, ContractManager> | undefined;
   #tracker: SwapTracker | undefined;
+  /** Hint-driven auto-claim worker; only built when `withAutoClaim` opted in. */
+  #worker: SwapWorker | undefined;
   #started = false;
 
   /**
@@ -596,16 +620,48 @@ export class Client {
         .map(swapToTracked)
         .filter((s): s is TrackedSwap => s !== undefined);
       await tracker.startTracking(tracked);
+      this.#startWorker(tracker);
     } catch (error) {
       // A partway failure (e.g. a ledger register/refresh erroring on an RPC or
-      // indexer hiccup) left `#tracker` set and some legs registered. Tear it down
-      // so `subscribeToActions` still reports "not started" and a retry begins
-      // clean, instead of leaking the partial tracker's registrations/listeners.
+      // indexer hiccup) left `#tracker`/`#worker` set and some legs registered.
+      // Tear them down so `subscribeToActions` still reports "not started" and a
+      // retry begins clean, instead of leaking registrations/listeners/sockets.
+      this.#worker?.stop();
+      this.#worker = undefined;
       this.#tracker?.stop();
       this.#tracker = undefined;
       this.#started = false;
       throw error;
     }
+  }
+
+  /**
+   * If auto-claim was opted in, wire the server status WebSocket into a
+   * {@link SwapWorker}: hints trigger a chain re-verify, and a swap the chain
+   * confirms claimable is auto-claimed; `fund`/refund actions are surfaced via the
+   * configured `onActionRequired`. A no-op unless `withAutoClaim` was set and a
+   * base URL is configured (the WebSocket needs a server to reach).
+   */
+  #startWorker(tracker: SwapTracker): void {
+    const autoClaim = this.#tracking.autoClaim;
+    if (!autoClaim) return;
+    if (!this.baseUrl) return;
+
+    const hintSource = new WsStatusSource({ serverUrl: this.baseUrl });
+    const worker = new SwapWorker({
+      tracker,
+      hintSource,
+      execute: async (swapId, actionId) => {
+        // The worker only ever auto-runs claims (its AUTO_EXECUTABLE set).
+        if (actionId !== "claim")
+          throw new Error(`refusing to auto-run action '${actionId}'`);
+        const result = await this.claim(swapId);
+        if (!result.success) throw new Error(result.message ?? "claim failed");
+      },
+      onActionRequired: autoClaim.onActionRequired,
+    });
+    this.#worker = worker;
+    worker.start();
   }
 
   /**
@@ -621,6 +677,8 @@ export class Client {
 
   /** Stop tracking and drop subscribers. The managers themselves are not disposed. */
   stopTracking(): void {
+    this.#worker?.stop();
+    this.#worker = undefined;
     this.#tracker?.stop();
     this.#tracker = undefined;
     this.#started = false;
@@ -683,6 +741,7 @@ export class ClientBuilder {
   #esploraUrl: string | undefined;
   #evmRpcUrls: Record<number, string> | undefined;
   #managers: Map<Ledger, ContractManager> | undefined;
+  #autoClaim: AutoClaimConfig | undefined;
 
   /**
    * Override the EVM JSON-RPC endpoint per chainId. Optional — tracking uses
@@ -691,6 +750,21 @@ export class ClientBuilder {
    */
   withEvmRpcUrls(urls: Record<number, string>): this {
     this.#evmRpcUrls = urls;
+    return this;
+  }
+
+  /**
+   * Opt in to hint-driven auto-claim. Tracking then also subscribes to the
+   * server status WebSocket (a faster trigger than the chain poll) and, when the
+   * chain confirms a swap is claimable, claims it automatically. Actions that
+   * need the user — a manual `fund`, or a refund to confirm — are surfaced via
+   * `onActionRequired` instead of being run. Off by default: this auto-spends on
+   * the user's behalf, so it must be explicit.
+   */
+  withAutoClaim(options?: {
+    onActionRequired?: (swapId: string, actions: SwapActions) => void;
+  }): this {
+    this.#autoClaim = { onActionRequired: options?.onActionRequired };
     return this;
   }
 
@@ -800,6 +874,7 @@ export class ClientBuilder {
       arkadeServerUrl: this.#arkadeServerUrl,
       esploraUrl: this.#esploraUrl,
       evmRpcUrls: this.#evmRpcUrls,
+      autoClaim: this.#autoClaim,
     });
   }
 }

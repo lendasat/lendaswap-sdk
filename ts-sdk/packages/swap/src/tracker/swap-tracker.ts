@@ -106,6 +106,11 @@ export class SwapTracker {
     await Promise.all([...managers].map((manager) => manager.refresh()));
   }
 
+  /** The swap ids currently tracked — e.g. to subscribe them to a hint feed. */
+  trackedSwapIds(): string[] {
+    return [...this.#swaps.keys()];
+  }
+
   /**
    * Re-verify one swap against the chain right now — the hook a faster server
    * status hint drives. Reconciles just that swap's legs (targeted, on the
