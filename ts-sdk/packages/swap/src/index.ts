@@ -53,6 +53,12 @@ export {
 } from "./contracts/evm-reader-viem.js";
 export type * from "./contracts/types.js";
 export { htlcKey } from "./contracts/types.js";
+export {
+  type SwapStatusUpdate,
+  type WebSocketLike,
+  WsStatusSource,
+  type WsStatusSourceOptions,
+} from "./hints/ws-status-source.js";
 export { swapToTracked } from "./tracker/from-swap.js";
 export {
   type ActionSubscriber,
