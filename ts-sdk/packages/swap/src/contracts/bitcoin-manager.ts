@@ -69,6 +69,12 @@ export class BitcoinContractManager implements ContractManager {
     });
   }
 
+  canObserve(ref: HtlcRef): boolean {
+    // Esplora is always configured (default or override), so any Bitcoin ref is
+    // observable.
+    return ref.ledger === "bitcoin";
+  }
+
   async register(ref: HtlcRef): Promise<void> {
     if (ref.ledger !== "bitcoin")
       throw new Error(

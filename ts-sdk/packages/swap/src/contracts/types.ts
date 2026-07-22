@@ -107,6 +107,16 @@ export interface ContractManager {
   /** The ledger this manager observes. */
   readonly ledger: Ledger;
 
+  /**
+   * Whether this manager can observe `ref` at all — a permanent capability check,
+   * not a transient health probe. `false` means the ledger/chain is not configured
+   * (e.g. an EVM chain with no RPC), so the ref can never be observed and the
+   * tracker should skip the swap rather than {@link register} it (which throws).
+   * Distinct from a register failure, which is a recoverable error on an
+   * observable ref.
+   */
+  canObserve(ref: HtlcRef): boolean;
+
   /** Start tracking an HTLC (idempotent); seeds its state from the ledger. */
   register(ref: HtlcRef): Promise<void>;
 

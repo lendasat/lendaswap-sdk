@@ -74,6 +74,10 @@ export class EvmContractManager implements ContractManager {
     return new EvmContractManager(deps);
   }
 
+  canObserve(ref: HtlcRef): boolean {
+    return ref.ledger === "evm" && this.#readers.has(ref.chainId);
+  }
+
   async register(ref: HtlcRef): Promise<void> {
     if (ref.ledger !== "evm")
       throw new Error(`EvmContractManager can't track a '${ref.ledger}' HTLC`);

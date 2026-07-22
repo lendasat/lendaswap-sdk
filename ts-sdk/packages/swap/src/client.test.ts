@@ -19,6 +19,9 @@ class FakeManager implements ContractManager {
   constructor(ledger: Ledger) {
     this.ledger = ledger;
   }
+  /** Flip to false to simulate an unreachable ledger/chain. */
+  observable = true;
+  canObserve = (_ref: HtlcRef): boolean => this.observable;
   register = async (ref: HtlcRef): Promise<void> => {
     this.registered.add(htlcKey(ref));
   };
@@ -179,6 +182,30 @@ describe("Client tracking", () => {
       expect(m.arkade.registered.size).toBe(1);
       expect(m.evm.registered.size).toBe(1);
     });
+  });
+
+  it("rejects creating a swap with an unreachable leg (throw-on-create)", async () => {
+    const m = managers();
+    m.evm.observable = false; // the created swap's EVM chain has no reader
+    const swaps: StoredSwap[] = [];
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => swaps,
+      createArkadeToEvmSwapGeneric: async () => {
+        swaps.push(arkadeEvmSwap);
+        return { response: { id: "swap-1" } };
+      },
+    });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+
+    await expect(
+      client.createArkadeToEvmSwapGeneric(
+        {} as Parameters<Client["createArkadeToEvmSwapGeneric"]>[0],
+      ),
+    ).rejects.toThrow(/can't reach/);
+    // Not tracked — it was rejected, not folded in.
+    expect(m.arkade.registered.size).toBe(0);
   });
 
   it("clears the partial tracker when startTracking fails partway", async () => {

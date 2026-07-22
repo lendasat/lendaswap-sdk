@@ -25,6 +25,9 @@ class FakeManager implements ContractManager {
     this.#refreshNow = refreshNow;
   }
 
+  /** Flip to false to simulate an unreachable ledger/chain. */
+  observable = true;
+  canObserve = (_ref: HtlcRef): boolean => this.observable;
   register = async (ref: HtlcRef): Promise<void> => {
     this.registered.add(htlcKey(ref));
   };
@@ -212,6 +215,40 @@ describe("SwapTracker", () => {
     arkade.register = vi.fn(arkade.register); // spy further registers
     await tracker.track(swap);
     expect(arkade.register).not.toHaveBeenCalled();
+  });
+
+  it("skips a swap with an unreachable leg instead of aborting startTracking", async () => {
+    const { arkade, evm, tracker } = setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    evm.observable = false; // the EVM chain has no reader configured
+    const other: TrackedSwap = { ...swap, swapId: "s2" };
+
+    // s1 (unobservable) is skipped; s2's arkade-only... no, both swaps share legs.
+    // Use a swap whose legs are all observable for the "other" case: swap on arkade
+    // only would need a different shape, so assert s1 skipped + startTracking ok.
+    await expect(tracker.startTracking([swap, other])).resolves.toBeUndefined();
+    expect(arkade.registered.size).toBe(0); // neither leg of either swap registered
+    expect(tracker.trackedSwapIds()).toEqual([]);
+    vi.restoreAllMocks();
+  });
+
+  it("canObserve is false when a leg's ledger has no reader", () => {
+    const { evm, tracker } = setup();
+    expect(tracker.canObserve(swap)).toBe(true);
+    evm.observable = false;
+    expect(tracker.canObserve(swap)).toBe(false);
+  });
+
+  it("track() skips an unreachable swap without throwing", async () => {
+    const { arkade, evm, tracker } = setup();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    await tracker.startTracking([]);
+    evm.observable = false;
+
+    await expect(tracker.track(swap)).resolves.toBeUndefined();
+    expect(arkade.registered.size).toBe(0);
+    expect(tracker.trackedSwapIds()).toEqual([]);
+    vi.restoreAllMocks();
   });
 
   it("track() rolls back a partial registration so a later attempt retries", async () => {

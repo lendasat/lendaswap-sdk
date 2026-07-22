@@ -108,6 +108,12 @@ export class ArkadeContractManager implements ContractManager {
     });
   }
 
+  canObserve(ref: HtlcRef): boolean {
+    // The Arkade server is always configured (default or override), so any Arkade
+    // ref is observable.
+    return ref.ledger === "arkade";
+  }
+
   async register(ref: HtlcRef): Promise<void> {
     if (ref.ledger !== "arkade")
       throw new Error(

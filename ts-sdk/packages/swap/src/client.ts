@@ -654,28 +654,44 @@ export class Client {
   }
 
   /**
-   * Run a create, then fold any newly-stored swap into tracking. Fire-and-forget:
-   * a tracking hiccup must never fail or delay the create, and it is a no-op when
-   * tracking isn't running (a later {@link startTracking} loads it from storage
-   * anyway). This is how a swap created after start gets tracked without a restart.
+   * Run a create, then fold the new swap into tracking.
+   *
+   * When tracking is active, first REJECT a swap this client can't reach: a leg on
+   * an unconfigured chain can be neither observed nor claimed, so creating it would
+   * strand funds. Throwing here (before the caller funds it) is deliberately
+   * stricter than {@link startTracking}, which only *skips* such a pre-existing
+   * swap. Otherwise fold the new swap(s) in — fire-and-forget, so a tracking hiccup
+   * never fails or delays the create; a no-op when tracking isn't running (a later
+   * {@link startTracking} picks it up from storage).
    */
   async #trackAfterCreate<T>(op: Promise<T>): Promise<T> {
     const result = await op;
-    if (this.#tracker) void this.#syncTrackedFromStorage();
-    return result;
-  }
-
-  /** Track every stored swap the tracker isn't already watching. */
-  async #syncTrackedFromStorage(): Promise<void> {
     const tracker = this.#tracker;
-    if (!tracker) return;
+    if (!tracker) return result;
+
     let swaps: TrackedSwap[];
     try {
       swaps = await this.#loadTrackedSwaps();
     } catch (error) {
-      console.warn("Client: loading swaps to track failed:", error);
-      return;
+      // A storage-read hiccup must not fail a create that already succeeded; the
+      // next startTracking reconciles from storage anyway.
+      console.warn("Client: loading swaps after create failed:", error);
+      return result;
     }
+
+    const created = swaps.find((s) => s.swapId === createdSwapId(result));
+    if (created && !tracker.canObserve(created))
+      throw new Error(
+        `Refusing swap ${created.swapId}: a leg is on a chain this client can't reach, ` +
+          `so it can be neither tracked nor claimed. Configure the chain ` +
+          `(e.g. ClientBuilder.withEvmRpcUrls) before creating it.`,
+      );
+    void this.#trackAll(tracker, swaps);
+    return result;
+  }
+
+  /** Track each given swap the tracker isn't already watching (isolated per swap). */
+  async #trackAll(tracker: SwapTracker, swaps: TrackedSwap[]): Promise<void> {
     // Isolate per swap: one that fails to register (and rolls itself back) must
     // not stop the rest of the batch from being tracked.
     for (const swap of swaps) {
@@ -929,4 +945,13 @@ export class ClientBuilder {
       autoClaim: this.#autoClaim,
     });
   }
+}
+
+/**
+ * The swap id from a create result. Every `create*` result carries the created
+ * swap under `response.id`; used to find the just-created swap in storage.
+ */
+function createdSwapId(result: unknown): string | undefined {
+  const id = (result as { response?: { id?: unknown } } | null)?.response?.id;
+  return typeof id === "string" ? id : undefined;
 }

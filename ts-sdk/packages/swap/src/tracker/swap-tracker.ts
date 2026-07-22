@@ -59,9 +59,29 @@ export class SwapTracker {
     this.#refreshIntervalMs = options?.refreshIntervalMs ?? 0;
   }
 
+  /**
+   * Whether every on-chain leg of `swap` is observable — i.e. the tracker can
+   * derive its status from chain. `false` means a leg is on a ledger/chain this
+   * client can't reach (no manager, or an EVM chain with no RPC), so the swap
+   * can't be tracked. Pure predicate — callers decide the policy (skip vs reject).
+   */
+  canObserve(swap: TrackedSwap): boolean {
+    return legsOf(swap).every(
+      (leg) => this.#managers.get(leg.ledger)?.canObserve(leg) ?? false,
+    );
+  }
+
   /** Register each swap's on-chain leg(s), subscribe to manager events, and seed state. */
   async startTracking(swaps: TrackedSwap[]): Promise<void> {
     for (const swap of swaps) {
+      // Skip a swap with an unreachable leg rather than letting register() throw
+      // and abort tracking for every other swap too. It simply goes untracked.
+      if (!this.canObserve(swap)) {
+        console.warn(
+          `SwapTracker: skipping swap ${swap.swapId} — a leg is on a chain this client can't reach (configure it to track this swap)`,
+        );
+        continue;
+      }
       this.#swaps.set(swap.swapId, swap);
       for (const leg of legsOf(swap)) await this.#managerFor(leg).register(leg);
     }
@@ -95,6 +115,14 @@ export class SwapTracker {
     // terminal) — either way, don't re-register.
     if (this.#swaps.has(swap.swapId) || this.#lastActions.has(swap.swapId))
       return;
+    // Unreachable leg: skip rather than throw. (The create path rejects such a
+    // swap up front; a pre-existing one reaching here just goes untracked.)
+    if (!this.canObserve(swap)) {
+      console.warn(
+        `SwapTracker: skipping swap ${swap.swapId} — a leg is on a chain this client can't reach (configure it to track this swap)`,
+      );
+      return;
+    }
     this.#swaps.set(swap.swapId, swap);
 
     const registered: HtlcRef[] = [];
