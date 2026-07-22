@@ -39,8 +39,10 @@ import {
   createSwapSmartAccountClient,
 } from "./smartAccount.js";
 import {
+  type SubmitBalanceUserOpParams,
   type SubmitUserOpParams,
   type SubmitUserOpResult,
+  submitCctpInboundBalanceUserOp,
   submitCctpInboundUserOp,
 } from "./submit.js";
 import type { AaConfig } from "./types.js";
@@ -123,6 +125,26 @@ export class CctpInboundClient {
    */
   submitUserOp(params: SubmitUserOpParams): Promise<SubmitUserOpResult> {
     return submitCctpInboundUserOp(
+      { apiClient: this.#apiClient, aa: this.#aa },
+      {
+        ...params,
+        logger: params.logger ?? this.#logger,
+        logLevel: params.logLevel ?? this.#logLevel,
+      },
+    );
+  }
+
+  /**
+   * Fund an Arbitrum-settled EVM-sourced swap from USDC/tBTC/WBTC that is
+   * already sitting in the Kernel smart account. This is the retry/recovery
+   * variant of the CCTP-inbound settlement path: it skips `receiveMessage` and
+   * submits only `approve(Permit2) + executeAndCreateWithPermit2` as a
+   * paymaster-sponsored UserOp.
+   */
+  submitBalanceUserOp(
+    params: SubmitBalanceUserOpParams,
+  ): Promise<SubmitUserOpResult> {
+    return submitCctpInboundBalanceUserOp(
       { apiClient: this.#apiClient, aa: this.#aa },
       {
         ...params,

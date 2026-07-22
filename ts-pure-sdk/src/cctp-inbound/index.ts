@@ -79,9 +79,11 @@ export {
   createSwapSmartAccountClient,
 } from "./smartAccount.js";
 export {
+  type SubmitBalanceUserOpParams,
   type SubmitUserOpContext,
   type SubmitUserOpParams,
   type SubmitUserOpResult,
+  submitCctpInboundBalanceUserOp,
   submitCctpInboundUserOp,
 } from "./submit.js";
 export type { AaConfig } from "./types.js";

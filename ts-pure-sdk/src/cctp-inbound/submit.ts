@@ -105,6 +105,23 @@ export interface SubmitUserOpResult {
   transactionHash?: Hex;
 }
 
+export interface SubmitBalanceUserOpParams {
+  /** Swap ID assigned by the backend at create time. */
+  swapId: string;
+  /** Kernel smart-account owner as the SDK's `EvmSigner`. */
+  signer: EvmSigner;
+  /** Settlement chain. Defaults to Arbitrum mainnet. */
+  chain?: Chain;
+  /** Return immediately after submission without waiting for receipt. */
+  noWait?: boolean;
+  /** Optional debug simulation of each batched call. */
+  preflightSimulate?: boolean;
+  /** Optional logger sink. Silent by default. */
+  logger?: Logger;
+  /** Minimum log level to emit. Defaults to `silent`. */
+  logLevel?: LogLevel;
+}
+
 /** Inputs needed from the `CctpInboundClient` to execute a submission. */
 export interface SubmitUserOpContext {
   apiClient: ApiClient;
@@ -119,6 +136,89 @@ export interface SubmitUserOpContext {
  * injects its own state; tests and advanced consumers can call the
  * free function directly with a custom `SubmitUserOpContext`.
  */
+async function sendBalanceUserOp(
+  context: SubmitUserOpContext,
+  params: SubmitBalanceUserOpParams,
+): Promise<SubmitUserOpResult> {
+  const { apiClient, aa } = context;
+  const {
+    swapId,
+    signer,
+    chain = arbitrum,
+    noWait,
+    preflightSimulate,
+  } = params;
+
+  const { data, error } = await apiClient.GET(
+    "/swap/{id}/swap-and-lock-calldata-userop",
+    { params: { path: { id: swapId } } },
+  );
+  if (error || !data) {
+    throw new Error(
+      `Failed to fetch AA balance-funding calldata for swap ${swapId}: ${JSON.stringify(
+        error,
+      )}`,
+    );
+  }
+  const server = data as unknown as UseropCalldataResponse;
+
+  const {
+    client: aaClient,
+    account: smartAccount,
+    accountAddress,
+  } = await createSwapSmartAccountClient({ signer, aa, chain });
+
+  const publicClient = createPublicClient({
+    chain,
+    transport: http(aa.bundlerUrl),
+  });
+
+  const { calls } = await buildCctpInboundBatch({
+    server,
+    smartAccountAddress: accountAddress,
+    signTypedData: (args) => smartAccount.signTypedData(args),
+    cctpMessage: "0x" as Hex,
+    cctpAttestation: "0x" as Hex,
+    chainId: chain.id,
+    skipReceiveMessage: true,
+  });
+
+  if (preflightSimulate) {
+    await simulateBatchCalls({
+      calls,
+      smartAccount: accountAddress,
+      publicClient,
+      logger: params.logger,
+      logLevel: params.logLevel,
+    });
+  }
+
+  const userOpHash = await aaClient.sendUserOperation({ calls });
+  if (noWait) {
+    return { userOpHash, smartAccountAddress: accountAddress };
+  }
+
+  const receipt = await aaClient.waitForUserOperationReceipt({
+    hash: userOpHash,
+  });
+  if (!receipt.success) {
+    throw new Error(`Balance-funding UserOperation reverted: ${userOpHash}`);
+  }
+
+  return {
+    userOpHash,
+    smartAccountAddress: accountAddress,
+    transactionHash: receipt.receipt.transactionHash,
+  };
+}
+
+export async function submitCctpInboundBalanceUserOp(
+  context: SubmitUserOpContext,
+  params: SubmitBalanceUserOpParams,
+): Promise<SubmitUserOpResult> {
+  return sendBalanceUserOp(context, params);
+}
+
 export async function submitCctpInboundUserOp(
   context: SubmitUserOpContext,
   params: SubmitUserOpParams,

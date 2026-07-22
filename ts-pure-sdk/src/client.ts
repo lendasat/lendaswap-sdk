@@ -406,6 +406,36 @@ export interface CollabRefundEvmParams {
   dexCalldata?: { to: string; data: string; value: string };
 }
 
+export interface ContinueRefundedEvmSwapInfo {
+  eligible: boolean;
+  reason?: string;
+  smartAccountAddress?: string;
+  token?: {
+    chain: Chain;
+    address: string;
+    symbol: string;
+    decimals: number;
+  };
+  amount?: string;
+  balance?: string;
+  oldSwap?: GetSwapResponse;
+}
+
+export interface ContinueRefundedEvmSwapResult {
+  oldSwapId: string;
+  newSwapId: string;
+  txHash: string;
+  userOpHash: string;
+  smartAccountAddress: string;
+  amount: string;
+  token: {
+    chain: Chain;
+    address: string;
+    symbol: string;
+    decimals: number;
+  };
+}
+
 /** General refund options — the method picks the right variant based on swap type */
 export type RefundOptions =
   | OnchainRefundOptions
@@ -5830,6 +5860,276 @@ export class Client {
     });
 
     return { txHash: result.txHash };
+  }
+
+  async #actualRefundTransfer(
+    oldSwap: GetSwapResponse,
+    smartAccountAddress: string,
+  ): Promise<{ tokenAddress: string; amount: string } | null> {
+    const txHash = (oldSwap as { evm_claim_txid?: string | null })
+      .evm_claim_txid;
+    if (!txHash || !this.#config.aa?.bundlerUrl) return null;
+
+    const { createPublicClient, http } = await import("viem");
+    const { arbitrum } = await import("viem/chains");
+    const publicClient = createPublicClient({
+      chain: arbitrum,
+      transport: http(this.#config.aa.bundlerUrl),
+    });
+    let receipt: Awaited<ReturnType<typeof publicClient.getTransactionReceipt>>;
+    try {
+      receipt = await publicClient.getTransactionReceipt({
+        hash: txHash as `0x${string}`,
+      });
+    } catch {
+      return null;
+    }
+
+    const transferTopic =
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+    const paddedRecipient = smartAccountAddress
+      .replace(/^0x/i, "")
+      .toLowerCase()
+      .padStart(64, "0");
+
+    const transfers = receipt.logs
+      .filter(
+        (log) =>
+          log.topics[0]?.toLowerCase() === transferTopic &&
+          log.topics[2]?.replace(/^0x/i, "").toLowerCase() === paddedRecipient,
+      )
+      .map((log) => ({
+        tokenAddress: log.address,
+        amount: BigInt(log.data).toString(),
+      }))
+      .filter((t) => BigInt(t.amount) > 0n);
+
+    return transfers.at(-1) ?? null;
+  }
+
+  async getRefundedEvmSwapContinuation(
+    oldSwapId: string,
+    signer: EvmSigner,
+  ): Promise<ContinueRefundedEvmSwapInfo> {
+    const oldSwap = await this.getSwap(oldSwapId, { updateStorage: true });
+
+    if (
+      oldSwap.direction !== "evm_to_arkade" &&
+      oldSwap.direction !== "evm_to_bitcoin" &&
+      oldSwap.direction !== "evm_to_lightning"
+    ) {
+      return {
+        eligible: false,
+        reason: `Expected an EVM-sourced swap, got ${oldSwap.direction}.`,
+        oldSwap,
+      };
+    }
+
+    if (
+      oldSwap.status !== "clientrefunded" &&
+      oldSwap.status !== "clientrefundedserverrefunded" &&
+      oldSwap.status !== "clientrefundedserverfunded"
+    ) {
+      return {
+        eligible: false,
+        reason: `Swap is ${oldSwap.status}, not refunded.`,
+        oldSwap,
+      };
+    }
+
+    const { accountAddress } = await this.cctpInbound.createSmartAccountClient({
+      signer,
+    });
+    const smartAccountAddress = accountAddress;
+
+    const chainConfig = await this.getChainConfig();
+    const refundChain = "42161" as Chain;
+    const refundChainConfig = chainConfig.chains.find(
+      (c) => c.chain === refundChain,
+    );
+    if (!refundChainConfig) {
+      return {
+        eligible: false,
+        reason:
+          "Arbitrum chain config is missing; cannot identify refund token.",
+        smartAccountAddress,
+        oldSwap,
+      };
+    }
+
+    const sourceTokenAddress = String(oldSwap.source_token.token_id);
+    const fallbackCandidates = [
+      {
+        chain: refundChain,
+        address: refundChainConfig.btc_pegged_token.address,
+        symbol: refundChainConfig.btc_pegged_token.symbol,
+        decimals: refundChainConfig.btc_pegged_token.decimals,
+        amount: String(
+          (oldSwap as { evm_expected_sats?: number | string })
+            .evm_expected_sats,
+        ),
+      },
+      {
+        chain: oldSwap.source_token.chain as Chain,
+        address: sourceTokenAddress,
+        symbol: oldSwap.source_token.symbol,
+        decimals: oldSwap.source_token.decimals,
+        amount: String(oldSwap.source_amount),
+      },
+    ];
+
+    const actualRefund = await this.#actualRefundTransfer(
+      oldSwap,
+      smartAccountAddress,
+    );
+    const actualMeta = actualRefund
+      ? fallbackCandidates.find(
+          (c) =>
+            c.address.toLowerCase() === actualRefund.tokenAddress.toLowerCase(),
+        )
+      : undefined;
+    const candidates = [
+      ...(actualRefund
+        ? [
+            {
+              chain: refundChain,
+              address: actualRefund.tokenAddress,
+              symbol: actualMeta?.symbol ?? "ERC-20",
+              decimals: actualMeta?.decimals ?? 18,
+              amount: actualRefund.amount,
+            },
+          ]
+        : []),
+      ...fallbackCandidates,
+    ].filter(
+      (c, idx, arr) =>
+        c.amount !== "undefined" &&
+        c.address.startsWith("0x") &&
+        c.chain === refundChain &&
+        arr.findIndex(
+          (other) =>
+            other.chain === c.chain &&
+            other.address.toLowerCase() === c.address.toLowerCase(),
+        ) === idx,
+    );
+
+    for (const candidate of candidates) {
+      const balanceCall = encodeBalanceOfCall(
+        candidate.address,
+        smartAccountAddress,
+      );
+      const balanceResult = await signer.call({
+        to: balanceCall.to,
+        data: balanceCall.data,
+      });
+      const balance = decodeUint256(balanceResult || "0x0");
+      const amount = BigInt(candidate.amount);
+      if (balance >= amount) {
+        return {
+          eligible: true,
+          smartAccountAddress,
+          token: {
+            chain: candidate.chain,
+            address: candidate.address,
+            symbol: candidate.symbol,
+            decimals: candidate.decimals,
+          },
+          amount: candidate.amount,
+          balance: balance.toString(),
+          oldSwap,
+        };
+      }
+    }
+
+    return {
+      eligible: false,
+      reason: `No expected refunded balance found in Kernel account ${smartAccountAddress}.`,
+      smartAccountAddress,
+      oldSwap,
+    };
+  }
+
+  async continueRefundedEvmSwap(
+    oldSwapId: string,
+    options: { targetAddress: string; signer: EvmSigner },
+  ): Promise<ContinueRefundedEvmSwapResult> {
+    const info = await this.getRefundedEvmSwapContinuation(
+      oldSwapId,
+      options.signer,
+    );
+    if (!info.eligible || !info.token || !info.amount || !info.oldSwap) {
+      throw new Error(info.reason ?? "Refunded swap cannot be continued.");
+    }
+
+    let created: CreateSwapResult;
+    const common = {
+      tokenAddress: info.token.address,
+      evmChainId: 42161,
+      userAddress: info.smartAccountAddress ?? "",
+      gasless: true,
+    };
+
+    if (info.oldSwap.direction === "evm_to_arkade") {
+      created = await this.createEvmToArkadeSwapGeneric({
+        ...common,
+        targetAddress: options.targetAddress,
+        sourceAmount: BigInt(info.amount),
+      });
+    } else if (info.oldSwap.direction === "evm_to_bitcoin") {
+      created = await this.createEvmToBitcoinSwap({
+        ...common,
+        targetAddress: options.targetAddress,
+        sourceAmount: BigInt(info.amount),
+      });
+    } else {
+      const target = options.targetAddress.trim();
+      const isAddress = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
+        target,
+      );
+      const isLnurlStr = /^lnurl1[a-z0-9]+$/i.test(target);
+      const quote = await this.getQuote({
+        sourceChain: info.token.chain,
+        sourceToken: info.token.address,
+        targetChain: "Lightning",
+        targetToken: "btc",
+        sourceAmount: Number(info.amount),
+      });
+      const targetSats = Number(quote.net_target_amount || quote.target_amount);
+      if (!Number.isFinite(targetSats) || targetSats <= 0) {
+        throw new Error(
+          `Unable to derive Lightning target amount from source-fixed quote: ${JSON.stringify(quote)}`,
+        );
+      }
+      created = await this.createEvmToLightningSwapGeneric({
+        ...common,
+        ...(isAddress
+          ? { lightningAddress: target, amountSats: targetSats }
+          : isLnurlStr
+            ? { lnurl: target, amountSats: targetSats }
+            : { lightningInvoice: target }),
+      });
+      const needed = BigInt(String(created.response.source_amount));
+      if (needed > BigInt(info.amount)) {
+        throw new Error(
+          `New Lightning swap requires ${needed} source units, but the recovered balance is ${info.amount}. Please use a smaller invoice/target amount.`,
+        );
+      }
+    }
+
+    const submitted = await this.cctpInbound.submitBalanceUserOp({
+      swapId: created.response.id,
+      signer: options.signer,
+    });
+
+    return {
+      oldSwapId,
+      newSwapId: created.response.id,
+      txHash: submitted.transactionHash ?? submitted.userOpHash,
+      userOpHash: submitted.userOpHash,
+      smartAccountAddress: submitted.smartAccountAddress,
+      amount: info.amount,
+      token: info.token,
+    };
   }
 
   /**

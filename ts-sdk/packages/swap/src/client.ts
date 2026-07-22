@@ -595,6 +595,20 @@ export class Client {
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
+  getRefundedEvmSwapContinuation(
+    ...args: Parameters<LegacyClient["getRefundedEvmSwapContinuation"]>
+  ): ReturnType<LegacyClient["getRefundedEvmSwapContinuation"]> {
+    return this.#legacy.getRefundedEvmSwapContinuation(...args);
+  }
+
+  /** Delegated to the legacy client (migration checkpoint). */
+  continueRefundedEvmSwap(
+    ...args: Parameters<LegacyClient["continueRefundedEvmSwap"]>
+  ): ReturnType<LegacyClient["continueRefundedEvmSwap"]> {
+    return this.#legacy.continueRefundedEvmSwap(...args);
+  }
+
+  /** Delegated to the legacy client (migration checkpoint). */
   recoverGaslessFunds(
     ...args: Parameters<LegacyClient["recoverGaslessFunds"]>
   ): ReturnType<LegacyClient["recoverGaslessFunds"]> {
