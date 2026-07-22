@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   SwapActionAutomation,
   SwapActionId,
@@ -14,11 +14,16 @@ class FakeTracker implements WorkerTracker {
   ids: string[] = [];
   applied: string[] = [];
   #cb: ((id: string, a: SwapActions) => void) | undefined;
+  readonly #last = new Map<string, SwapActions>();
   trackedSwapIds(): string[] {
     return this.ids;
   }
-  applyHint = async (id: string): Promise<void> => {
+  applyHint = async (id: string, opts?: { force?: boolean }): Promise<void> => {
     this.applied.push(id);
+    // A forced re-verify re-emits the swap's current (unchanged) action, standing
+    // in for "chain still says claimable" so a retry re-runs.
+    const current = this.#last.get(id);
+    if (opts?.force && current) this.#cb?.(id, current);
   };
   subscribeToActions(cb: (id: string, a: SwapActions) => void): () => void {
     this.#cb = cb;
@@ -27,6 +32,7 @@ class FakeTracker implements WorkerTracker {
     };
   }
   emit(id: string, actions: SwapActions): void {
+    this.#last.set(id, actions);
     this.#cb?.(id, actions);
   }
 }
@@ -87,7 +93,10 @@ const acts = (recommended?: SwapActionId): SwapActions =>
         ],
       }) as SwapActions;
 
-function setup(execute = vi.fn(async () => {})) {
+function setup(
+  execute = vi.fn(async () => {}),
+  retry?: { maxAttempts?: number; baseDelayMs?: number; maxDelayMs?: number },
+) {
   const tracker = new FakeTracker();
   const hintSource = new FakeHintSource();
   const onActionRequired = vi.fn();
@@ -96,6 +105,7 @@ function setup(execute = vi.fn(async () => {})) {
     hintSource,
     execute,
     onActionRequired,
+    retry,
   });
   return { tracker, hintSource, worker, execute, onActionRequired };
 }
@@ -176,5 +186,96 @@ describe("SwapWorker", () => {
     hintSource.hint("s1");
     expect(execute).not.toHaveBeenCalled();
     expect(tracker.applied).toEqual([]);
+  });
+
+  describe("auto-claim retry", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    const fast = { maxAttempts: 5, baseDelayMs: 10, maxDelayMs: 10 };
+
+    it("re-verifies against chain then re-runs a failed claim, stopping on success", async () => {
+      let n = 0;
+      const execute = vi.fn(async () => {
+        n += 1;
+        if (n === 1) throw new Error("rpc blip"); // first attempt fails
+      });
+      const { tracker, worker } = setup(execute, fast);
+      worker.start();
+
+      tracker.emit("s1", acts("claim"));
+      await vi.advanceTimersByTimeAsync(0); // settle the failure → schedule retry
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(tracker.applied).toEqual([]); // not re-verified yet
+
+      await vi.advanceTimersByTimeAsync(15); // retry fires → applyHint(force) → re-run
+      expect(tracker.applied).toContain("s1"); // re-verified before retrying
+      expect(execute).toHaveBeenCalledTimes(2); // second attempt (succeeds)
+
+      // Succeeded → no further retries scheduled.
+      await vi.advanceTimersByTimeAsync(100);
+      expect(execute).toHaveBeenCalledTimes(2);
+    });
+
+    it("gives up and surfaces the swap after exhausting attempts", async () => {
+      const execute = vi.fn(async () => {
+        throw new Error("always fails");
+      });
+      const { tracker, worker, onActionRequired } = setup(execute, {
+        ...fast,
+        maxAttempts: 3,
+      });
+      worker.start();
+
+      tracker.emit("s1", acts("claim"));
+      // Drain the initial attempt + 3 retries.
+      for (let i = 0; i < 5; i++) await vi.advanceTimersByTimeAsync(15);
+
+      expect(execute).toHaveBeenCalledTimes(4); // initial + 3 retries
+      expect(onActionRequired).toHaveBeenCalledWith("s1", acts("claim"));
+      // No more retries after giving up.
+      const after = execute.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(100);
+      expect(execute).toHaveBeenCalledTimes(after);
+    });
+
+    it("cancels a pending retry when the swap moves off claim", async () => {
+      const execute = vi.fn(async () => {
+        throw new Error("blip");
+      });
+      const { tracker, worker } = setup(execute, {
+        maxAttempts: 5,
+        baseDelayMs: 50,
+        maxDelayMs: 50,
+      });
+      worker.start();
+
+      tracker.emit("s1", acts("claim"));
+      await vi.advanceTimersByTimeAsync(0); // 1st attempt fails → retry scheduled
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      tracker.emit("s1", acts("wait")); // state moved on → supersedes the retry
+      await vi.advanceTimersByTimeAsync(100); // the 50ms timer would have fired
+      expect(execute).toHaveBeenCalledTimes(1); // but was cancelled
+    });
+
+    it("stop() cancels pending retries", async () => {
+      const execute = vi.fn(async () => {
+        throw new Error("blip");
+      });
+      const { tracker, worker } = setup(execute, {
+        maxAttempts: 5,
+        baseDelayMs: 50,
+        maxDelayMs: 50,
+      });
+      worker.start();
+
+      tracker.emit("s1", acts("claim"));
+      await vi.advanceTimersByTimeAsync(0);
+      worker.stop();
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(execute).toHaveBeenCalledTimes(1); // no retry after stop
+    });
   });
 });

@@ -187,13 +187,16 @@ export class SwapTracker {
    * chain stays the source of truth, so a premature hint that the chain doesn't
    * yet reflect changes nothing. A no-op for an untracked swap.
    */
-  async applyHint(swapId: string): Promise<void> {
+  async applyHint(swapId: string, opts?: { force?: boolean }): Promise<void> {
     const swap = this.#swaps.get(swapId);
     if (!swap) return;
     await Promise.all(
       legsOf(swap).map((leg) => this.#managerFor(leg).reconcile(leg)),
     );
-    this.#recompute(swap);
+    // `force` re-notifies even when the derived action is unchanged — the hook a
+    // failed auto-execution uses to re-verify against chain and get retried, since
+    // an unchanged action would otherwise be deduped and never re-trigger.
+    this.#recompute(swap, opts?.force ?? false);
   }
 
   /** Notify `cb` of the current action for each tracked swap, then on every change. */
@@ -234,7 +237,7 @@ export class SwapTracker {
     for (const swap of this.#swaps.values()) this.#recompute(swap);
   }
 
-  #recompute(swap: TrackedSwap): void {
+  #recompute(swap: TrackedSwap, force = false): void {
     // A Lightning swap has one on-chain leg; the absent leg stays `undefined` (its
     // status is derived from the leg that exists). Gate only on present legs — a
     // leg with no observation or clock yet means "not enough known", so bail.
@@ -272,7 +275,11 @@ export class SwapTracker {
     });
 
     const previous = this.#lastActions.get(swap.swapId);
-    if (previous && JSON.stringify(previous) === JSON.stringify(actions))
+    if (
+      !force &&
+      previous &&
+      JSON.stringify(previous) === JSON.stringify(actions)
+    )
       return;
 
     this.#lastActions.set(swap.swapId, actions);
