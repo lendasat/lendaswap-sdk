@@ -10,6 +10,19 @@
 /** One or more Esplora API base URLs, tried in order. */
 export type EsploraUrls = string | string[];
 
+/**
+ * Per-request timeouts. Without these a hanging explorer would sit on the
+ * platform default (~300s in Node, browser-dependent otherwise), so the
+ * fallback URL would never get a chance within the caller's polling
+ * budget (e.g. the 30s funding wait in the claim path).
+ *
+ * Lookups normally return in well under a second, so they fail over
+ * quickly; broadcasts get more headroom since the node has to validate
+ * and accept the transaction.
+ */
+const LOOKUP_TIMEOUT_MS = 2_000;
+const BROADCAST_TIMEOUT_MS = 10_000;
+
 /** Esplora UTXO response */
 export interface EsploraUtxo {
   txid: string;
@@ -74,7 +87,9 @@ export async function findOutputByAddress(
   address: string,
 ): Promise<HtlcOutputResult | null> {
   return withFallback(esploraUrls, async (esploraUrl) => {
-    const response = await fetch(`${esploraUrl}/address/${address}/utxo`);
+    const response = await fetch(`${esploraUrl}/address/${address}/utxo`, {
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(
         `Failed to fetch UTXOs for address ${address}: ${response.status}`,
@@ -108,7 +123,9 @@ export async function fetchTransactionOutputs(
 ): Promise<{ vout: Array<{ value: number }> } | null> {
   try {
     return await withFallback(esploraUrls, async (esploraUrl) => {
-      const response = await fetch(`${esploraUrl}/tx/${txid}`);
+      const response = await fetch(`${esploraUrl}/tx/${txid}`, {
+        signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+      });
       if (!response.ok) {
         throw new Error(`Failed to fetch tx ${txid}: ${response.status}`);
       }
@@ -149,6 +166,7 @@ export async function broadcastTransaction(
           "Content-Type": "text/plain",
         },
         body: txHex,
+        signal: AbortSignal.timeout(BROADCAST_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -209,6 +227,10 @@ function isTransientBroadcastError(error: unknown): boolean {
     m.includes("fetch failed") ||
     m.includes("network") ||
     m.includes("timeout") ||
+    // AbortSignal.timeout rejections: "signal timed out" (browser) /
+    // "the operation was aborted" (Node).
+    m.includes("timed out") ||
+    m.includes("aborted") ||
     m.includes("econnrefused") ||
     m.includes("econnreset") ||
     m.includes("etimedout") ||

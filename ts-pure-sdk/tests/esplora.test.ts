@@ -82,6 +82,26 @@ describe("findOutputByAddress", () => {
     );
   });
 
+  it("passes a per-request timeout signal so hung endpoints fail over", async () => {
+    // First endpoint "hangs" until its timeout signal aborts the request;
+    // the SDK must then move on to the fallback URL.
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementationOnce((_url, init) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        return Promise.reject(
+          new DOMException("signal timed out", "TimeoutError"),
+        );
+      })
+      .mockResolvedValueOnce(jsonResponse([utxo]));
+
+    const result = await findOutputByAddress(URLS, "bc1qaddress");
+
+    expect(result?.txid).toBe(utxo.txid);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[1][0]).toContain("fallback.example");
+  });
+
   it("still works with a single string URL", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([utxo]));
 
