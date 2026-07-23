@@ -6,6 +6,7 @@
  */
 
 import { ripemd160 } from "@noble/hashes/legacy.js";
+import { validateArkadeAddress } from "../arkade-address.js";
 import { bytesToHex } from "../signer/index.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
@@ -48,6 +49,8 @@ export async function createBitcoinToArkadeSwap(
   options: BitcoinToArkadeSwapOptions,
   ctx: CreateSwapContext,
 ): Promise<BitcoinToArkadeSwapResult> {
+  validateArkadeAddress(options.targetAddress);
+
   return retryOnHashCollision(ctx, async () => {
     const swapParams = await ctx.deriveSwapParams();
 
