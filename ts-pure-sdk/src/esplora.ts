@@ -1,6 +1,14 @@
 /**
  * Esplora API utilities for Bitcoin transaction lookups.
+ *
+ * All functions accept either a single Esplora base URL or a list of URLs.
+ * With a list, each URL is tried in order and the first successful response
+ * wins, so an outage of one explorer doesn't break
+ * claims/refunds as long as a fallback instance is reachable.
  */
+
+/** One or more Esplora API base URLs, tried in order. */
+export type EsploraUrls = string | string[];
 
 /** Esplora UTXO response */
 export interface EsploraUtxo {
@@ -22,62 +30,142 @@ export interface HtlcOutputResult {
   amount: bigint;
 }
 
+/** Normalizes to a trailing-slash-free URL list. */
+function toUrlList(esploraUrls: EsploraUrls): string[] {
+  const urls = Array.isArray(esploraUrls) ? esploraUrls : [esploraUrls];
+  return urls.map((url) => url.replace(/\/+$/, ""));
+}
+
+/**
+ * Runs `fn` against each URL in order, returning the first successful
+ * result. Throws the last error if every URL fails.
+ */
+async function withFallback<T>(
+  esploraUrls: EsploraUrls,
+  fn: (url: string) => Promise<T>,
+): Promise<T> {
+  const urls = toUrlList(esploraUrls);
+  if (urls.length === 0) {
+    throw new Error("No Esplora URL provided");
+  }
+  let lastError: unknown;
+  for (const url of urls) {
+    try {
+      return await fn(url);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
 /**
  * Finds a UTXO at the given address.
  *
  * Queries the Esplora `/address/:address/utxo` endpoint to find
  * unspent outputs. Returns the first UTXO found.
  *
- * @param esploraUrl - The Esplora API base URL
+ * @param esploraUrls - Esplora API base URL(s), tried in order
  * @param address - The address to look up UTXOs for
  * @returns The txid, vout, and amount of the first UTXO, or null if none found
  */
 export async function findOutputByAddress(
-  esploraUrl: string,
+  esploraUrls: EsploraUrls,
   address: string,
 ): Promise<HtlcOutputResult | null> {
-  const response = await fetch(`${esploraUrl}/address/${address}/utxo`);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch UTXOs for address ${address}: ${response.status}`,
-    );
-  }
+  return withFallback(esploraUrls, async (esploraUrl) => {
+    const response = await fetch(`${esploraUrl}/address/${address}/utxo`);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch UTXOs for address ${address}: ${response.status}`,
+      );
+    }
 
-  const utxos = (await response.json()) as EsploraUtxo[];
+    const utxos = (await response.json()) as EsploraUtxo[];
 
-  if (utxos.length === 0) {
+    if (utxos.length === 0) {
+      return null;
+    }
+
+    const utxo = utxos[0];
+    return { txid: utxo.txid, vout: utxo.vout, amount: BigInt(utxo.value) };
+  });
+}
+
+/**
+ * Fetches a transaction's outputs via the Esplora `/tx/:txid` endpoint.
+ *
+ * Returns null when no explorer knows the transaction yet (or all
+ * explorers are unreachable) so callers can fall back to an address
+ * lookup or keep polling.
+ *
+ * @param esploraUrls - Esplora API base URL(s), tried in order
+ * @param txid - The transaction ID to look up
+ */
+export async function fetchTransactionOutputs(
+  esploraUrls: EsploraUrls,
+  txid: string,
+): Promise<{ vout: Array<{ value: number }> } | null> {
+  try {
+    return await withFallback(esploraUrls, async (esploraUrl) => {
+      const response = await fetch(`${esploraUrl}/tx/${txid}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch tx ${txid}: ${response.status}`);
+      }
+      return (await response.json()) as { vout: Array<{ value: number }> };
+    });
+  } catch {
     return null;
   }
-
-  const utxo = utxos[0];
-  return { txid: utxo.txid, vout: utxo.vout, amount: BigInt(utxo.value) };
 }
 
 /**
  * Broadcasts a raw transaction to the Bitcoin network via Esplora API.
  *
- * @param esploraUrl - The Esplora API base URL
+ * With multiple URLs, each is tried in order until one accepts the
+ * transaction. If one explorer rejects it with a permanent validation
+ * error (e.g. `bad-txns-*`), that error is preferred over transient
+ * network errors from other explorers so retry logic doesn't spin on a
+ * transaction that can never confirm.
+ *
+ * @param esploraUrls - Esplora API base URL(s), tried in order
  * @param txHex - The raw transaction hex to broadcast
  * @returns The transaction ID on success
  */
 export async function broadcastTransaction(
-  esploraUrl: string,
+  esploraUrls: EsploraUrls,
   txHex: string,
 ): Promise<string> {
-  const response = await fetch(`${esploraUrl}/tx`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/plain",
-    },
-    body: txHex,
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Broadcast failed: ${response.status} - ${errorText}`);
+  const urls = toUrlList(esploraUrls);
+  if (urls.length === 0) {
+    throw new Error("No Esplora URL provided");
   }
+  const errors: unknown[] = [];
+  for (const esploraUrl of urls) {
+    try {
+      const response = await fetch(`${esploraUrl}/tx`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/plain",
+        },
+        body: txHex,
+      });
 
-  return response.text();
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Broadcast failed: ${response.status} - ${errorText}`);
+      }
+
+      return response.text();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+  // Prefer a permanent (non-transient) rejection: it tells the caller the
+  // tx itself is invalid, which no amount of retrying or failing over fixes.
+  const permanent = errors.find((e) => !isTransientBroadcastError(e));
+  const chosen = permanent ?? errors[errors.length - 1];
+  throw chosen instanceof Error ? chosen : new Error(String(chosen));
 }
 
 /**
@@ -134,15 +222,16 @@ function isTransientBroadcastError(error: unknown): boolean {
  * The funding tx may still be propagating to the broadcast node when the
  * client tries to claim, so the first attempt can fail with a
  * missing-inputs style error that clears within a few seconds. Retries use
- * a capped backoff (500ms → 2s).
+ * a capped backoff (500ms → 2s). Each attempt fails over across all
+ * configured Esplora URLs.
  *
- * @param esploraUrl - The Esplora API base URL
+ * @param esploraUrls - Esplora API base URL(s), tried in order
  * @param txHex - The raw transaction hex to broadcast
  * @param retries - Number of additional attempts after the first (default 5)
  * @returns The transaction ID on success
  */
 export async function broadcastTransactionWithRetry(
-  esploraUrl: string,
+  esploraUrls: EsploraUrls,
   txHex: string,
   retries = 5,
 ): Promise<string> {
@@ -150,7 +239,7 @@ export async function broadcastTransactionWithRetry(
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await broadcastTransaction(esploraUrl, txHex);
+      return await broadcastTransaction(esploraUrls, txHex);
     } catch (error) {
       lastError = error;
       // Don't waste attempts on errors that won't clear on their own.

@@ -69,6 +69,8 @@ import { delegateClaim, delegateRefund } from "./delegate.js";
 import {
   broadcastTransaction,
   broadcastTransactionWithRetry,
+  type EsploraUrls,
+  fetchTransactionOutputs,
   findOutputByAddress,
 } from "./esplora.js";
 import {
@@ -554,11 +556,17 @@ export interface GetQuoteParams {
 
 const DEFAULT_BASE_URL = "https://api.satora.io/";
 
-/** Default Esplora URLs by network */
-const DEFAULT_ESPLORA_URLS: Record<string, string> = {
-  mainnet: "https://mempool.space/api",
-  signet: "https://mutinynet.com/api",
-  regtest: "http://localhost:3000",
+/**
+ * Default Esplora URLs by network. Each list is tried in order, so an
+ * outage of the primary explorer fails over to the next one.
+ */
+const DEFAULT_ESPLORA_URLS: Record<string, string[]> = {
+  mainnet: [
+    "https://mempool.space/api",
+    "https://blockstream.info/api",
+  ],
+  signet: ["https://mutinynet.com/api"],
+  regtest: ["http://localhost:3000"],
 };
 
 /** Configuration options for the Lendaswap client. */
@@ -574,8 +582,11 @@ export interface ClientConfig {
   referralCode?: string;
   /** Optional default headers to send with SDK API requests. */
   defaultHeaders?: Record<string, string>;
-  /** Optional Esplora API URL for broadcasting Bitcoin transactions. */
-  esploraUrl?: string;
+  /**
+   * Optional Esplora API URL(s) for Bitcoin lookups and broadcasting.
+   * When a list is given, each URL is tried in order (fallback on failure).
+   */
+  esploraUrl?: string | string[];
   /** Optional Arkade server URL (e.g. "https://arkade.computer"). Falls back to network-based defaults. */
   arkadeServerUrl?: string;
   /**
@@ -622,7 +633,7 @@ export class ClientBuilder {
   #baseUrl: string = DEFAULT_BASE_URL;
   #referralCode?: string;
   #defaultHeaders?: Record<string, string>;
-  #esploraUrl?: string;
+  #esploraUrl?: string | string[];
   #arkadeServerUrl?: string;
   #signerStorage?: WalletStorage;
   #swapStorage?: SwapStorage;
@@ -676,17 +687,15 @@ export class ClientBuilder {
   }
 
   /**
-   * Sets the Esplora API URL for broadcasting Bitcoin transactions.
+   * Sets the Esplora API URL(s) for Bitcoin lookups and broadcasting.
    *
-   * If not set, defaults will be used based on the network:
-   * - mainnet: https://mempool.space/api
-   * - testnet: https://mempool.space/testnet/api
-   * - signet: https://mempool.space/signet/api
+   * Pass a list to enable fallback: each URL is tried in order until one
+   * responds. If not set, network-based defaults are used.
    *
-   * @param esploraUrl - The Esplora API base URL.
+   * @param esploraUrl - Esplora API base URL, or a list tried in order.
    * @returns The builder instance for chaining.
    */
-  withEsploraUrl(esploraUrl: string): this {
+  withEsploraUrl(esploraUrl: string | string[]): this {
     this.#esploraUrl = esploraUrl;
     return this;
   }
@@ -861,7 +870,9 @@ export class ClientBuilder {
         baseUrl: this.#baseUrl.replace(/\/+$/, ""),
         referralCode: this.#referralCode,
         defaultHeaders: this.#defaultHeaders,
-        esploraUrl: this.#esploraUrl?.replace(/\/+$/, ""),
+        esploraUrl: Array.isArray(this.#esploraUrl)
+          ? this.#esploraUrl.map((url) => url.replace(/\/+$/, ""))
+          : this.#esploraUrl?.replace(/\/+$/, ""),
         arkadeServerUrl: this.#arkadeServerUrl?.replace(/\/+$/, ""),
         aa: this.#aa,
         logger: this.#logger,
@@ -2506,37 +2517,38 @@ export class Client {
    * can poll.
    */
   async #findOnchainHtlcOutput(
-    esploraUrl: string,
+    esploraUrls: EsploraUrls,
     address: string,
     fundTxid: string | undefined,
     fundVout: number | undefined,
   ): Promise<{ txid: string; vout: number; amount: bigint } | null> {
     // Prefer funding info from the API response (works before confirmation).
     if (fundTxid && fundVout !== undefined) {
-      try {
-        const txResponse = await fetch(`${esploraUrl}/tx/${fundTxid}`);
-        if (txResponse.ok) {
-          const txData = (await txResponse.json()) as {
-            vout: Array<{ value: number }>;
-          };
-          if (txData.vout?.[fundVout]) {
-            return {
-              txid: fundTxid,
-              vout: fundVout,
-              amount: BigInt(txData.vout[fundVout].value),
-            };
-          }
-        }
-      } catch {
-        // Not indexed yet — fall through to the address lookup.
+      const txData = await fetchTransactionOutputs(esploraUrls, fundTxid);
+      if (txData?.vout?.[fundVout]) {
+        return {
+          txid: fundTxid,
+          vout: fundVout,
+          amount: BigInt(txData.vout[fundVout].value),
+        };
       }
     }
 
     // Fallback: query the explorer for UTXOs at the HTLC address.
     try {
-      return await findOutputByAddress(esploraUrl, address);
-    } catch {
-      // Transient explorer/network error — treat as "not found yet".
+      return await findOutputByAddress(esploraUrls, address);
+    } catch (error) {
+      // Every configured explorer failed — treat as "not found yet" so the
+      // caller keeps polling, but surface it so a dead explorer isn't
+      // mistaken for an unfunded HTLC.
+      this.#logger.warn({
+        event: "client.esplora.lookupFailed",
+        message: "All Esplora endpoints failed for HTLC output lookup",
+        data: {
+          address,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
       return null;
     }
   }
@@ -2551,7 +2563,7 @@ export class Client {
    * hammering the explorer.
    */
   async #waitForOnchainHtlcOutput(
-    esploraUrl: string,
+    esploraUrls: EsploraUrls,
     address: string,
     fundTxid: string | undefined,
     fundVout: number | undefined,
@@ -2561,7 +2573,7 @@ export class Client {
     let delayMs = 500;
     while (true) {
       const output = await this.#findOnchainHtlcOutput(
-        esploraUrl,
+        esploraUrls,
         address,
         fundTxid,
         fundVout,
@@ -3023,8 +3035,9 @@ export class Client {
     }
 
     // Get the HTLC output info - prefer API data over Esplora lookup
-    const esploraUrl = this.#config.esploraUrl ?? DEFAULT_ESPLORA_URLS[network];
-    if (!esploraUrl) {
+    const esploraUrls =
+      this.#config.esploraUrl ?? DEFAULT_ESPLORA_URLS[network];
+    if (!esploraUrls || esploraUrls.length === 0) {
       return {
         success: false,
         message: `No Esplora URL configured for network ${network}.`,
@@ -3039,7 +3052,7 @@ export class Client {
     // just before the client claims, so the explorer/indexer may race behind.
     const waitForFundingMs = options?.waitForFundingMs ?? 30_000;
     const htlcOutput = await this.#waitForOnchainHtlcOutput(
-      esploraUrl,
+      esploraUrls,
       btcHtlcAddress,
       btcFundTxid,
       btcFundVout,
@@ -3086,7 +3099,7 @@ export class Client {
       // not seen the funding tx yet).
       try {
         await broadcastTransactionWithRetry(
-          esploraUrl,
+          esploraUrls,
           result.txHex,
           options?.broadcastRetries ?? 5,
         );
@@ -3263,8 +3276,9 @@ export class Client {
     }
 
     // Get the HTLC output info - prefer API data over Esplora lookup
-    const esploraUrl = this.#config.esploraUrl ?? DEFAULT_ESPLORA_URLS[network];
-    if (!esploraUrl) {
+    const esploraUrls =
+      this.#config.esploraUrl ?? DEFAULT_ESPLORA_URLS[network];
+    if (!esploraUrls || esploraUrls.length === 0) {
       return {
         success: false,
         message: `No Esplora URL configured for network ${network}. Cannot look up funding transaction.`,
@@ -3280,28 +3294,19 @@ export class Client {
 
     if (btcFundTxid && btcFundVout !== undefined) {
       // We have the funding info from the API, get the amount from the transaction
-      try {
-        const txResponse = await fetch(`${esploraUrl}/tx/${btcFundTxid}`);
-        if (txResponse.ok) {
-          const txData = (await txResponse.json()) as {
-            vout: Array<{ value: number }>;
-          };
-          if (txData.vout?.[btcFundVout]) {
-            htlcOutput = {
-              txid: btcFundTxid,
-              vout: btcFundVout,
-              amount: BigInt(txData.vout[btcFundVout].value),
-            };
-          }
-        }
-      } catch {
-        // Fall through to Esplora lookup
+      const txData = await fetchTransactionOutputs(esploraUrls, btcFundTxid);
+      if (txData?.vout?.[btcFundVout]) {
+        htlcOutput = {
+          txid: btcFundTxid,
+          vout: btcFundVout,
+          amount: BigInt(txData.vout[btcFundVout].value),
+        };
       }
     }
 
     // Fallback: query Esplora for UTXOs at the address (requires confirmation)
     if (!htlcOutput) {
-      htlcOutput = await findOutputByAddress(esploraUrl, btcHtlcAddress);
+      htlcOutput = await findOutputByAddress(esploraUrls, btcHtlcAddress);
     }
 
     if (!htlcOutput) {
@@ -3346,9 +3351,9 @@ export class Client {
       }
 
       // Broadcast the transaction
-      const broadcastEsploraUrl =
+      const broadcastEsploraUrls =
         this.#config.esploraUrl ?? DEFAULT_ESPLORA_URLS[network];
-      if (!broadcastEsploraUrl) {
+      if (!broadcastEsploraUrls || broadcastEsploraUrls.length === 0) {
         return {
           success: true,
           message:
@@ -3365,7 +3370,7 @@ export class Client {
       }
 
       try {
-        await broadcastTransaction(broadcastEsploraUrl, result.txHex);
+        await broadcastTransaction(broadcastEsploraUrls, result.txHex);
         return {
           success: true,
           message: "Refund transaction broadcast successfully!",
