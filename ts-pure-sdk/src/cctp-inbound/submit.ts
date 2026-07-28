@@ -170,7 +170,7 @@ async function sendBalanceUserOp(
 
   const publicClient = createPublicClient({
     chain,
-    transport: http(aa.bundlerUrl),
+    transport: http(aa.rpcUrl ?? aa.bundlerUrl),
   });
 
   const { calls } = await buildCctpInboundBatch({
@@ -264,10 +264,9 @@ export async function submitCctpInboundUserOp(
   //    unminted, stranding the fresh funds. Nonce consumption is the
   //    authoritative signal — `MessageTransmitter.usedNonces(nonce)`
   //    returns non-zero iff the mint for *this* message has landed.
-  //    Reuses the bundler URL as the node RPC (Alchemy serves both).
   const publicClient = createPublicClient({
     chain,
-    transport: http(aa.bundlerUrl),
+    transport: http(aa.rpcUrl ?? aa.bundlerUrl),
   });
   const nonce = extractNonce(cctpMessage);
   const usedNonce = (await publicClient.readContract({
@@ -303,8 +302,8 @@ export async function submitCctpInboundUserOp(
     });
   }
 
-  // 6. Send the UserOp via the bundler. Paymaster sponsorship is wired
-  //    into the Kernel client already, so no gas is owed by the caller.
+  // 6. Send the UserOp via the bundler. If a paymaster was configured it is
+  //    wired into the Kernel client; otherwise the smart account pays gas.
   const userOpHash = await aaClient.sendUserOperation({ calls });
 
   if (noWait) {

@@ -15,8 +15,8 @@
  * UserOperation carries the 7702 authorization tuple and installs the
  * delegation on-chain; subsequent ones reuse it.
  *
- * Bundler + paymaster both live at the same Alchemy app URL; the
- * policy id is passed via the ERC-7677 `paymasterContext`.
+ * Hosted bundler + paymaster setups may live at the same Alchemy app URL;
+ * local E2E splits normal chain RPC (Anvil) from bundler RPC (alto).
  */
 
 import { createKernelAccount, createKernelAccountClient } from "@zerodev/sdk";
@@ -39,7 +39,7 @@ export interface CreateSwapSmartAccountClientParams {
    * `EvmSigner`; the adapter throws a clear error if either is missing.
    */
   signer: EvmSigner;
-  /** AA config (bundler URL + Gas Manager policy id). */
+  /** AA config (normal chain RPC, bundler URL, optional Gas Manager policy id). */
   aa: AaConfig;
   /**
    * Settlement chain. Defaults to Arbitrum mainnet — the only supported
@@ -60,20 +60,17 @@ export async function createSwapSmartAccountClient(
   params: CreateSwapSmartAccountClientParams,
 ) {
   const { signer, aa, chain = arbitrum } = params;
-  const { bundlerUrl, paymasterPolicyId } = aa;
+  const { bundlerUrl, paymasterPolicyId, rpcUrl = bundlerUrl } = aa;
 
   if (!bundlerUrl) {
     throw new Error("aa.bundlerUrl is required");
-  }
-  if (!paymasterPolicyId) {
-    throw new Error("aa.paymasterPolicyId is required");
   }
 
   const entryPoint = getEntryPoint("0.7");
 
   const publicClient = createPublicClient({
     chain,
-    transport: http(bundlerUrl),
+    transport: http(rpcUrl),
   });
 
   // Adapt the EvmSigner to a viem LocalAccount. Under 7702 this is the
@@ -93,21 +90,20 @@ export async function createSwapSmartAccountClient(
     kernelVersion: KERNEL_V3_3,
   });
 
-  // Alchemy serves standard ERC-7677 paymaster methods
-  // (`pm_getPaymasterStubData` / `pm_getPaymasterData`) on the same app
-  // URL as the bundler. Passing the policy id via `paymasterContext`
-  // lets viem call both methods at the right points in the UserOp
-  // preparation flow (stub → gas estimate → final paymaster data).
-  const paymasterClient = createPaymasterClient({
-    transport: http(bundlerUrl),
-  });
+  const paymaster = paymasterPolicyId
+    ? {
+        paymaster: createPaymasterClient({
+          transport: http(bundlerUrl),
+        }),
+        paymasterContext: { policyId: paymasterPolicyId },
+      }
+    : {};
 
   const client = createKernelAccountClient({
     account,
     chain,
     bundlerTransport: http(bundlerUrl),
-    paymaster: paymasterClient,
-    paymasterContext: { policyId: paymasterPolicyId },
+    ...paymaster,
     userOperation: {
       // ZeroDev's default fetcher calls `zd_getUserOperationGasPrice`,
       // which Alchemy's bundler rejects. Use Alchemy's

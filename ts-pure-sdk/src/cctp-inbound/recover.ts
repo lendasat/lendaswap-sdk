@@ -153,7 +153,7 @@ export async function recoverCctpInbound(
 
   const publicClient = createPublicClient({
     chain,
-    transport: http(context.aa.bundlerUrl),
+    transport: http(context.aa.rpcUrl ?? context.aa.bundlerUrl),
   });
 
   // 1. Make sure we have the attestation. If the receiveMessage call was
