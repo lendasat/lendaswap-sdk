@@ -43,6 +43,32 @@ export interface HtlcOutputResult {
   amount: bigint;
 }
 
+/**
+ * `fetch` with a timeout built from `AbortController` + `setTimeout` instead
+ * of `AbortSignal.timeout`, which is missing in some supported runtimes
+ * (React Native/Hermes). If `AbortController` itself is absent, the request
+ * is issued without a timeout rather than throwing before it starts.
+ */
+async function fetchWithTimeout(
+  url: string,
+  timeoutMs: number,
+  init?: RequestInit,
+): Promise<Response> {
+  if (typeof AbortController === "undefined") {
+    return fetch(url, init);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(new Error(`request timed out after ${timeoutMs}ms`)),
+    timeoutMs,
+  );
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** Normalizes to a trailing-slash-free URL list. */
 function toUrlList(esploraUrls: EsploraUrls): string[] {
   const urls = Array.isArray(esploraUrls) ? esploraUrls : [esploraUrls];
@@ -87,9 +113,10 @@ export async function findOutputByAddress(
   address: string,
 ): Promise<HtlcOutputResult | null> {
   return withFallback(esploraUrls, async (esploraUrl) => {
-    const response = await fetch(`${esploraUrl}/address/${address}/utxo`, {
-      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-    });
+    const response = await fetchWithTimeout(
+      `${esploraUrl}/address/${address}/utxo`,
+      LOOKUP_TIMEOUT_MS,
+    );
     if (!response.ok) {
       throw new Error(
         `Failed to fetch UTXOs for address ${address}: ${response.status}`,
@@ -123,9 +150,10 @@ export async function fetchTransactionOutputs(
 ): Promise<{ vout: Array<{ value: number }> } | null> {
   try {
     return await withFallback(esploraUrls, async (esploraUrl) => {
-      const response = await fetch(`${esploraUrl}/tx/${txid}`, {
-        signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
-      });
+      const response = await fetchWithTimeout(
+        `${esploraUrl}/tx/${txid}`,
+        LOOKUP_TIMEOUT_MS,
+      );
       if (!response.ok) {
         throw new Error(`Failed to fetch tx ${txid}: ${response.status}`);
       }
@@ -160,14 +188,17 @@ export async function broadcastTransaction(
   const errors: unknown[] = [];
   for (const esploraUrl of urls) {
     try {
-      const response = await fetch(`${esploraUrl}/tx`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
+      const response = await fetchWithTimeout(
+        `${esploraUrl}/tx`,
+        BROADCAST_TIMEOUT_MS,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "text/plain",
+          },
+          body: txHex,
         },
-        body: txHex,
-        signal: AbortSignal.timeout(BROADCAST_TIMEOUT_MS),
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -227,8 +258,9 @@ function isTransientBroadcastError(error: unknown): boolean {
     m.includes("fetch failed") ||
     m.includes("network") ||
     m.includes("timeout") ||
-    // AbortSignal.timeout rejections: "signal timed out" (browser) /
-    // "the operation was aborted" (Node).
+    // Timeout-abort rejections: our fetchWithTimeout reason ("request timed
+    // out after Nms"), or a generic AbortError ("the operation was aborted")
+    // in runtimes that ignore the abort reason.
     m.includes("timed out") ||
     m.includes("aborted") ||
     m.includes("econnrefused") ||

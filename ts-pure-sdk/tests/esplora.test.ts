@@ -102,6 +102,51 @@ describe("findOutputByAddress", () => {
     expect(fetchMock.mock.calls[1][0]).toContain("fallback.example");
   });
 
+  it("aborts a hung request after the lookup timeout and fails over", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        // First endpoint hangs forever; only the timeout signal ends it.
+        .mockImplementationOnce(
+          (_url, init) =>
+            new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () =>
+                reject(init.signal?.reason ?? new Error("aborted")),
+              );
+            }),
+        )
+        .mockResolvedValueOnce(jsonResponse([utxo]));
+
+      const pending = findOutputByAddress(URLS, "bc1qaddress");
+      await vi.advanceTimersByTimeAsync(2_000);
+
+      const result = await pending;
+      expect(result?.txid).toBe(utxo.txid);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[1][0]).toContain("fallback.example");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("works without AbortSignal.timeout (React Native/Hermes)", async () => {
+    // Hermes provides fetch/AbortController but not the static
+    // AbortSignal.timeout helper; lookups must still go through.
+    const original = AbortSignal.timeout;
+    // biome-ignore lint/suspicious/noExplicitAny: simulating a runtime without the static helper
+    (AbortSignal as any).timeout = undefined;
+    try {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([utxo]));
+
+      const result = await findOutputByAddress(URLS, "bc1qaddress");
+
+      expect(result?.amount).toBe(12345n);
+    } finally {
+      AbortSignal.timeout = original;
+    }
+  });
+
   it("still works with a single string URL", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse([utxo]));
 

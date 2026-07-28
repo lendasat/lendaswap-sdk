@@ -561,10 +561,7 @@ const DEFAULT_BASE_URL = "https://api.satora.io/";
  * outage of the primary explorer fails over to the next one.
  */
 const DEFAULT_ESPLORA_URLS: Record<string, string[]> = {
-  mainnet: [
-    "https://mempool.space/api",
-    "https://blockstream.info/api",
-  ],
+  mainnet: ["https://mempool.space/api", "https://blockstream.info/api"],
   signet: ["https://mutinynet.com/api"],
   regtest: ["http://localhost:3000"],
 };
