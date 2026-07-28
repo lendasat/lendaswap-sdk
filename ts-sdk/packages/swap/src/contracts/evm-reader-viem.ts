@@ -60,7 +60,7 @@ export type EvmLogClient = {
     address: `0x${string}`;
     event: typeof SWAP_CREATED | typeof SWAP_REDEEMED | typeof SWAP_REFUNDED;
     args: { preimageHash: `0x${string}`; claimAddress?: `0x${string}` };
-    fromBlock: bigint | "earliest";
+    fromBlock: bigint;
   }): Promise<Log[]>;
   getBlock(): Promise<Pick<Block, "timestamp">>;
   watchBlocks(args: { onBlock: () => void }): () => void;
@@ -73,23 +73,25 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
       const [created, redeemed, refunded] = await Promise.all([
         // Filter by claimAddress too (also indexed), so only the HTLC actually
         // claimable on the swap's terms is seen.
+        // fromBlock 0n, not "earliest": strict RPCs (e.g. arb1.arbitrum.io)
+        // reject the tag on eth_getLogs and want a hex quantity.
         client.getLogs({
           address: htlc,
           event: SWAP_CREATED,
           args: { preimageHash, claimAddress },
-          fromBlock: "earliest",
+          fromBlock: 0n,
         }),
         client.getLogs({
           address: htlc,
           event: SWAP_REDEEMED,
           args: { preimageHash },
-          fromBlock: "earliest",
+          fromBlock: 0n,
         }),
         client.getLogs({
           address: htlc,
           event: SWAP_REFUNDED,
           args: { preimageHash },
-          fromBlock: "earliest",
+          fromBlock: 0n,
         }),
       ]);
       // Order doesn't matter — evmObservation resolves precedence.
