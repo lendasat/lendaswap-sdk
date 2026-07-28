@@ -5,7 +5,7 @@
  * after Boltz funds the Arkade VHTLC.
  */
 
-import { validateArkadeAddress } from "../arkade-address.js";
+import { parseArkadeAddress } from "../arkade-address.js";
 import { bytesToHex } from "../signer/index.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
@@ -47,7 +47,7 @@ export async function createLightningToArkadeSwap(
   options: LightningToArkadeSwapOptions,
   ctx: CreateSwapContext,
 ): Promise<LightningToArkadeSwapResult> {
-  validateArkadeAddress(options.targetAddress);
+  parseArkadeAddress(options.targetAddress);
 
   return retryOnHashCollision(ctx, async () => {
     const swapParams = await ctx.deriveSwapParams();

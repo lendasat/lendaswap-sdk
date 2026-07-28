@@ -38,10 +38,10 @@ export {
   type VhtlcAmounts,
   type VtxoStatus,
 } from "./arkade.js";
-// Arkade address validation
+// Arkade address parsing and validation
 export {
   isValidArkadeAddress,
-  validateArkadeAddress,
+  parseArkadeAddress,
 } from "./arkade-address.js";
 // CCTP (Cross-Chain Transfer Protocol) utilities
 export {

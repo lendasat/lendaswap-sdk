@@ -1,5 +1,5 @@
 /**
- * Arkade address validation.
+ * Arkade address parsing and validation.
  *
  * Used to reject malformed destination addresses before a swap is created,
  * mirroring the server-side check.
@@ -12,16 +12,20 @@ import { getNetworkHrp, getNetworkName } from "./arkade-network.js";
 const ARKADE_HRPS = ["ark", "tark"];
 
 /**
- * Validates an Arkade address, throwing a descriptive error if it is not a
+ * Parses an Arkade address, throwing a descriptive error if it is not a
  * well-formed bech32m Ark address (`ark1...` / `tark1...`).
  *
- * @param address - The Arkade address to validate.
+ * @param address - The Arkade address to parse.
  * @param network - Optional network name (e.g. "bitcoin", "signet",
  *   "mutinynet"). When provided, the address prefix must match the network;
  *   otherwise any known Arkade prefix is accepted.
+ * @returns The decoded {@link ArkAddress}.
  * @throws Error if the address is malformed or on the wrong network.
  */
-export function validateArkadeAddress(address: string, network?: string): void {
+export function parseArkadeAddress(
+  address: string,
+  network?: string,
+): ArkAddress {
   let decoded: ArkAddress;
   try {
     decoded = ArkAddress.decode(address);
@@ -40,6 +44,8 @@ export function validateArkadeAddress(address: string, network?: string): void {
   } else if (!ARKADE_HRPS.includes(decoded.hrp)) {
     throw new Error(`Invalid Arkade address: unknown prefix "${decoded.hrp}1"`);
   }
+
+  return decoded;
 }
 
 /**
@@ -53,7 +59,7 @@ export function isValidArkadeAddress(
   network?: string,
 ): boolean {
   try {
-    validateArkadeAddress(address, network);
+    parseArkadeAddress(address, network);
     return true;
   } catch {
     return false;
