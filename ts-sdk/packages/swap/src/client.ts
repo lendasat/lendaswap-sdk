@@ -508,7 +508,9 @@ export class Client {
   retryArkadeToLightningSwap(
     ...args: Parameters<LegacyClient["retryArkadeToLightningSwap"]>
   ): ReturnType<LegacyClient["retryArkadeToLightningSwap"]> {
-    return this.#legacy.retryArkadeToLightningSwap(...args);
+    return this.#trackAfterRetry(
+      this.#legacy.retryArkadeToLightningSwap(...args),
+    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
@@ -687,6 +689,28 @@ export class Client {
           `(e.g. ClientBuilder.withEvmRpcUrls) before creating it.`,
       );
     void this.#trackAll(tracker, swaps);
+    return result;
+  }
+
+  /**
+   * Run a retry, then fold its replacement swap into tracking.
+   *
+   * Unlike a create there is no unreachable-leg
+   * rejection: by the time the retry returns, the old VHTLC has already been
+   * collab-refunded into the new one, so refusing here can't protect any funds
+   * — and {@link SwapTracker.track} skips a swap it can't observe anyway.
+   */
+  async #trackAfterRetry<T>(op: Promise<T>): Promise<T> {
+    const result = await op;
+    const tracker = this.#tracker;
+    if (!tracker) return result;
+
+    try {
+      void this.#trackAll(tracker, await this.#loadTrackedSwaps());
+    } catch (error) {
+      // Same rationale as #trackAfterCreate: the retry already succeeded.
+      console.warn("Client: loading swaps after retry failed:", error);
+    }
     return result;
   }
 

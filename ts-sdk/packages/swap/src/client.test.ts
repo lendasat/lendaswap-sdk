@@ -208,6 +208,66 @@ describe("Client tracking", () => {
     expect(m.arkade.registered.size).toBe(0);
   });
 
+  it("tracks the replacement swap after a retry (track-on-retry)", async () => {
+    const m = managers();
+    const swaps: StoredSwap[] = [];
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => swaps,
+      // The real retry creates + persists a replacement swap internally.
+      retryArkadeToLightningSwap: async () => {
+        swaps.push(arkadeEvmSwap);
+        return {
+          newSwap: { id: "swap-1" },
+          refundTxId: "tx",
+          refundAmount: 1n,
+        };
+      },
+    });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+    expect(m.arkade.registered.size).toBe(0);
+
+    await client.retryArkadeToLightningSwap("old-swap", {
+      lightningAddress: "user@example.com",
+    });
+
+    await vi.waitFor(() => {
+      expect(m.arkade.registered.size).toBe(1);
+      expect(m.evm.registered.size).toBe(1);
+    });
+  });
+
+  it("does not reject a retry over an unreachable leg (funds already moved)", async () => {
+    const m = managers();
+    m.evm.observable = false;
+    const swaps: StoredSwap[] = [];
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => swaps,
+      retryArkadeToLightningSwap: async () => {
+        swaps.push(arkadeEvmSwap);
+        return {
+          newSwap: { id: "swap-1" },
+          refundTxId: "tx",
+          refundAmount: 1n,
+        };
+      },
+    });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+
+    // Unlike a create, the retry has already refunded into the new VHTLC, so
+    // the wrapper must return the result instead of throwing; tracking just
+    // skips the unobservable swap.
+    await expect(
+      client.retryArkadeToLightningSwap("old-swap", {
+        lightningAddress: "user@example.com",
+      }),
+    ).resolves.toMatchObject({ refundTxId: "tx" });
+    expect(m.arkade.registered.size).toBe(0);
+  });
+
   it("clears the partial tracker when startTracking fails partway", async () => {
     const m = managers();
     // The EVM leg's register fails, as an RPC/indexer error would. The Arkade leg
