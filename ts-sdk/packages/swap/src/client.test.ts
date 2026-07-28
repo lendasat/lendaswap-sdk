@@ -268,6 +268,41 @@ describe("Client tracking", () => {
     expect(m.arkade.registered.size).toBe(0);
   });
 
+  it("a concurrent startTracking awaits the in-flight start, not a boolean", async () => {
+    const m = managers();
+    // Gate the storage load so the first startTracking is reliably mid-flight
+    // when the second one comes in.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => {
+        await gate;
+        return [arkadeEvmSwap];
+      },
+    });
+    const client = new Client(legacy, withManagers(m.map));
+
+    const first = client.startTracking();
+    const second = client.startTracking();
+    let secondDone = false;
+    void second.then(() => {
+      secondDone = true;
+    });
+
+    // The second call must NOT resolve while the first is still starting —
+    // resolving early would let a caller hit subscribeToActions before the
+    // tracker exists.
+    await new Promise((r) => setTimeout(r, 0));
+    expect(secondDone).toBe(false);
+
+    release();
+    await Promise.all([first, second]);
+    expect(() => client.subscribeToActions(() => {})).not.toThrow();
+  });
+
   it("clears the partial tracker when startTracking fails partway", async () => {
     const m = managers();
     // The EVM leg's register fails, as an RPC/indexer error would. The Arkade leg

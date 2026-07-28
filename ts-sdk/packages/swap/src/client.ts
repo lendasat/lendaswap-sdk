@@ -74,7 +74,7 @@ export class Client {
   #tracker: SwapTracker | undefined;
   /** Hint-driven auto-claim worker; only built when `withAutoClaim` opted in. */
   #worker: SwapWorker | undefined;
-  #started = false;
+  #startPromise?: Promise<void>;
 
   /**
    * Creates a new Client instance.
@@ -633,13 +633,24 @@ export class Client {
    * Subscribe with {@link subscribeToActions}; release with
    * {@link stopTracking}.
    */
-  async startTracking(): Promise<void> {
+  startTracking(): Promise<void> {
     if (!this.#tracking.enabled)
-      throw new Error(
-        "tracking is disabled — remove .withoutTracking() to enable it",
+      return Promise.reject(
+        new Error(
+          "tracking is disabled — remove .withoutTracking() to enable it",
+        ),
       );
-    if (this.#started) return;
-    this.#started = true;
+    // Cache the in-flight promise, not a boolean: a concurrent caller must
+    // await the first call's completion, or it would be told "started" while
+    // `#tracker` is still unset and crash in `subscribeToActions`.
+    this.#startPromise ??= this.#doStartTracking().catch((error) => {
+      this.#startPromise = undefined; // let a later call retry cleanly
+      throw error;
+    });
+    return this.#startPromise;
+  }
+
+  async #doStartTracking(): Promise<void> {
     try {
       const tracker = new SwapTracker(await this.#ensureManagers(), {
         refreshIntervalMs: this.#tracking.refreshIntervalMs ?? 5_000,
@@ -656,7 +667,6 @@ export class Client {
       this.#worker = undefined;
       this.#tracker?.stop();
       this.#tracker = undefined;
-      this.#started = false;
       throw error;
     }
   }
@@ -787,7 +797,7 @@ export class Client {
     this.#worker = undefined;
     this.#tracker?.stop();
     this.#tracker = undefined;
-    this.#started = false;
+    this.#startPromise = undefined;
   }
 
   /**
