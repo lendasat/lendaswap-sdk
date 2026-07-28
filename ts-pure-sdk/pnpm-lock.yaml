@@ -33,8 +33,8 @@ importers:
         specifier: ^5.5.0
         version: 5.5.10(viem@2.52.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.67))
       dexie:
-        specifier: ^4.4.2
-        version: 4.4.2
+        specifier: 4.4.4
+        version: 4.4.4
       openapi-fetch:
         specifier: ^0.17.0
         version: 0.17.0
@@ -1027,8 +1027,8 @@ packages:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
 
-  dexie@4.4.2:
-    resolution: {integrity: sha512-zMtV8q79EFE5U8FKZvt0Y/77PCU/Hr/RDxv1EDeo228L+m/HTbeN2AjoQm674rhQCX8n3ljK87lajt7UQuZfvw==}
+  dexie@4.4.4:
+    resolution: {integrity: sha512-jIwsYI8Os2hgnqc6O49YwFDKGc5v5QjGx0wPVp543ip1F53VFAKMLthV2pQosQcVTv3eAskTWYspOx195PM0FQ==}
 
   dir-glob@3.0.1:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
@@ -2920,7 +2920,7 @@ snapshots:
   detect-libc@2.1.2:
     optional: true
 
-  dexie@4.4.2: {}
+  dexie@4.4.4: {}
 
   dir-glob@3.0.1:
     dependencies:

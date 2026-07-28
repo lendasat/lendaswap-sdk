@@ -45,7 +45,7 @@ importers:
         specifier: ^5.5.0
         version: 5.5.10(viem@2.52.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@3.25.67))
       dexie:
-        specifier: ^4.4.2
+        specifier: 4.4.4
         version: 4.4.4
       openapi-fetch:
         specifier: ^0.17.0
