@@ -69,7 +69,8 @@ const SWAP_REFUNDED = parseAbiItem(
   "event SwapRefunded(bytes32 indexed preimageHash)",
 );
 const HTLC_EVENTS_ABI = [SWAP_CREATED, SWAP_REDEEMED, SWAP_REFUNDED] as const;
-const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
+/** topic0 of the three lifecycle events — shared with the WS log subscriber. */
+export const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
 
 // The contract's open-check: the args hash into the swap key, so `true` with
 // the EXPECTED values also verifies the funded terms.

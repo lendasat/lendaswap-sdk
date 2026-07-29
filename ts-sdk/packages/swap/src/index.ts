@@ -40,6 +40,14 @@ export {
   htlcFactsFromEsploraTxs,
 } from "./contracts/bitcoin-reader-esplora.js";
 export {
+  createEvmLogSubscriber,
+  DEFAULT_EVM_WSS,
+  type EvmHtlcHit,
+  type EvmLogSubscriber,
+  type EvmLogSubscriberOptions,
+  type EvmWatchQuery,
+} from "./contracts/evm-log-subscriber.js";
+export {
   type EvmChainReader,
   EvmContractManager,
   type EvmContractManagerDeps,

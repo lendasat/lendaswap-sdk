@@ -215,6 +215,78 @@ describe("EvmContractManager", () => {
     });
   });
 
+  describe("push subscription wiring", () => {
+    class FakeSubscriber {
+      filter: { htlc: string; preimageHash: string }[] = [];
+      cb: ((hit?: {
+        htlc: `0x${string}`;
+        preimageHash: `0x${string}`;
+      }) => void)[] = [];
+      disposed = false;
+      setFilter = vi.fn((queries: { htlc: string; preimageHash: string }[]) => {
+        this.filter = queries;
+      });
+      onEvent = vi.fn(
+        (
+          cb: (hit?: {
+            htlc: `0x${string}`;
+            preimageHash: `0x${string}`;
+          }) => void,
+        ) => {
+          this.cb.push(cb);
+          return () => {};
+        },
+      );
+      dispose = vi.fn(() => {
+        this.disposed = true;
+      });
+      emit(hit?: { htlc: `0x${string}`; preimageHash: `0x${string}` }): void {
+        for (const cb of this.cb) cb(hit);
+      }
+    }
+    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it("keeps the push filter aligned with tracked refs", async () => {
+      const sub = new FakeSubscriber();
+      const m = EvmContractManager.fromDeps({
+        readers,
+        subscribers: new Map([[137, sub]]),
+        fallbackScanIntervalMs: 0,
+      });
+      await m.register(ref);
+      expect(sub.filter).toEqual([{ htlc: "0xhtlc", preimageHash: "0xph" }]);
+      await m.unregister(ref);
+      expect(sub.filter).toEqual([]);
+      m.dispose();
+      expect(sub.disposed).toBe(true);
+    });
+
+    it("a pushed hit triggers ONE targeted verify; a reconnect rescans the chain", async () => {
+      const sub = new FakeSubscriber();
+      const m = EvmContractManager.fromDeps({
+        readers,
+        subscribers: new Map([[137, sub]]),
+        fallbackScanIntervalMs: 0,
+      });
+      const ref2 = { ...ref, preimageHash: "0xph2" } satisfies HtlcRef;
+      await m.register(ref);
+      await m.register(ref2);
+      reader.getHtlcEventsBatch.mockClear();
+
+      sub.emit({ htlc: "0xhtlc", preimageHash: "0xph" });
+      await tick();
+      // Only the hit ref was re-verified, not the whole chain.
+      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
+      expect(reader.getHtlcEventsBatch.mock.calls[0][0]).toHaveLength(1);
+
+      reader.getHtlcEventsBatch.mockClear();
+      sub.emit(undefined); // (re)connect → catch-up scan of the chain
+      await tick();
+      expect(reader.getHtlcEventsBatch.mock.calls[0][0]).toHaveLength(2);
+      m.dispose();
+    });
+  });
+
   describe("with fake time", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());

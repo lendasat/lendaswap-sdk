@@ -13,6 +13,7 @@
  */
 import type { HtlcObservation } from "../actions/types.js";
 import { type EvmHtlcEvent, evmObservation } from "./evm.js";
+import type { EvmHtlcHit, EvmLogSubscriber } from "./evm-log-subscriber.js";
 import {
   type ContractManager,
   type HtlcRef,
@@ -91,6 +92,12 @@ export type EvmContractManagerDeps = {
    * `0` disables the gate (scan on every refresh — tests).
    */
   fallbackScanIntervalMs?: number;
+  /**
+   * Optional push feeds per chainId (`eth_subscribe("logs")` over wss). A
+   * pushed log triggers one targeted verify; a (re)connect triggers a chain
+   * catch-up scan. Owned by the manager once passed — disposed with it.
+   */
+  subscribers?: Map<number, EvmLogSubscriber>;
 };
 
 const DEFAULT_FALLBACK_SCAN_INTERVAL_MS = 180_000;
@@ -135,9 +142,13 @@ export class EvmContractManager implements ContractManager {
   readonly #listeners = new Set<
     (ref: HtlcRef, state: HtlcObservation) => void
   >();
+  readonly #subscribers: Map<number, EvmLogSubscriber> | undefined;
+  /** chainId → unsubscribe for its push-event listener (wired lazily). */
+  readonly #pushUnsubs = new Map<number, () => void>();
 
   private constructor(deps: EvmContractManagerDeps) {
     this.#readers = deps.readers;
+    this.#subscribers = deps.subscribers;
     this.#fallbackScanIntervalMs =
       deps.fallbackScanIntervalMs ?? DEFAULT_FALLBACK_SCAN_INTERVAL_MS;
   }
@@ -161,6 +172,9 @@ export class EvmContractManager implements ContractManager {
         `no EVM reader for chain ${ref.chainId} — configure it via ClientBuilder.withEvmRpcUrls()`,
       );
     this.#refs.set(htlcKey(ref), ref);
+    // Subscribe BEFORE the first scan so there is no gap: anything landing
+    // mid-scan arrives as a push and just re-verifies (latched, so harmless).
+    this.#syncPushFilter(ref.chainId);
     await this.#reconcileChain(ref.chainId);
   }
 
@@ -170,6 +184,7 @@ export class EvmContractManager implements ContractManager {
     this.#refs.delete(key);
     this.#obs.delete(key);
     this.#preimages.delete(key);
+    this.#syncPushFilter(ref.chainId);
     // Drop the chain's state once nothing on it is tracked anymore.
     if (![...this.#refs.values()].some((r) => r.chainId === ref.chainId)) {
       this.#now.delete(ref.chainId);
@@ -225,7 +240,56 @@ export class EvmContractManager implements ContractManager {
   }
 
   dispose(): void {
+    for (const unsub of this.#pushUnsubs.values()) unsub();
+    this.#pushUnsubs.clear();
+    if (this.#subscribers)
+      for (const sub of this.#subscribers.values()) sub.dispose();
     this.#listeners.clear();
+  }
+
+  /** Align a chain's push subscription with its tracked refs (lazy-wired). */
+  #syncPushFilter(chainId: number): void {
+    const subscriber = this.#subscribers?.get(chainId);
+    if (!subscriber) return;
+    if (!this.#pushUnsubs.has(chainId))
+      this.#pushUnsubs.set(
+        chainId,
+        subscriber.onEvent((hit) => this.#onPush(chainId, hit)),
+      );
+    subscriber.setFilter(
+      [...this.#refs.values()]
+        .filter((r) => r.chainId === chainId)
+        .map((r) => ({ htlc: r.htlc, preimageHash: r.preimageHash })),
+    );
+  }
+
+  /**
+   * A push event: a specific log → one targeted verify of that HTLC; a
+   * (re)connect (`hit` undefined) → a chain catch-up scan for whatever the
+   * disconnected gap missed. The push is only ever a TRIGGER — both paths
+   * re-read the chain.
+   */
+  #onPush(chainId: number, hit?: EvmHtlcHit): void {
+    const run = async (): Promise<void> => {
+      const reader = this.#readers.get(chainId);
+      if (!reader) return;
+      if (!hit) {
+        await this.#reconcileChain(chainId);
+        return;
+      }
+      const ref = [...this.#refs.values()].find(
+        (r) => r.chainId === chainId && htlcQueryKey(r) === htlcQueryKey(hit),
+      );
+      if (!ref) return;
+      await this.#readClock(reader, chainId);
+      await this.#reconcileRefs(reader, chainId, [ref]);
+    };
+    void run().catch((error) => {
+      console.warn(
+        `EVM push-triggered verify failed (chain ${chainId}):`,
+        error,
+      );
+    });
   }
 
   /** The preimage a claim revealed on this HTLC, if one was seen. */
