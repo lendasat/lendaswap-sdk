@@ -264,15 +264,21 @@ export class SwapTracker {
     const status = deriveSwapStatus({ clientHtlc, serverHtlc });
     if (status === undefined) return; // contradictory observations
 
-    const actions = deriveSwapActions({
-      status,
-      clientChainNow,
-      serverChainNow,
-      clientRefundLocktime: swap.clientRefundLocktime,
-      serverRefundLocktime: swap.serverRefundLocktime,
-      // Pay-on-Lightning swaps have no client-funded on-chain leg.
-      clientFunds: swap.clientHtlc !== undefined,
-    });
+    const actions = {
+      ...deriveSwapActions({
+        status,
+        clientChainNow,
+        serverChainNow,
+        clientRefundLocktime: swap.clientRefundLocktime,
+        serverRefundLocktime: swap.serverRefundLocktime,
+        // Pay-on-Lightning swaps have no client-funded on-chain leg.
+        clientFunds: swap.clientHtlc !== undefined,
+      }),
+      // Expose the raw observations so consumers can render progress from
+      // chain facts (which leg is funded/spent) even when the server is
+      // stale/unreachable — without interpreting the SwapStatus enum.
+      observations: { clientHtlc, serverHtlc },
+    };
 
     const previous = this.#lastActions.get(swap.swapId);
     if (

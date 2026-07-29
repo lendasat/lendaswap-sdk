@@ -166,6 +166,8 @@ describe("SwapTracker", () => {
     expect(sub).toHaveBeenCalledWith("s1", {
       recommended: "claim",
       actions: [expect.objectContaining({ id: "claim" })],
+      // The raw observations ride along for UI progress rendering.
+      observations: { clientHtlc: "confirmed", serverHtlc: "confirmed" },
     });
   });
 
@@ -334,6 +336,7 @@ describe("SwapTracker", () => {
     expect(sub).toHaveBeenLastCalledWith("s1", {
       recommended: "none",
       actions: [expect.objectContaining({ id: "none" })],
+      observations: { clientHtlc: "confirmed", serverHtlc: "spent_claim" },
     });
     // terminal → unregistered, and further events don't notify
     expect(evm.registered.has(htlcKey(serverHtlc))).toBe(false);

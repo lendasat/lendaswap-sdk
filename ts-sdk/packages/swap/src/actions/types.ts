@@ -81,6 +81,14 @@ export type SwapActions = {
   /** id of the recommended action, if any; convenience pointer into `actions`. */
   recommended?: SwapActionId;
   actions: SwapAction[];
+  /**
+   * The raw chain observations these actions were derived from (set by the
+   * tracker; absent from a bare `deriveSwapActions` call). Chain FACTS — which
+   * leg is funded/spent — not protocol states: lets a UI render progress from
+   * chain truth (even when the server is stale or unreachable) without ever
+   * interpreting the `SwapStatus` enum.
+   */
+  observations?: SwapObservations;
 };
 
 /**
