@@ -71,10 +71,6 @@ function fakeClient(logs: RawLog[]): EvmLogClient & {
   return {
     request: vi.fn(async () => logs),
     getBlock: async () => ({ timestamp: 1_700_000_000n }),
-    watchBlocks: ({ onBlock }: { onBlock: () => void }) => {
-      onBlock();
-      return () => {};
-    },
   };
 }
 
@@ -165,13 +161,6 @@ describe("evmReaderFromClient", () => {
   it("converts block.timestamp (seconds) to ms", async () => {
     const reader = evmReaderFromClient(fakeClient([]));
     expect(await reader.getBlockTimeMs()).toBe(1_700_000_000_000);
-  });
-
-  it("wires watchBlocks through to the callback", async () => {
-    const reader = evmReaderFromClient(fakeClient([]));
-    const cb = vi.fn();
-    reader.watch(cb);
-    expect(cb).toHaveBeenCalledTimes(1);
   });
 });
 

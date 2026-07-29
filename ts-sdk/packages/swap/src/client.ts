@@ -11,6 +11,7 @@
 import {
   Client as LegacyClient,
   type ClientBuilder as LegacyClientBuilder,
+  type SwapStatus,
 } from "@lendasat/lendaswap-sdk-pure";
 import type { SwapActions } from "./actions/types.js";
 import { ArkadeContractManager } from "./contracts/arkade-manager.js";
@@ -50,6 +51,13 @@ type AutoClaimConfig = {
 type TrackingConfig = {
   /** Whether tracking is enabled at all (default on; `withoutTracking()` clears). */
   enabled: boolean;
+  /**
+   * The swap server URL (from `withBaseUrl`). When set, tracking opens the
+   * server's status WebSocket as a HINT feed: a pushed transition triggers a
+   * targeted chain verify, so the chain pollers can stay slow. Chain reads
+   * remain the source of truth.
+   */
+  serverUrl?: string;
   /** Explicit per-ledger managers, bypassing auto-construction (advanced/testing). */
   managers?: Map<Ledger, ContractManager>;
   /** Ark server URL override; defaults to the mainnet server when unset. */
@@ -675,6 +683,7 @@ export class Client {
   async #loadTrackedSwaps(): Promise<TrackedSwap[]> {
     const swaps = await this.listAllSwaps();
     return swaps
+      .filter((s) => !SETTLED_STORED_STATUSES.has(s.response.status))
       .map(swapToTracked)
       .filter((s): s is TrackedSwap => s !== undefined);
   }
@@ -752,29 +761,33 @@ export class Client {
   }
 
   /**
-   * If auto-claim was opted in, wire the server status WebSocket into a
-   * {@link SwapWorker}: hints trigger a chain re-verify, and a swap the chain
-   * confirms claimable is auto-claimed; `fund`/refund actions are surfaced via the
-   * configured `onActionRequired`. A no-op unless `withAutoClaim` was set and a
-   * base URL is configured (the WebSocket needs a server to reach).
+   * Wire the server status WebSocket into a {@link SwapWorker} whenever a server
+   * URL is configured: pushed status transitions trigger a targeted chain
+   * re-verify (`applyHint`), which is what lets the chain pollers stay slow.
+   * Auto-EXECUTION on top of that is opt-in: only with `withAutoClaim` does the
+   * worker get an `execute` (claims) and an `onActionRequired` surface —
+   * otherwise it runs observe-only, hints in, no spends.
    */
   #startWorker(tracker: SwapTracker): void {
+    const serverUrl = this.#tracking.serverUrl;
+    if (!serverUrl) return;
     const autoClaim = this.#tracking.autoClaim;
-    if (!autoClaim) return;
-    if (!this.baseUrl) return;
 
-    const hintSource = new WsStatusSource({ serverUrl: this.baseUrl });
+    const hintSource = new WsStatusSource({ serverUrl });
     const worker = new SwapWorker({
       tracker,
       hintSource,
-      execute: async (swapId, actionId) => {
-        // The worker only ever auto-runs claims (its AUTO_EXECUTABLE set).
-        if (actionId !== "claim")
-          throw new Error(`refusing to auto-run action '${actionId}'`);
-        const result = await this.claim(swapId);
-        if (!result.success) throw new Error(result.message ?? "claim failed");
-      },
-      onActionRequired: autoClaim.onActionRequired,
+      execute: autoClaim
+        ? async (swapId, actionId) => {
+            // The worker only ever auto-runs claims (its AUTO_EXECUTABLE set).
+            if (actionId !== "claim")
+              throw new Error(`refusing to auto-run action '${actionId}'`);
+            const result = await this.claim(swapId);
+            if (!result.success)
+              throw new Error(result.message ?? "claim failed");
+          }
+        : undefined,
+      onActionRequired: autoClaim?.onActionRequired,
     });
     this.#worker = worker;
     worker.start();
@@ -853,6 +866,7 @@ export class ClientBuilder {
   // Observe-mode tracking is on by default; the built client auto-builds its
   // managers from config unless disabled or given an explicit override.
   #trackingEnabled = true;
+  #serverUrl: string | undefined;
   #arkadeServerUrl: string | undefined;
   #esploraUrl: string | undefined;
   #evmRpcUrls: Record<number, string> | undefined;
@@ -902,6 +916,7 @@ export class ClientBuilder {
 
   withBaseUrl(...args: Parameters<LegacyClientBuilder["withBaseUrl"]>): this {
     this.#inner.withBaseUrl(...args);
+    this.#serverUrl = args[0];
     return this;
   }
 
@@ -986,6 +1001,7 @@ export class ClientBuilder {
   async build(): Promise<Client> {
     return new Client(await this.#inner.build(), {
       enabled: this.#trackingEnabled,
+      serverUrl: this.#serverUrl,
       managers: this.#managers,
       arkadeServerUrl: this.#arkadeServerUrl,
       esploraUrl: this.#esploraUrl,
@@ -994,6 +1010,23 @@ export class ClientBuilder {
     });
   }
 }
+
+/**
+ * Stored statuses where the client's money is fully settled — already received,
+ * already refunded, or (for `expired`) never deposited: the server only marks a
+ * swap expired while it is unfunded (a late-funded one becomes
+ * `clientfundedtoolate`, which is NOT in this set). Safe to skip registering
+ * entirely, so tracking doesn't re-scan every historical swap on each start;
+ * anything ambiguous stays chain-verified.
+ */
+const SETTLED_STORED_STATUSES = new Set<SwapStatus>([
+  "serverredeemed",
+  "clientrefunded",
+  "clientrefundedserverfunded",
+  "clientrefundedserverrefunded",
+  "clientredeemedandclientrefunded",
+  "expired",
+]);
 
 /**
  * The swap id from a create result. Every `create*` result carries the created

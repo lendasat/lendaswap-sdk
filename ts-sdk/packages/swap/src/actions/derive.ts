@@ -8,6 +8,16 @@ import type {
   WaitAction,
 } from "./types.js";
 
+/**
+ * How long past the client refund locktime a `pending` swap keeps being watched
+ * before it is declared dead. Covers observation lag on a deadline-straddling
+ * funding tx (EVM has no mempool-level observation, and clocks are partly
+ * extrapolated); one that stays invisible longer than this is treated as never
+ * sent. A later `startTracking` still picks the swap up from storage if a
+ * funding somehow surfaces afterwards.
+ */
+export const FUNDING_REAP_GRACE_MS = 60 * 60 * 1000;
+
 export function deriveSwapActions(input: SwapActionInput): SwapActions {
   const {
     status,
@@ -35,7 +45,21 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       }
 
       // Funding is "too late" once past the client's refund locktime (the funded
-      // deposit would be immediately refundable).
+      // deposit would be immediately refundable). But `pending` only means the
+      // last chain read saw NO deposit — a funding broadcast near the deadline
+      // can still surface after it (and would need the refund path). So keep
+      // watching through a grace window; only once it has clearly stayed unfunded
+      // derive `none`, letting the tracker reap the dead swap instead of
+      // watching it forever.
+      if (clientChainNow >= clientRefundLocktime + FUNDING_REAP_GRACE_MS) {
+        const done: NoneAction = {
+          id: "none",
+          recommended: true,
+          automation: "auto",
+          reason: "The funding window closed and no deposit ever appeared.",
+        };
+        return { recommended: "none", actions: [done] };
+      }
       if (clientChainNow >= clientRefundLocktime) return { actions: [] };
 
       const fund: FundAction = {

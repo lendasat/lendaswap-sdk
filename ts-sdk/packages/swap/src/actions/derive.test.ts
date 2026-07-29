@@ -1,6 +1,6 @@
 import type { SwapStatus } from "@lendasat/lendaswap-sdk-pure";
 import { describe, expect, it } from "vitest";
-import { deriveSwapActions } from "./derive.js";
+import { deriveSwapActions, FUNDING_REAP_GRACE_MS } from "./derive.js";
 import type { SwapActionInput } from "./types.js";
 
 /**
@@ -64,19 +64,36 @@ describe("deriveSwapActions", () => {
       });
     });
 
-    it("at the client refund locktime → no longer fundable (client-chain clock)", () => {
+    it("at the client refund locktime → no longer fundable, but still watched", () => {
       const result = deriveSwapActions(
         input({ status: "pending", clientChainNow: 10_000 }),
       );
+      // Not yet terminal: `pending` only means the last read saw no deposit — a
+      // deadline-straddling funding may still surface and need the refund path,
+      // so the swap keeps being watched through the grace window.
       expect(result.actions).toEqual([]);
       expect(result.recommended).toBeUndefined();
     });
 
-    it("past the locktime → no fund action", () => {
-      expect(
-        deriveSwapActions(input({ status: "pending", clientChainNow: 20_000 }))
-          .actions,
-      ).toEqual([]);
+    it("past the locktime + grace → dead swap, derives none (reapable)", () => {
+      const result = deriveSwapActions(
+        input({
+          status: "pending",
+          clientChainNow: 10_000 + FUNDING_REAP_GRACE_MS,
+        }),
+      );
+      // `none`, not an empty set: nothing was funded in the whole grace window,
+      // so the swap is terminal and the tracker must be able to reap it.
+      expect(result.recommended).toBe("none");
+      expect(result.actions).toEqual([
+        {
+          id: "none",
+          recommended: true,
+          automation: "auto",
+          reason: expect.any(String),
+        },
+      ]);
+      expect(result.actions.some((a) => a.id === "fund")).toBe(false);
     });
   });
 

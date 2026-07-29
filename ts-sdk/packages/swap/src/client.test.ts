@@ -116,6 +116,20 @@ describe("Client tracking", () => {
     expect(m.evm.registered.size).toBe(1);
   });
 
+  it("does not register a swap the server already settled (stored-status filter)", async () => {
+    const m = managers();
+    const settled = {
+      response: {
+        ...(arkadeEvmSwap as { response: object }).response,
+        status: "serverredeemed",
+      },
+    } as unknown as StoredSwap;
+    const client = new Client(fakeLegacy([settled]), withManagers(m.map));
+    await client.startTracking();
+    expect(m.arkade.registered.size).toBe(0);
+    expect(m.evm.registered.size).toBe(0);
+  });
+
   it("skips swaps whose ledgers aren't observable yet", async () => {
     const m = managers();
     const client = new Client(

@@ -51,9 +51,10 @@ export type SwapWorkerOptions = {
   /**
    * Run the recommended auto action for a swap (today: claim). Reject to signal
    * failure — the worker re-verifies against chain and retries with backoff.
-   * Resolve once submitted.
+   * Resolve once submitted. OMIT for observe-only mode: hints still trigger
+   * chain re-verifies (fast, cheap derivations), but nothing is ever run.
    */
-  execute: (swapId: string, actionId: SwapActionId) => Promise<void>;
+  execute?: (swapId: string, actionId: SwapActionId) => Promise<void>;
   /**
    * Surface an action that needs the user rather than being auto-run — a manual
    * `fund`, a refund the user must confirm, or a claim whose retries are spent.
@@ -145,7 +146,9 @@ export class SwapWorker {
     // appears after tracking started).
     this.#hintSource.subscribe([swapId]);
 
-    if (recommended && AUTO_EXECUTABLE.has(recommended)) {
+    // Observe-only mode (no execute): fall through — an auto action is nobody's
+    // to run, and it doesn't need surfacing either (subscribers see it live).
+    if (recommended && AUTO_EXECUTABLE.has(recommended) && this.#execute) {
       this.#autoExecute(swapId, actions);
       return;
     }
@@ -163,11 +166,13 @@ export class SwapWorker {
   }
 
   #autoExecute(swapId: string, actions: SwapActions): void {
+    const execute = this.#execute;
+    if (!execute) return; // observe-only mode
     if (this.#executing.has(swapId)) return; // one in-flight run per swap
     const actionId = actions.recommended;
     if (!actionId) return;
     this.#executing.add(swapId);
-    void this.#execute(swapId, actionId)
+    void execute(swapId, actionId)
       .then(() => this.#cancelRetry(swapId)) // submitted — reset the attempt budget
       .catch((error) => {
         console.warn(`SwapWorker: ${actionId}(${swapId}) failed:`, error);

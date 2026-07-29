@@ -133,6 +133,27 @@ describe("SwapWorker", () => {
     expect(execute).toHaveBeenCalledWith("s1", "claim");
   });
 
+  it("observe-only mode (no execute): hints verify, but a claim is never run", () => {
+    const tracker = new FakeTracker();
+    const hintSource = new FakeHintSource();
+    const onActionRequired = vi.fn();
+    const worker = new SwapWorker({ tracker, hintSource, onActionRequired });
+    worker.start();
+
+    hintSource.hint("s1");
+    expect(tracker.applied).toEqual(["s1"]); // hint → chain verify still happens
+
+    tracker.emit("s1", acts("claim"));
+    // Nothing to run and nothing to surface (claim is auto; subscribers see it).
+    expect(onActionRequired).not.toHaveBeenCalled();
+    // Still surfaces what genuinely needs the user.
+    tracker.emit("s2", acts("refund_unilateral"));
+    expect(onActionRequired).toHaveBeenCalledWith(
+      "s2",
+      expect.objectContaining({ recommended: "refund_unilateral" }),
+    );
+  });
+
   it("surfaces a refund instead of running it", () => {
     const { tracker, worker, execute, onActionRequired } = setup();
     worker.start();

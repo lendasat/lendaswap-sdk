@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HtlcObservation } from "../actions/types.js";
 import type { EvmHtlcEvent } from "./evm.js";
 import {
@@ -23,28 +23,11 @@ class FakeReader implements EvmChainReader {
   /** Events served for every queried HTLC. */
   events: EvmHtlcEvent[] = [];
   blockTimeMs = 1_000;
-  #cb: (() => void) | undefined;
   getHtlcEventsBatch = vi.fn(async (queries: EvmHtlcQuery[]) => {
     return new Map(queries.map((q) => [htlcQueryKey(q), this.events]));
   });
   getBlockTimeMs = async () => this.blockTimeMs;
-  watch = (cb: () => void): (() => void) => {
-    this.#cb = cb;
-    return () => {
-      this.#cb = undefined;
-    };
-  };
-  /** Simulate a new block/log notification. */
-  fire(): void {
-    this.#cb?.();
-  }
-  get watching(): boolean {
-    return this.#cb !== undefined;
-  }
 }
-
-/** Let fire-and-forget async reconciliation settle. */
-const tick = () => new Promise<void>((r) => setTimeout(r, 0));
 
 describe("EvmContractManager", () => {
   let reader: FakeReader;
@@ -55,7 +38,9 @@ describe("EvmContractManager", () => {
     readers = new Map([[137, reader]]);
   });
 
-  const build = () => EvmContractManager.fromDeps({ readers });
+  /** Passive-scan gate off by default in tests: every refresh() rescans. */
+  const build = (fallbackScanIntervalMs = 0) =>
+    EvmContractManager.fromDeps({ readers, fallbackScanIntervalMs });
 
   it("rejects non-evm HTLCs", async () => {
     await expect(
@@ -74,7 +59,7 @@ describe("EvmContractManager", () => {
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
     await m.register(ref);
     expect(m.getState(ref)).toBe("confirmed");
-    expect(m.chainNow(ref)).toBe(1_000);
+    expect(m.chainNow(ref)).toBeGreaterThanOrEqual(1_000);
     expect(reader.getHtlcEventsBatch).toHaveBeenCalledWith([
       { htlc: "0xhtlc", preimageHash: "0xph", claimAddress: "0xclaim" },
     ]);
@@ -104,7 +89,7 @@ describe("EvmContractManager", () => {
     expect(m.getState(ref)).toBe("invalid");
   });
 
-  it("re-observes and notifies when the reader signals a change", async () => {
+  it("re-observes and notifies on refresh", async () => {
     const m = build();
     const seen: HtlcObservation[] = [];
     m.onEvent((_r, s) => seen.push(s));
@@ -116,8 +101,7 @@ describe("EvmContractManager", () => {
       { kind: "created", amount: 1000n, token: "0xwbtc" },
       { kind: "redeemed", preimage: "0xse" },
     ];
-    reader.fire();
-    await tick();
+    await m.refresh();
     expect(m.getState(ref)).toBe("spent_claim");
     expect(m.getPreimage(ref)).toBe("0xse");
     expect(seen).toEqual(["confirmed", "spent_claim"]);
@@ -133,79 +117,64 @@ describe("EvmContractManager", () => {
     expect(m.getState(ref)).toBe("spent_refund");
     // A stale read that no longer sees the refund must not revert it.
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
-    reader.fire();
-    await tick();
+    await m.refresh();
     expect(m.getState(ref)).toBe("spent_refund");
   });
 
   it("tracks independent clocks per chain", async () => {
     const other = new FakeReader();
-    other.blockTimeMs = 2_000;
+    other.blockTimeMs = 500_000;
     readers.set(1, other);
     const m = build();
     const ethRef = { ...ref, chainId: 1 } satisfies HtlcRef;
     await m.register(ref);
     await m.register(ethRef);
-    expect(m.chainNow(ref)).toBe(1_000);
-    expect(m.chainNow(ethRef)).toBe(2_000);
+    expect(m.chainNow(ref) ?? 0).toBeLessThan(m.chainNow(ethRef) ?? 0);
   });
 
-  it("stops watching a chain once its last HTLC is unregistered", async () => {
+  it("clears a chain's state once its last HTLC is unregistered", async () => {
     const m = build();
     await m.register(ref);
-    expect(reader.watching).toBe(true);
     await m.unregister(ref);
-    expect(reader.watching).toBe(false);
     expect(m.getState(ref)).toBeUndefined();
+    expect(m.chainNow(ref)).toBeUndefined();
   });
 
-  it("disposes all chain watches", async () => {
-    const m = build();
-    await m.register(ref);
-    m.dispose();
-    expect(reader.watching).toBe(false);
-  });
+  describe("with fake time", () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-  it("coalesces overlapping block-event reconciles into a single rerun", async () => {
-    const m = build();
-    await m.register(ref);
+    it("rate-limits passive refresh scans to the fallback interval", async () => {
+      const m = build(60_000);
+      await m.register(ref); // scan #1 (register is never gated)
+      reader.getHtlcEventsBatch.mockClear();
 
-    // Gate the first watch-driven reconcile so we can fire more events while it's
-    // in flight; count reconciles by their one getBlockTimeMs call each.
-    let releaseGate!: () => void;
-    const gate = new Promise<void>((r) => {
-      releaseGate = r;
+      await m.refresh(); // within the interval → no-op
+      await m.refresh();
+      expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(61_000);
+      await m.refresh(); // interval elapsed → scans
+      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
     });
-    let calls = 0;
-    reader.getBlockTimeMs = async () => {
-      calls += 1;
-      if (calls === 1) await gate;
-      return 1_000;
-    };
 
-    reader.fire(); // starts reconcile #1 (blocks on the gate)
-    reader.fire(); // in flight → queue exactly one rerun
-    reader.fire(); // in flight → coalesced, no extra queue
-    await tick();
+    it("a targeted reconcile is never gated", async () => {
+      const m = build(60_000);
+      await m.register(ref);
+      reader.getHtlcEventsBatch.mockClear();
 
-    releaseGate(); // #1 finishes → runs the single queued rerun (#2)
-    await tick();
-    await tick();
+      await m.reconcile(ref); // hint path — must hit the chain immediately
+      await m.reconcile(ref);
+      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(2);
+    });
 
-    // #1 + one coalesced rerun = 2, not 3 (the three rapid fires didn't stack).
-    expect(calls).toBe(2);
-  });
-
-  it("catches a rejecting block-event reconcile (no unhandled rejection)", async () => {
-    const m = build();
-    await m.register(ref);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    reader.getBlockTimeMs = async () => {
-      throw new Error("rpc down");
-    };
-    expect(() => reader.fire()).not.toThrow();
-    await tick();
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
+    it("extrapolates chainNow between scans", async () => {
+      const m = build(60_000);
+      await m.register(ref);
+      const at0 = m.chainNow(ref);
+      vi.advanceTimersByTime(30_000);
+      // No RPC in between — the clock still advances with wall time.
+      expect(m.chainNow(ref)).toBe((at0 ?? 0) + 30_000);
+    });
   });
 });

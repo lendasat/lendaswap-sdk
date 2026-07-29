@@ -51,39 +51,50 @@ export type EvmChainReader = {
   ): Promise<Map<string, EvmHtlcEvent[]>>;
   /** The latest block's `block.timestamp`, in ms. */
   getBlockTimeMs(): Promise<number>;
-  /** Fire `cb` when new blocks/logs may have changed watched HTLCs; returns unsubscribe. */
-  watch(cb: () => void): () => void;
 };
 
 export type EvmContractManagerDeps = {
   /** A chain reader per EVM `chainId` this manager serves. */
   readers: Map<number, EvmChainReader>;
+  /**
+   * Minimum ms between PASSIVE full-chain rescans (the tracker's periodic
+   * `refresh()`). Targeted verifies — `register` and `reconcile(ref)`, i.e. the
+   * hint/auto-claim path — are never gated. The passive scan is only the safety
+   * net for a missed hint, so it can be slow; this is what keeps background
+   * traffic against rate-limited public RPCs near zero. Default 3 minutes;
+   * `0` disables the gate (scan on every refresh — tests).
+   */
+  fallbackScanIntervalMs?: number;
 };
+
+const DEFAULT_FALLBACK_SCAN_INTERVAL_MS = 180_000;
+
+/** A chain clock reading: block.timestamp plus when we fetched it. */
+type ChainClock = { blockTimeMs: number; fetchedAtMs: number };
 
 export class EvmContractManager implements ContractManager {
   readonly ledger: Ledger = "evm";
 
   readonly #readers: Map<number, EvmChainReader>;
+  readonly #fallbackScanIntervalMs: number;
   /** htlcKey → the ref we're tracking. */
   readonly #refs = new Map<string, EvmRef>();
   /** htlcKey → last known observation. */
   readonly #obs = new Map<string, HtlcObservation>();
   /** htlcKey → the preimage a claim revealed. */
   readonly #preimages = new Map<string, `0x${string}`>();
-  /** chainId → its latest block time (ms). */
-  readonly #now = new Map<number, number>();
-  /** chainId → unsubscribe for its (single, shared) watch. */
-  readonly #watchUnsubs = new Map<number, () => void>();
-  /** chainId → a block-event reconcile is currently running (coalescing). */
-  readonly #reconciling = new Set<number>();
-  /** chainId → a block event arrived mid-reconcile; run exactly one more. */
-  readonly #reconcileAgain = new Set<number>();
+  /** chainId → its last clock reading (extrapolated in {@link chainNow}). */
+  readonly #now = new Map<number, ChainClock>();
+  /** chainId → when its last full scan STARTED (gates passive rescans). */
+  readonly #lastScanStartedAt = new Map<number, number>();
   readonly #listeners = new Set<
     (ref: HtlcRef, state: HtlcObservation) => void
   >();
 
   private constructor(deps: EvmContractManagerDeps) {
     this.#readers = deps.readers;
+    this.#fallbackScanIntervalMs =
+      deps.fallbackScanIntervalMs ?? DEFAULT_FALLBACK_SCAN_INTERVAL_MS;
   }
 
   static fromDeps(deps: EvmContractManagerDeps): EvmContractManager {
@@ -105,7 +116,6 @@ export class EvmContractManager implements ContractManager {
         `no EVM reader for chain ${ref.chainId} — configure it via ClientBuilder.withEvmRpcUrls()`,
       );
     this.#refs.set(htlcKey(ref), ref);
-    this.#ensureWatch(ref.chainId);
     await this.#reconcileChain(ref.chainId);
   }
 
@@ -115,12 +125,10 @@ export class EvmContractManager implements ContractManager {
     this.#refs.delete(key);
     this.#obs.delete(key);
     this.#preimages.delete(key);
-    // Drop the chain's watch once nothing on it is tracked anymore.
+    // Drop the chain's state once nothing on it is tracked anymore.
     if (![...this.#refs.values()].some((r) => r.chainId === ref.chainId)) {
-      this.#watchUnsubs.get(ref.chainId)?.();
-      this.#watchUnsubs.delete(ref.chainId);
       this.#now.delete(ref.chainId);
-      this.#reconcileAgain.delete(ref.chainId);
+      this.#lastScanStartedAt.delete(ref.chainId);
     }
   }
 
@@ -129,7 +137,14 @@ export class EvmContractManager implements ContractManager {
   }
 
   chainNow(ref: HtlcRef): number | undefined {
-    return ref.ledger === "evm" ? this.#now.get(ref.chainId) : undefined;
+    if (ref.ledger !== "evm") return undefined;
+    const clock = this.#now.get(ref.chainId);
+    if (!clock) return undefined;
+    // Extrapolate between reads: EVM block.timestamp tracks wall-clock closely,
+    // so the clock stays current without polling `getBlock`. This is what lets a
+    // timelock flip (e.g. refund unlocking) surface between slow scans; the
+    // worker re-verifies against the real chain before ever acting on it.
+    return clock.blockTimeMs + Math.max(0, Date.now() - clock.fetchedAtMs);
   }
 
   onEvent(cb: (ref: HtlcRef, state: HtlcObservation) => void): () => void {
@@ -137,26 +152,34 @@ export class EvmContractManager implements ContractManager {
     return () => this.#listeners.delete(cb);
   }
 
+  /**
+   * The PASSIVE safety-net scan, called on the tracker's periodic tick. Gated
+   * per chain by `fallbackScanIntervalMs`: most ticks are free no-ops, because
+   * the hint feed (`reconcile`) covers timely reaction and {@link chainNow}
+   * extrapolates the clock in between.
+   */
   async refresh(): Promise<void> {
     const chainIds = new Set([...this.#refs.values()].map((r) => r.chainId));
-    await Promise.all([...chainIds].map((c) => this.#reconcileChain(c)));
+    const now = Date.now();
+    const due = [...chainIds].filter((c) => {
+      const last = this.#lastScanStartedAt.get(c);
+      return last === undefined || now - last >= this.#fallbackScanIntervalMs;
+    });
+    await Promise.all(due.map((c) => this.#reconcileChain(c)));
   }
 
+  /** Targeted verify (hint / pre-action path) — never gated. */
   async reconcile(ref: HtlcRef): Promise<void> {
     if (ref.ledger !== "evm") return;
     const tracked = this.#refs.get(htlcKey(ref));
     if (!tracked) return;
     const reader = this.#readers.get(tracked.chainId);
     if (!reader) return;
-    this.#now.set(tracked.chainId, await reader.getBlockTimeMs());
+    await this.#readClock(reader, tracked.chainId);
     await this.#reconcileRefs(reader, [tracked]);
   }
 
   dispose(): void {
-    for (const unsub of this.#watchUnsubs.values()) unsub();
-    this.#watchUnsubs.clear();
-    this.#reconciling.clear();
-    this.#reconcileAgain.clear();
     this.#listeners.clear();
   }
 
@@ -165,46 +188,18 @@ export class EvmContractManager implements ContractManager {
     return ref.ledger === "evm" ? this.#preimages.get(htlcKey(ref)) : undefined;
   }
 
-  #ensureWatch(chainId: number): void {
-    if (this.#watchUnsubs.has(chainId)) return;
-    const reader = this.#readers.get(chainId);
-    if (!reader) return;
-    this.#watchUnsubs.set(
-      chainId,
-      reader.watch(() => this.#scheduleReconcile(chainId)),
-    );
-  }
-
-  /**
-   * Reconcile a chain in response to a block/log event, coalesced: at most one
-   * reconcile runs per chain at a time, with at most one queued rerun to pick up
-   * changes that arrived mid-run. This stops fast chains / slow RPCs from stacking
-   * redundant full-log scans (which amplify rate limits), and the `.catch` keeps a
-   * transient RPC failure in a background reconcile from becoming an unhandled
-   * rejection. `register`/`refresh` still await `#reconcileChain` directly.
-   */
-  #scheduleReconcile(chainId: number): void {
-    if (this.#reconciling.has(chainId)) {
-      this.#reconcileAgain.add(chainId);
-      return;
-    }
-    this.#reconciling.add(chainId);
-    void this.#reconcileChain(chainId)
-      .catch((error) => {
-        console.warn(`EVM reconcile failed for chain ${chainId}:`, error);
-      })
-      .finally(() => {
-        this.#reconciling.delete(chainId);
-        if (this.#reconcileAgain.delete(chainId))
-          this.#scheduleReconcile(chainId);
-      });
+  /** Read and store a chain's clock (with its fetch time, for extrapolation). */
+  async #readClock(reader: EvmChainReader, chainId: number): Promise<void> {
+    const blockTimeMs = await reader.getBlockTimeMs();
+    this.#now.set(chainId, { blockTimeMs, fetchedAtMs: Date.now() });
   }
 
   /** Refresh one chain's clock and re-observe every HTLC tracked on it. */
   async #reconcileChain(chainId: number): Promise<void> {
     const reader = this.#readers.get(chainId);
     if (!reader) return;
-    this.#now.set(chainId, await reader.getBlockTimeMs());
+    this.#lastScanStartedAt.set(chainId, Date.now());
+    await this.#readClock(reader, chainId);
     const refs = [...this.#refs.values()].filter((r) => r.chainId === chainId);
     await this.#reconcileRefs(reader, refs);
   }

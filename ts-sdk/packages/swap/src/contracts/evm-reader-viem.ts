@@ -90,7 +90,6 @@ export type EvmLogClient = {
     ];
   }): Promise<RawLog[]>;
   getBlock(): Promise<Pick<Block, "timestamp">>;
-  watchBlocks(args: { onBlock: () => void }): () => void;
 };
 
 /** Build an {@link EvmChainReader} over an existing viem-like client. */
@@ -133,9 +132,6 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
     async getBlockTimeMs() {
       const block = await client.getBlock();
       return Number(block.timestamp) * 1000;
-    },
-    watch(cb) {
-      return client.watchBlocks({ onBlock: () => cb() });
     },
   };
 }
