@@ -5868,13 +5868,14 @@ export class Client {
   ): Promise<{ tokenAddress: string; amount: string } | null> {
     const txHash = (oldSwap as { evm_claim_txid?: string | null })
       .evm_claim_txid;
-    if (!txHash || !this.#config.aa?.bundlerUrl) return null;
+    const rpcUrl = this.#config.aa?.rpcUrl ?? this.#config.aa?.bundlerUrl;
+    if (!txHash || !rpcUrl) return null;
 
     const { createPublicClient, http } = await import("viem");
     const { arbitrum } = await import("viem/chains");
     const publicClient = createPublicClient({
       chain: arbitrum,
-      transport: http(this.#config.aa.bundlerUrl),
+      transport: http(rpcUrl),
     });
     let receipt: Awaited<ReturnType<typeof publicClient.getTransactionReceipt>>;
     try {
