@@ -605,7 +605,7 @@ export class Client {
   continueRefundedEvmSwap(
     ...args: Parameters<LegacyClient["continueRefundedEvmSwap"]>
   ): ReturnType<LegacyClient["continueRefundedEvmSwap"]> {
-    return this.#legacy.continueRefundedEvmSwap(...args);
+    return this.#trackAfterRetry(this.#legacy.continueRefundedEvmSwap(...args));
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
