@@ -1,4 +1,9 @@
-import { encodeAbiParameters, encodeEventTopics, parseAbiItem } from "viem";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionResult,
+  parseAbiItem,
+} from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { htlcQueryKey } from "./evm-manager.js";
 import {
@@ -6,6 +11,7 @@ import {
   defaultEvmReaders,
   type EvmLogClient,
   evmReaderFromClient,
+  MULTICALL3_ADDRESS,
   type RawLog,
 } from "./evm-reader-viem.js";
 
@@ -67,12 +73,34 @@ function refundedLog(): RawLog {
 
 function fakeClient(logs: RawLog[]): EvmLogClient & {
   request: ReturnType<typeof vi.fn>;
+  call: ReturnType<typeof vi.fn>;
 } {
   return {
     request: vi.fn(async () => logs),
-    getBlock: async () => ({ timestamp: 1_700_000_000n }),
+    call: vi.fn(async () => ({ data: "0x" as const })),
+    getBlock: async () => ({ timestamp: 1_700_000_000n, number: 42n }),
   };
 }
+
+const IS_ACTIVE = parseAbiItem(
+  "function isActive(bytes32 preimageHash, uint256 amount, address token, address sender, address claimAddress, uint256 timelock) view returns (bool)",
+);
+const AGGREGATE3 = parseAbiItem(
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+);
+
+const boolResult = (value: boolean): `0x${string}` =>
+  encodeFunctionResult({ abi: [IS_ACTIVE], result: value });
+
+const activeQueryFor = (htlc: `0x${string}`, preimageHash: `0x${string}`) => ({
+  htlc,
+  preimageHash,
+  amount: 1000n,
+  token: TOKEN,
+  sender: REFUND,
+  claimAddress: CLAIM,
+  timelockSec: 1_700_000_000,
+});
 
 const QUERY = { htlc: HTLC, preimageHash: PH, claimAddress: CLAIM };
 const KEY = htlcQueryKey(QUERY);
@@ -158,9 +186,90 @@ describe("evmReaderFromClient", () => {
     expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toHaveLength(1);
   });
 
-  it("converts block.timestamp (seconds) to ms", async () => {
+  it("passes fromBlock through as a hex quantity", async () => {
+    const client = fakeClient([]);
+    const reader = evmReaderFromClient(client);
+    await reader.getHtlcEventsBatch([QUERY], 123n);
+    expect(client.request.mock.calls[0][0].params[0].fromBlock).toBe("0x7b");
+  });
+
+  it("reports the latest block time (ms) and number", async () => {
     const reader = evmReaderFromClient(fakeClient([]));
-    expect(await reader.getBlockTimeMs()).toBe(1_700_000_000_000);
+    expect(await reader.getLatestBlock()).toEqual({
+      timeMs: 1_700_000_000_000,
+      number: 42n,
+    });
+  });
+});
+
+describe("isActiveBatch", () => {
+  it("a single query goes straight to the HTLC contract", async () => {
+    const client = fakeClient([]);
+    client.call.mockResolvedValueOnce({ data: boolResult(true) });
+    const reader = evmReaderFromClient(client);
+
+    const result = await reader.isActiveBatch([activeQueryFor(HTLC, PH)]);
+
+    expect(client.call).toHaveBeenCalledTimes(1);
+    expect(client.call.mock.calls[0][0].to).toBe(HTLC);
+    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
+      true,
+    );
+  });
+
+  it("many queries collapse into one Multicall3 eth_call", async () => {
+    const htlc2 = `0x${"88".repeat(20)}` as const;
+    const ph2 = `0x${"77".repeat(32)}` as const;
+    const client = fakeClient([]);
+    client.call.mockResolvedValueOnce({
+      data: encodeFunctionResult({
+        abi: [AGGREGATE3],
+        result: [
+          { success: true, returnData: boolResult(true) },
+          { success: false, returnData: "0x" },
+        ],
+      }),
+    });
+    const reader = evmReaderFromClient(client);
+
+    const result = await reader.isActiveBatch([
+      activeQueryFor(HTLC, PH),
+      activeQueryFor(htlc2, ph2),
+    ]);
+
+    expect(client.call).toHaveBeenCalledTimes(1);
+    expect(client.call.mock.calls[0][0].to).toBe(MULTICALL3_ADDRESS);
+    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
+      true,
+    );
+    // A failed inner call reads as inactive (the caller's log path classifies).
+    expect(result.get(htlcQueryKey({ htlc: htlc2, preimageHash: ph2 }))).toBe(
+      false,
+    );
+  });
+
+  it("falls back to per-HTLC calls when Multicall3 is unavailable", async () => {
+    const htlc2 = `0x${"88".repeat(20)}` as const;
+    const ph2 = `0x${"77".repeat(32)}` as const;
+    const client = fakeClient([]);
+    client.call
+      .mockResolvedValueOnce({ data: "0x" }) // multicall address is empty → decode fails
+      .mockResolvedValueOnce({ data: boolResult(true) })
+      .mockResolvedValueOnce({ data: boolResult(false) });
+    const reader = evmReaderFromClient(client);
+
+    const result = await reader.isActiveBatch([
+      activeQueryFor(HTLC, PH),
+      activeQueryFor(htlc2, ph2),
+    ]);
+
+    expect(client.call).toHaveBeenCalledTimes(3);
+    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
+      true,
+    );
+    expect(result.get(htlcQueryKey({ htlc: htlc2, preimageHash: ph2 }))).toBe(
+      false,
+    );
   });
 });
 

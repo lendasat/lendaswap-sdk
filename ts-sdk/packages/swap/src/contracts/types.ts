@@ -74,6 +74,22 @@ export type HtlcRef =
       expectedAmount: bigint;
       /** Expected token address; the funding is `invalid` if it locks another token. */
       expectedToken?: `0x${string}`;
+      /**
+       * The funder (the HTLC's refund address). Together with the other fields it
+       * completes the contract's swap-key tuple, enabling the cheap `isActive`
+       * eth_call fast path (which verifies the terms implicitly — the key hashes
+       * amount/token/addresses/timelock). Legs whose response omits a tuple field
+       * fall back to log scans.
+       */
+      sender?: `0x${string}`;
+      /** The HTLC refund timelock in unix SECONDS, exactly as funded on-chain. */
+      timelockSec?: number;
+      /**
+       * Swap creation time (ms). Lower-bounds log scans: the HTLC can have no
+       * events before the swap existed, so the scan starts near the corresponding
+       * block instead of genesis.
+       */
+      createdAtMs?: number;
     }
   | {
       ledger: "lightning";

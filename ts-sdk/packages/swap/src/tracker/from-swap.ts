@@ -18,6 +18,31 @@ import type { TrackedSwap } from "./swap-tracker.js";
 /** Locktimes are unix seconds on the wire; the resolver works in ms. */
 const ms = (seconds: number): number => seconds * 1000;
 
+/**
+ * The BTC-pegged token the coordinator locks in HTLCs per MAINNET chain
+ * (mirrors `config.mainnet.yaml` `tokens.wbtc`): WBTC on Polygon, tBTC on
+ * Ethereum/Arbitrum. TEMPORARY fallback for the responses that don't expose
+ * the locked token (`evm_to_arkade`, `evm_to_lightning`) so their isActive
+ * tuple is complete; delete once the server returns the token there.
+ * Gated to mainnet: a dev deployment's mock token lives at another address,
+ * and guessing wrong would flag valid fundings as `invalid`.
+ */
+const MAINNET_LOCKED_TOKEN: Record<number, `0x${string}`> = {
+  1: "0x18084fba666a33d37592fa2633fd49a74dd93a88", // tBTC
+  42161: "0x6c84a8f1c29108F47a79964b5Fe888D4f4D0dE40", // tBTC
+  137: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", // WBTC
+};
+
+function lockedTokenFallback(
+  chainId: number,
+  network: string | undefined,
+): `0x${string}` | undefined {
+  const net = network?.toLowerCase();
+  return net === "bitcoin" || net === "mainnet"
+    ? MAINNET_LOCKED_TOKEN[chainId]
+    : undefined;
+}
+
 const ensure0x = (value: string): `0x${string}` =>
   (value.startsWith("0x") ? value : `0x${value}`) as `0x${string}`;
 const strip0x = (value: string): string =>
@@ -74,7 +99,14 @@ function evmLeg(args: {
   claimAddress: string;
   expectedSats: string;
   token?: string;
+  /** The funder / refund address — completes the isActive tuple when known. */
+  sender?: string;
+  /** Refund timelock in unix seconds, exactly as funded on-chain. */
+  timelockSec?: number;
+  /** Swap creation time (ISO) — lower-bounds log scans. */
+  createdAt?: string;
 }): HtlcRef {
+  const createdAtMs = args.createdAt ? Date.parse(args.createdAt) : Number.NaN;
   return {
     ledger: "evm",
     chainId: args.chainId,
@@ -83,6 +115,9 @@ function evmLeg(args: {
     claimAddress: ensure0x(args.claimAddress),
     expectedAmount: BigInt(args.expectedSats),
     expectedToken: args.token ? ensure0x(args.token) : undefined,
+    sender: args.sender ? ensure0x(args.sender) : undefined,
+    timelockSec: args.timelockSec,
+    createdAtMs: Number.isNaN(createdAtMs) ? undefined : createdAtMs,
   };
 }
 
@@ -119,6 +154,9 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           claimAddress: r.client_evm_address, // the client claims the server's EVM HTLC
           expectedSats: r.evm_expected_sats,
           token: r.wbtc_address,
+          sender: r.server_evm_address, // the server funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         clientRefundLocktime: ms(r.vhtlc_refund_locktime),
         serverRefundLocktime: ms(r.evm_refund_locktime),
@@ -133,7 +171,12 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           hashLock: r.hash_lock,
           claimAddress: r.server_evm_address, // the server claims the client's EVM HTLC
           expectedSats: r.evm_expected_sats,
-          // evm_to_arkade doesn't expose the locked token — verify amount only.
+          // evm_to_arkade doesn't expose the locked token — fall back to the
+          // per-chain mainnet constant so the isActive tuple is complete.
+          token: lockedTokenFallback(r.evm_chain_id, r.network),
+          sender: r.client_evm_address, // the client funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         serverHtlc: arkadeLeg(r, r.btc_vhtlc_address, Number(r.target_amount)),
         clientRefundLocktime: ms(r.evm_refund_locktime),
@@ -155,6 +198,9 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           claimAddress: r.client_evm_address, // the client claims the server's EVM HTLC
           expectedSats: r.evm_expected_sats,
           token: r.wbtc_address,
+          sender: r.server_evm_address, // the server funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         clientRefundLocktime: ms(r.btc_refund_locktime),
         serverRefundLocktime: ms(r.evm_refund_locktime),
@@ -170,6 +216,9 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           claimAddress: r.server_evm_address, // the server claims the client's EVM HTLC
           expectedSats: r.evm_expected_sats,
           token: r.wbtc_address,
+          sender: r.client_evm_address, // the client funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         serverHtlc: bitcoinLeg(
           r.btc_htlc_address,
@@ -238,7 +287,12 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           hashLock: r.hash_lock,
           claimAddress: r.server_evm_address, // the server claims the client's leg
           expectedSats: r.evm_expected_sats,
-          // evm_to_lightning doesn't expose the locked token — verify amount only.
+          // evm_to_lightning doesn't expose the locked token — fall back to the
+          // per-chain mainnet constant so the isActive tuple is complete.
+          token: lockedTokenFallback(r.evm_chain_id, r.network),
+          sender: r.client_evm_address, // the client funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         clientRefundLocktime: ms(r.evm_refund_locktime),
         serverRefundLocktime: 0, // no on-chain server leg
@@ -271,6 +325,9 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           claimAddress: r.client_evm_address, // the client claims the server's leg
           expectedSats: r.evm_expected_sats,
           token: r.wbtc_address,
+          sender: r.server_evm_address, // the server funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
         }),
         clientRefundLocktime: 0, // no on-chain client leg
         serverRefundLocktime: ms(r.evm_refund_locktime),

@@ -107,6 +107,8 @@ describe("swapToTracked", () => {
       claimAddress: "0xclient", // the client claims the server's EVM HTLC
       expectedAmount: 1450n, // evm_expected_sats
       expectedToken: "0xwbtc",
+      sender: "0xserver", // the server funded it
+      timelockSec: 900_000,
     });
     // locktimes converted seconds → ms, client=Arkade, server=EVM
     expect(tracked?.clientRefundLocktime).toBe(1_000_000_000);
@@ -164,6 +166,8 @@ describe("swapToTracked", () => {
       claimAddress: "0xserver", // the server claims the client's EVM HTLC
       expectedAmount: 2450n, // evm_expected_sats
       expectedToken: "0xwbtc",
+      sender: "0xclient", // the client funded it
+      timelockSec: 900_000,
     });
     expect(tracked?.serverHtlc).toEqual({
       ledger: "bitcoin",
@@ -241,9 +245,35 @@ describe("swapToTracked", () => {
       claimAddress: "0xserver", // the server claims the client's EVM HTLC
       expectedAmount: 1450n, // evm_expected_sats
       expectedToken: undefined, // no wbtc_address — amount-only
+      sender: "0xclient", // the client funded it
+      timelockSec: 900_000,
     });
     expect(tracked?.clientRefundLocktime).toBe(900_000_000); // EVM leg
     expect(tracked?.serverRefundLocktime).toBe(0);
+  });
+
+  it("token-less directions fall back to the per-chain locked token on mainnet", () => {
+    const tracked = swapToTracked(
+      stored({
+        ...arkadeEvmFields,
+        direction: "evm_to_lightning",
+        network: "bitcoin",
+      } as Partial<GetSwapResponse>),
+    );
+    expect(tracked?.clientHtlc).toMatchObject({
+      expectedToken: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", // WBTC (chain 137)
+    });
+  });
+
+  it("no locked-token fallback off mainnet (a dev token lives elsewhere)", () => {
+    const tracked = swapToTracked(
+      stored({
+        ...arkadeEvmFields,
+        direction: "evm_to_lightning",
+        network: "regtest",
+      } as Partial<GetSwapResponse>),
+    );
+    expect(tracked?.clientHtlc).toMatchObject({ expectedToken: undefined });
   });
 
   it("maps lightning_to_evm: client claims EVM, no client leg", () => {
@@ -259,6 +289,8 @@ describe("swapToTracked", () => {
       claimAddress: "0xclient", // the client claims the server's EVM HTLC
       expectedAmount: 1450n, // evm_expected_sats
       expectedToken: "0xwbtc",
+      sender: "0xserver", // the server funded it
+      timelockSec: 900_000,
     });
     expect(tracked?.clientRefundLocktime).toBe(0);
     expect(tracked?.serverRefundLocktime).toBe(900_000_000); // EVM leg

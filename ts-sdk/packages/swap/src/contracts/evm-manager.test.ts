@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HtlcObservation } from "../actions/types.js";
 import type { EvmHtlcEvent } from "./evm.js";
 import {
+  type EvmActiveQuery,
   type EvmChainReader,
   EvmContractManager,
   type EvmHtlcQuery,
@@ -20,13 +21,29 @@ const ref = {
 } satisfies HtlcRef;
 
 class FakeReader implements EvmChainReader {
-  /** Events served for every queried HTLC. */
+  /** Events served for every queried HTLC (the log path). */
   events: EvmHtlcEvent[] = [];
+  /** htlcQueryKey → open? Missing key reads as inactive. */
+  active = new Map<string, boolean>();
   blockTimeMs = 1_000;
-  getHtlcEventsBatch = vi.fn(async (queries: EvmHtlcQuery[]) => {
-    return new Map(queries.map((q) => [htlcQueryKey(q), this.events]));
+  blockNumber = 100n;
+  getHtlcEventsBatch = vi.fn(
+    async (queries: EvmHtlcQuery[], _fromBlock?: bigint) => {
+      return new Map(queries.map((q) => [htlcQueryKey(q), this.events]));
+    },
+  );
+  isActiveBatch = vi.fn(async (queries: EvmActiveQuery[]) => {
+    return new Map(
+      queries.map((q) => [
+        htlcQueryKey(q),
+        this.active.get(htlcQueryKey(q)) ?? false,
+      ]),
+    );
   });
-  getBlockTimeMs = async () => this.blockTimeMs;
+  getLatestBlock = async () => ({
+    timeMs: this.blockTimeMs,
+    number: this.blockNumber,
+  });
 }
 
 describe("EvmContractManager", () => {
@@ -60,9 +77,10 @@ describe("EvmContractManager", () => {
     await m.register(ref);
     expect(m.getState(ref)).toBe("confirmed");
     expect(m.chainNow(ref)).toBeGreaterThanOrEqual(1_000);
-    expect(reader.getHtlcEventsBatch).toHaveBeenCalledWith([
-      { htlc: "0xhtlc", preimageHash: "0xph", claimAddress: "0xclaim" },
-    ]);
+    expect(reader.getHtlcEventsBatch).toHaveBeenCalledWith(
+      [{ htlc: "0xhtlc", preimageHash: "0xph", claimAddress: "0xclaim" }],
+      0n,
+    );
   });
 
   it("reads a whole chain's HTLCs in one batched call", async () => {
@@ -138,6 +156,63 @@ describe("EvmContractManager", () => {
     await m.unregister(ref);
     expect(m.getState(ref)).toBeUndefined();
     expect(m.chainNow(ref)).toBeUndefined();
+  });
+
+  describe("isActive fast path (complete tuple)", () => {
+    // A ref whose response exposed the whole contract tuple.
+    const tupleRef = {
+      ...ref,
+      sender: "0xsender",
+      timelockSec: 1_700_000_000,
+      createdAtMs: 500,
+    } satisfies HtlcRef;
+
+    it("confirms an active HTLC without any log scan", async () => {
+      const m = build();
+      reader.active.set(htlcQueryKey(tupleRef), true);
+      await m.register(tupleRef);
+      expect(m.getState(tupleRef)).toBe("confirmed");
+      // isActive == true proves the terms — no logs needed at all.
+      expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
+    });
+
+    it("classifies an inactive HTLC from logs", async () => {
+      const m = build();
+      reader.events = [
+        { kind: "created", amount: 1000n, token: "0xwbtc" },
+        { kind: "refunded" },
+      ];
+      await m.register(tupleRef); // active-map empty → inactive
+      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
+      expect(m.getState(tupleRef)).toBe("spent_refund");
+    });
+
+    it("falls back to logs when the isActive check fails (no Multicall on chain)", async () => {
+      const m = build();
+      reader.isActiveBatch.mockRejectedValueOnce(new Error("no multicall"));
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
+      await m.register(tupleRef);
+      expect(m.getState(tupleRef)).toBe("confirmed");
+      warn.mockRestore();
+    });
+
+    it("stops scanning a leg once it is latched on a spend", async () => {
+      const m = build();
+      reader.events = [
+        { kind: "created", amount: 1000n, token: "0xwbtc" },
+        { kind: "refunded" },
+      ];
+      await m.register(tupleRef);
+      expect(m.getState(tupleRef)).toBe("spent_refund");
+
+      reader.isActiveBatch.mockClear();
+      reader.getHtlcEventsBatch.mockClear();
+      await m.refresh();
+      // Terminal per leg: nothing left to learn, no requests at all.
+      expect(reader.isActiveBatch).not.toHaveBeenCalled();
+      expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
+    });
   });
 
   describe("with fake time", () => {

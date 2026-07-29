@@ -38,19 +38,45 @@ export function htlcQueryKey(q: {
   return `${q.htlc.toLowerCase()}:${q.preimageHash.toLowerCase()}`;
 }
 
+/**
+ * The contract's full swap-key tuple for one HTLC. `isActive` hashes all of it
+ * into the swap key, so an `isActive == true` with these EXPECTED values also
+ * proves the HTLC was funded on exactly the expected terms.
+ */
+export type EvmActiveQuery = {
+  htlc: `0x${string}`;
+  preimageHash: `0x${string}`;
+  amount: bigint;
+  token: `0x${string}`;
+  sender: `0x${string}`;
+  claimAddress: `0x${string}`;
+  timelockSec: number;
+};
+
 /** Reads `HTLCErc20` state for one EVM chain. Implemented over viem/ethers/etc. */
 export type EvmChainReader = {
   /**
    * The decoded lifecycle events for every queried HTLC, keyed by
    * {@link htlcQueryKey}. Batched so a whole chain scan costs one RPC request
    * regardless of how many swaps are tracked; a queried HTLC with no events maps
-   * to an empty array.
+   * to an empty array. `fromBlock` lower-bounds the scan (default genesis) —
+   * pass the swaps' creation-block estimate so providers never see an
+   * unbounded log query.
    */
   getHtlcEventsBatch(
     queries: EvmHtlcQuery[],
+    fromBlock?: bigint,
   ): Promise<Map<string, EvmHtlcEvent[]>>;
-  /** The latest block's `block.timestamp`, in ms. */
-  getBlockTimeMs(): Promise<number>;
+  /**
+   * Whether each queried HTLC is currently open, keyed by {@link htlcQueryKey}.
+   * The cheap routine check (`eth_call`, batched via Multicall3): `true` means
+   * funded-and-unspent on exactly the queried terms; `false` is ambiguous
+   * (never funded / claimed / refunded) and needs {@link getHtlcEventsBatch}
+   * to classify.
+   */
+  isActiveBatch(queries: EvmActiveQuery[]): Promise<Map<string, boolean>>;
+  /** The latest block's timestamp (ms) and number. */
+  getLatestBlock(): Promise<{ timeMs: number; number: bigint }>;
 };
 
 export type EvmContractManagerDeps = {
@@ -69,8 +95,27 @@ export type EvmContractManagerDeps = {
 
 const DEFAULT_FALLBACK_SCAN_INTERVAL_MS = 180_000;
 
-/** A chain clock reading: block.timestamp plus when we fetched it. */
-type ChainClock = { blockTimeMs: number; fetchedAtMs: number };
+/** A chain clock reading: block.timestamp/number plus when we fetched it. */
+type ChainClock = {
+  blockTimeMs: number;
+  blockNumber: bigint;
+  fetchedAtMs: number;
+};
+
+/**
+ * Rough average block time per supported chain, for estimating "the block
+ * around a swap's creation time". Only a LOWER bound for log scans, so being
+ * generous (scanning further back) is safe; the ×1.5 factor in the estimate
+ * absorbs historical variance. An unlisted chain falls back to a genesis scan.
+ */
+const AVG_BLOCK_MS: Record<number, number> = {
+  1: 12_000,
+  137: 2_100,
+  42161: 250,
+};
+
+/** Extra blocks to over-scan past the estimate (reorgs + estimate slack). */
+const SCAN_MARGIN_BLOCKS = 1_000n;
 
 export class EvmContractManager implements ContractManager {
   readonly ledger: Ledger = "evm";
@@ -176,7 +221,7 @@ export class EvmContractManager implements ContractManager {
     const reader = this.#readers.get(tracked.chainId);
     if (!reader) return;
     await this.#readClock(reader, tracked.chainId);
-    await this.#reconcileRefs(reader, [tracked]);
+    await this.#reconcileRefs(reader, tracked.chainId, [tracked]);
   }
 
   dispose(): void {
@@ -190,8 +235,12 @@ export class EvmContractManager implements ContractManager {
 
   /** Read and store a chain's clock (with its fetch time, for extrapolation). */
   async #readClock(reader: EvmChainReader, chainId: number): Promise<void> {
-    const blockTimeMs = await reader.getBlockTimeMs();
-    this.#now.set(chainId, { blockTimeMs, fetchedAtMs: Date.now() });
+    const block = await reader.getLatestBlock();
+    this.#now.set(chainId, {
+      blockTimeMs: block.timeMs,
+      blockNumber: block.number,
+      fetchedAtMs: Date.now(),
+    });
   }
 
   /** Refresh one chain's clock and re-observe every HTLC tracked on it. */
@@ -201,20 +250,63 @@ export class EvmContractManager implements ContractManager {
     this.#lastScanStartedAt.set(chainId, Date.now());
     await this.#readClock(reader, chainId);
     const refs = [...this.#refs.values()].filter((r) => r.chainId === chainId);
-    await this.#reconcileRefs(reader, refs);
+    await this.#reconcileRefs(reader, chainId, refs);
   }
 
-  /** Re-observe the given refs from one batched log read. */
-  async #reconcileRefs(reader: EvmChainReader, refs: EvmRef[]): Promise<void> {
-    if (refs.length === 0) return;
+  /**
+   * Re-observe the given refs. Two tiers:
+   *
+   * 1. Refs with the full contract tuple get the cheap `isActive` check —
+   *    `true` proves open-and-on-expected-terms (the swap key hashes them) →
+   *    `confirmed`, no log scan at all. This is the common case.
+   * 2. Everything else — an incomplete tuple, an inactive-and-unclassified
+   *    HTLC (never funded vs claimed vs refunded), or an `isActive` transport
+   *    failure (e.g. no Multicall3 on a dev chain) — is classified from one
+   *    batched log read, lower-bounded by the swaps' creation-block estimate.
+   *
+   * A ref already latched on a spend is skipped entirely: terminal per leg,
+   * nothing left to learn.
+   */
+  async #reconcileRefs(
+    reader: EvmChainReader,
+    chainId: number,
+    refs: EvmRef[],
+  ): Promise<void> {
+    const open = refs.filter((r) => !this.#isSpent(r));
+    if (open.length === 0) return;
+
+    const fast = open.filter((r) => activeQuery(r) !== undefined);
+    let needLogs = open.filter((r) => activeQuery(r) === undefined);
+
+    if (fast.length > 0) {
+      try {
+        const active = await reader.isActiveBatch(
+          fast.map((r) => activeQuery(r) as EvmActiveQuery),
+        );
+        for (const ref of fast) {
+          if (active.get(htlcQueryKey(ref)) === true)
+            this.#set(htlcKey(ref), "confirmed");
+          else needLogs.push(ref); // inactive: classify from logs
+        }
+      } catch (error) {
+        console.warn(
+          `EVM isActive check failed for chain ${chainId} — falling back to logs:`,
+          error,
+        );
+        needLogs = open;
+      }
+    }
+    if (needLogs.length === 0) return;
+
     const events = await reader.getHtlcEventsBatch(
-      refs.map((r) => ({
+      needLogs.map((r) => ({
         htlc: r.htlc,
         preimageHash: r.preimageHash,
         claimAddress: r.claimAddress,
       })),
+      this.#estimateFromBlock(chainId, needLogs),
     );
-    for (const ref of refs) {
+    for (const ref of needLogs) {
       const { observation, preimage } = evmObservation(
         events.get(htlcQueryKey(ref)) ?? [],
         { amount: ref.expectedAmount, token: ref.expectedToken },
@@ -223,6 +315,31 @@ export class EvmContractManager implements ContractManager {
       if (preimage) this.#preimages.set(key, preimage);
       this.#set(key, observation);
     }
+  }
+
+  #isSpent(ref: EvmRef): boolean {
+    const obs = this.#obs.get(htlcKey(ref));
+    return obs === "spent_claim" || obs === "spent_refund";
+  }
+
+  /**
+   * The block to scan logs from: roughly where the OLDEST of the given swaps
+   * was created (an HTLC has no events before its swap existed). Only a lower
+   * bound, so estimation errs early — ×1.5 on elapsed time plus a fixed block
+   * margin. Falls back to genesis when the creation time, clock, or the
+   * chain's block time is unknown.
+   */
+  #estimateFromBlock(chainId: number, refs: EvmRef[]): bigint {
+    const clock = this.#now.get(chainId);
+    const avgBlockMs = AVG_BLOCK_MS[chainId];
+    const createdAts = refs.map((r) => r.createdAtMs ?? 0);
+    const oldestMs = Math.min(...createdAts);
+    if (!clock || !avgBlockMs || oldestMs <= 0) return 0n;
+    const elapsedMs = Math.max(0, clock.blockTimeMs - oldestMs);
+    const blocksBehind =
+      BigInt(Math.ceil((elapsedMs / avgBlockMs) * 1.5)) + SCAN_MARGIN_BLOCKS;
+    const from = clock.blockNumber - blocksBehind;
+    return from > 0n ? from : 0n;
   }
 
   /** Update an observation and notify on change; never downgrade a resolved spend. */
@@ -241,4 +358,26 @@ export class EvmContractManager implements ContractManager {
     this.#obs.set(key, observation);
     for (const listener of this.#listeners) listener(ref, observation);
   }
+}
+
+/**
+ * The complete `isActive` tuple for a ref, or `undefined` when the swap
+ * response didn't expose a field (then only the log path can observe the leg).
+ */
+function activeQuery(ref: EvmRef): EvmActiveQuery | undefined {
+  if (
+    ref.sender === undefined ||
+    ref.expectedToken === undefined ||
+    ref.timelockSec === undefined
+  )
+    return undefined;
+  return {
+    htlc: ref.htlc,
+    preimageHash: ref.preimageHash,
+    amount: ref.expectedAmount,
+    token: ref.expectedToken,
+    sender: ref.sender,
+    claimAddress: ref.claimAddress,
+    timelockSec: ref.timelockSec,
+  };
 }

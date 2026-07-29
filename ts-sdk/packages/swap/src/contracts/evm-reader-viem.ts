@@ -17,8 +17,11 @@ import {
   type Block,
   createPublicClient,
   decodeEventLog,
+  decodeFunctionResult,
+  encodeFunctionData,
   fallback,
   http,
+  numberToHex,
   parseAbiItem,
   toEventSelector,
 } from "viem";
@@ -68,6 +71,20 @@ const SWAP_REFUNDED = parseAbiItem(
 const HTLC_EVENTS_ABI = [SWAP_CREATED, SWAP_REDEEMED, SWAP_REFUNDED] as const;
 const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
 
+// The contract's open-check: the args hash into the swap key, so `true` with
+// the EXPECTED values also verifies the funded terms.
+const IS_ACTIVE = parseAbiItem(
+  "function isActive(bytes32 preimageHash, uint256 amount, address token, address sender, address claimAddress, uint256 timelock) view returns (bool)",
+);
+
+// Multicall3 — same address on every major EVM chain; aggregates the per-HTLC
+// isActive calls into one eth_call.
+export const MULTICALL3_ADDRESS =
+  "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
+const AGGREGATE3 = parseAbiItem(
+  "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
+);
+
 /** The undecoded log shape `eth_getLogs` returns. */
 export type RawLog = {
   address: `0x${string}`;
@@ -89,13 +106,18 @@ export type EvmLogClient = {
       },
     ];
   }): Promise<RawLog[]>;
-  getBlock(): Promise<Pick<Block, "timestamp">>;
+  /** A read-only `eth_call`. */
+  call(args: {
+    to: `0x${string}`;
+    data: `0x${string}`;
+  }): Promise<{ data?: `0x${string}` }>;
+  getBlock(): Promise<Pick<Block, "timestamp" | "number">>;
 };
 
 /** Build an {@link EvmChainReader} over an existing viem-like client. */
 export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
   return {
-    async getHtlcEventsBatch(queries) {
+    async getHtlcEventsBatch(queries, fromBlock = 0n) {
       const results = new Map<string, EvmHtlcEvent[]>();
       if (queries.length === 0) return results;
       for (const q of queries) results.set(htlcQueryKey(q), []);
@@ -109,7 +131,7 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
               HTLC_EVENT_TOPICS,
               unique(queries.map((q) => q.preimageHash)),
             ],
-            fromBlock: "0x0",
+            fromBlock: numberToHex(fromBlock),
           },
         ],
       });
@@ -129,11 +151,84 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
       }
       return results;
     },
-    async getBlockTimeMs() {
+    async isActiveBatch(queries) {
+      const results = new Map<string, boolean>();
+      if (queries.length === 0) return results;
+      const calldatas = queries.map((q) =>
+        encodeFunctionData({
+          abi: [IS_ACTIVE],
+          args: [
+            q.preimageHash,
+            q.amount,
+            q.token,
+            q.sender,
+            q.claimAddress,
+            BigInt(q.timelockSec),
+          ],
+        }),
+      );
+
+      const callOne = async (i: number): Promise<void> => {
+        const { data } = await client.call({
+          to: queries[i].htlc,
+          data: calldatas[i],
+        });
+        results.set(htlcQueryKey(queries[i]), decodeIsActive(data));
+      };
+
+      if (queries.length === 1) {
+        await callOne(0);
+        return results;
+      }
+      try {
+        const { data } = await client.call({
+          to: MULTICALL3_ADDRESS,
+          data: encodeFunctionData({
+            abi: [AGGREGATE3],
+            args: [
+              queries.map((q, i) => ({
+                target: q.htlc,
+                allowFailure: true,
+                callData: calldatas[i],
+              })),
+            ],
+          }),
+        });
+        if (data === undefined || data === "0x")
+          throw new Error("empty multicall result");
+        const decoded = decodeFunctionResult({
+          abi: [AGGREGATE3],
+          data,
+        }) as readonly { success: boolean; returnData: `0x${string}` }[];
+        queries.forEach((q, i) => {
+          const r = decoded[i];
+          // A failed inner call reads as "not active" — the caller's log
+          // fallback then classifies it, so nothing is silently trusted.
+          results.set(
+            htlcQueryKey(q),
+            r?.success === true && decodeIsActive(r.returnData),
+          );
+        });
+      } catch {
+        // No Multicall3 on this chain (e.g. a bare dev node) — per-HTLC calls.
+        await Promise.all(queries.map((_, i) => callOne(i)));
+      }
+      return results;
+    },
+    async getLatestBlock() {
       const block = await client.getBlock();
-      return Number(block.timestamp) * 1000;
+      return {
+        timeMs: Number(block.timestamp) * 1000,
+        number: block.number ?? 0n,
+      };
     },
   };
+}
+
+/** Decode an `isActive` eth_call result; empty data (no contract) → false. */
+function decodeIsActive(data: `0x${string}` | undefined): boolean {
+  if (data === undefined || data === "0x") return false;
+  return decodeFunctionResult({ abi: [IS_ACTIVE], data }) === true;
 }
 
 type DecodedHtlcLog =
