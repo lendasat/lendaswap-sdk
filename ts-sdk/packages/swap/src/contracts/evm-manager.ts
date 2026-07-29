@@ -22,17 +22,33 @@ import {
 
 type EvmRef = Extract<HtlcRef, { ledger: "evm" }>;
 
+/** Identifies one HTLC to read: contract + preimageHash (+ the claim guard). */
+export type EvmHtlcQuery = {
+  htlc: `0x${string}`;
+  preimageHash: `0x${string}`;
+  /** A `SwapCreated` counts only when it pays this address (term check). */
+  claimAddress: `0x${string}`;
+};
+
+/** The result key for one {@link EvmHtlcQuery} in a batch. */
+export function htlcQueryKey(q: {
+  htlc: `0x${string}`;
+  preimageHash: `0x${string}`;
+}): string {
+  return `${q.htlc.toLowerCase()}:${q.preimageHash.toLowerCase()}`;
+}
+
 /** Reads `HTLCErc20` state for one EVM chain. Implemented over viem/ethers/etc. */
 export type EvmChainReader = {
   /**
-   * The decoded lifecycle events (oldest→newest) for the HTLC identified by
-   * `(htlc contract, preimageHash)`.
+   * The decoded lifecycle events for every queried HTLC, keyed by
+   * {@link htlcQueryKey}. Batched so a whole chain scan costs one RPC request
+   * regardless of how many swaps are tracked; a queried HTLC with no events maps
+   * to an empty array.
    */
-  getHtlcEvents(
-    htlc: `0x${string}`,
-    preimageHash: `0x${string}`,
-    claimAddress: `0x${string}`,
-  ): Promise<EvmHtlcEvent[]>;
+  getHtlcEventsBatch(
+    queries: EvmHtlcQuery[],
+  ): Promise<Map<string, EvmHtlcEvent[]>>;
   /** The latest block's `block.timestamp`, in ms. */
   getBlockTimeMs(): Promise<number>;
   /** Fire `cb` when new blocks/logs may have changed watched HTLCs; returns unsubscribe. */
@@ -133,7 +149,7 @@ export class EvmContractManager implements ContractManager {
     const reader = this.#readers.get(tracked.chainId);
     if (!reader) return;
     this.#now.set(tracked.chainId, await reader.getBlockTimeMs());
-    await this.#reconcileRef(reader, tracked);
+    await this.#reconcileRefs(reader, [tracked]);
   }
 
   dispose(): void {
@@ -189,26 +205,29 @@ export class EvmContractManager implements ContractManager {
     const reader = this.#readers.get(chainId);
     if (!reader) return;
     this.#now.set(chainId, await reader.getBlockTimeMs());
-    await Promise.all(
-      [...this.#refs.values()]
-        .filter((r) => r.chainId === chainId)
-        .map((r) => this.#reconcileRef(reader, r)),
-    );
+    const refs = [...this.#refs.values()].filter((r) => r.chainId === chainId);
+    await this.#reconcileRefs(reader, refs);
   }
 
-  async #reconcileRef(reader: EvmChainReader, ref: EvmRef): Promise<void> {
-    const events = await reader.getHtlcEvents(
-      ref.htlc,
-      ref.preimageHash,
-      ref.claimAddress,
+  /** Re-observe the given refs from one batched log read. */
+  async #reconcileRefs(reader: EvmChainReader, refs: EvmRef[]): Promise<void> {
+    if (refs.length === 0) return;
+    const events = await reader.getHtlcEventsBatch(
+      refs.map((r) => ({
+        htlc: r.htlc,
+        preimageHash: r.preimageHash,
+        claimAddress: r.claimAddress,
+      })),
     );
-    const { observation, preimage } = evmObservation(events, {
-      amount: ref.expectedAmount,
-      token: ref.expectedToken,
-    });
-    const key = htlcKey(ref);
-    if (preimage) this.#preimages.set(key, preimage);
-    this.#set(key, observation);
+    for (const ref of refs) {
+      const { observation, preimage } = evmObservation(
+        events.get(htlcQueryKey(ref)) ?? [],
+        { amount: ref.expectedAmount, token: ref.expectedToken },
+      );
+      const key = htlcKey(ref);
+      if (preimage) this.#preimages.set(key, preimage);
+      this.#set(key, observation);
+    }
   }
 
   /** Update an observation and notify on change; never downgrade a resolved spend. */

@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HtlcObservation } from "../actions/types.js";
 import type { EvmHtlcEvent } from "./evm.js";
-import { type EvmChainReader, EvmContractManager } from "./evm-manager.js";
+import {
+  type EvmChainReader,
+  EvmContractManager,
+  type EvmHtlcQuery,
+  htlcQueryKey,
+} from "./evm-manager.js";
 import type { HtlcRef } from "./types.js";
 
 const ref = {
@@ -15,10 +20,13 @@ const ref = {
 } satisfies HtlcRef;
 
 class FakeReader implements EvmChainReader {
+  /** Events served for every queried HTLC. */
   events: EvmHtlcEvent[] = [];
   blockTimeMs = 1_000;
   #cb: (() => void) | undefined;
-  getHtlcEvents = vi.fn(async () => this.events);
+  getHtlcEventsBatch = vi.fn(async (queries: EvmHtlcQuery[]) => {
+    return new Map(queries.map((q) => [htlcQueryKey(q), this.events]));
+  });
   getBlockTimeMs = async () => this.blockTimeMs;
   watch = (cb: () => void): (() => void) => {
     this.#cb = cb;
@@ -67,11 +75,26 @@ describe("EvmContractManager", () => {
     await m.register(ref);
     expect(m.getState(ref)).toBe("confirmed");
     expect(m.chainNow(ref)).toBe(1_000);
-    expect(reader.getHtlcEvents).toHaveBeenCalledWith(
-      "0xhtlc",
+    expect(reader.getHtlcEventsBatch).toHaveBeenCalledWith([
+      { htlc: "0xhtlc", preimageHash: "0xph", claimAddress: "0xclaim" },
+    ]);
+  });
+
+  it("reads a whole chain's HTLCs in one batched call", async () => {
+    const m = build();
+    const ref2 = { ...ref, preimageHash: "0xph2" } satisfies HtlcRef;
+    await m.register(ref);
+    await m.register(ref2);
+
+    reader.getHtlcEventsBatch.mockClear();
+    await m.refresh();
+
+    expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
+    const queries = reader.getHtlcEventsBatch.mock.calls[0][0];
+    expect(queries.map((q) => q.preimageHash).sort()).toEqual([
       "0xph",
-      "0xclaim",
-    );
+      "0xph2",
+    ]);
   });
 
   it("is invalid when the HTLC is funded below the expected amount", async () => {

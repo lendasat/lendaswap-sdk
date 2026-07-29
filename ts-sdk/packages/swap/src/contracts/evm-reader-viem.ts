@@ -5,17 +5,29 @@
  * Kept separate from the manager so the manager itself stays free of any
  * chain-library dependency (and unit-testable against a fake reader). This module
  * is the only place that touches viem and the `HTLCErc20` ABI.
+ *
+ * All HTLCs on a chain are read with a SINGLE `eth_getLogs` call: the three
+ * `HTLCErc20` lifecycle events all index `preimageHash` as topic1, so one filter
+ * ORs the three event signatures on topic0 and the tracked preimage hashes on
+ * topic1 across all HTLC contract addresses. Request count per scan is constant
+ * in the number of tracked swaps — this matters, since public RPCs rate-limit by
+ * request count.
  */
 import {
   type Block,
   createPublicClient,
+  decodeEventLog,
   fallback,
   http,
-  type Log,
   parseAbiItem,
+  toEventSelector,
 } from "viem";
 import type { EvmHtlcEvent } from "./evm.js";
-import type { EvmChainReader } from "./evm-manager.js";
+import {
+  type EvmChainReader,
+  type EvmHtlcQuery,
+  htlcQueryKey,
+} from "./evm-manager.js";
 
 /**
  * Tested public RPC endpoints per supported chainId, tried in order via viem's
@@ -53,15 +65,30 @@ const SWAP_REDEEMED = parseAbiItem(
 const SWAP_REFUNDED = parseAbiItem(
   "event SwapRefunded(bytes32 indexed preimageHash)",
 );
+const HTLC_EVENTS_ABI = [SWAP_CREATED, SWAP_REDEEMED, SWAP_REFUNDED] as const;
+const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
+
+/** The undecoded log shape `eth_getLogs` returns. */
+export type RawLog = {
+  address: `0x${string}`;
+  topics: [`0x${string}`, ...`0x${string}`[]];
+  data: `0x${string}`;
+};
 
 /** The viem surface the reader needs — a seam so it can be faked in tests. */
 export type EvmLogClient = {
-  getLogs(args: {
-    address: `0x${string}`;
-    event: typeof SWAP_CREATED | typeof SWAP_REDEEMED | typeof SWAP_REFUNDED;
-    args: { preimageHash: `0x${string}`; claimAddress?: `0x${string}` };
-    fromBlock: bigint;
-  }): Promise<Log[]>;
+  request(args: {
+    method: "eth_getLogs";
+    params: [
+      {
+        address: `0x${string}`[];
+        topics: (`0x${string}`[] | null)[];
+        // Hex quantity, not "earliest": strict RPCs (e.g. arb1.arbitrum.io)
+        // reject the tag on eth_getLogs.
+        fromBlock: `0x${string}`;
+      },
+    ];
+  }): Promise<RawLog[]>;
   getBlock(): Promise<Pick<Block, "timestamp">>;
   watchBlocks(args: { onBlock: () => void }): () => void;
 };
@@ -69,50 +96,39 @@ export type EvmLogClient = {
 /** Build an {@link EvmChainReader} over an existing viem-like client. */
 export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
   return {
-    async getHtlcEvents(htlc, preimageHash, claimAddress) {
-      const [created, redeemed, refunded] = await Promise.all([
-        // Filter by claimAddress too (also indexed), so only the HTLC actually
-        // claimable on the swap's terms is seen.
-        // fromBlock 0n, not "earliest": strict RPCs (e.g. arb1.arbitrum.io)
-        // reject the tag on eth_getLogs and want a hex quantity.
-        client.getLogs({
-          address: htlc,
-          event: SWAP_CREATED,
-          args: { preimageHash, claimAddress },
-          fromBlock: 0n,
-        }),
-        client.getLogs({
-          address: htlc,
-          event: SWAP_REDEEMED,
-          args: { preimageHash },
-          fromBlock: 0n,
-        }),
-        client.getLogs({
-          address: htlc,
-          event: SWAP_REFUNDED,
-          args: { preimageHash },
-          fromBlock: 0n,
-        }),
-      ]);
-      // Order doesn't matter — evmObservation resolves precedence.
-      const events: EvmHtlcEvent[] = [];
-      for (const log of created) {
-        const args = (
-          log as { args?: { amount?: bigint; token?: `0x${string}` } }
-        ).args;
-        events.push({
-          kind: "created",
-          amount: args?.amount ?? 0n,
-          token: args?.token ?? "0x",
+    async getHtlcEventsBatch(queries) {
+      const results = new Map<string, EvmHtlcEvent[]>();
+      if (queries.length === 0) return results;
+      for (const q of queries) results.set(htlcQueryKey(q), []);
+
+      const logs = await client.request({
+        method: "eth_getLogs",
+        params: [
+          {
+            address: unique(queries.map((q) => q.htlc)),
+            topics: [
+              HTLC_EVENT_TOPICS,
+              unique(queries.map((q) => q.preimageHash)),
+            ],
+            fromBlock: "0x0",
+          },
+        ],
+      });
+
+      const byKey = new Map(queries.map((q) => [htlcQueryKey(q), q]));
+      for (const log of logs) {
+        const decoded = tryDecode(log);
+        if (!decoded) continue;
+        const key = htlcQueryKey({
+          htlc: log.address,
+          preimageHash: decoded.preimageHash,
         });
+        const query = byKey.get(key);
+        if (!query) continue;
+        const event = toHtlcEvent(decoded, query);
+        if (event) results.get(key)?.push(event);
       }
-      for (const log of redeemed) {
-        const preimage = (log as { args?: { preimage?: `0x${string}` } }).args
-          ?.preimage;
-        if (preimage) events.push({ kind: "redeemed", preimage });
-      }
-      if (refunded.length > 0) events.push({ kind: "refunded" });
-      return events;
+      return results;
     },
     async getBlockTimeMs() {
       const block = await client.getBlock();
@@ -122,6 +138,64 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
       return client.watchBlocks({ onBlock: () => cb() });
     },
   };
+}
+
+type DecodedHtlcLog =
+  | {
+      eventName: "SwapCreated";
+      preimageHash: `0x${string}`;
+      claimAddress: `0x${string}`;
+      token: `0x${string}`;
+      amount: bigint;
+    }
+  | {
+      eventName: "SwapRedeemed";
+      preimageHash: `0x${string}`;
+      preimage: `0x${string}`;
+    }
+  | { eventName: "SwapRefunded"; preimageHash: `0x${string}` };
+
+/** Decode one raw log against the three-event ABI; undefined for foreign logs. */
+function tryDecode(log: RawLog): DecodedHtlcLog | undefined {
+  try {
+    const { eventName, args } = decodeEventLog({
+      abi: HTLC_EVENTS_ABI,
+      data: log.data,
+      topics: log.topics,
+    });
+    return { eventName, ...args } as DecodedHtlcLog;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Map a decoded log to the manager's event, applying the per-query guard: a
+ * `SwapCreated` counts only when its `claimAddress` matches the swap's — the
+ * batched filter can't express that per-hash, so it is enforced here (the event
+ * is indexed only by preimageHash, so amount/token/recipient are all unverified
+ * until this check plus `evmObservation`'s term checks).
+ */
+function toHtlcEvent(
+  decoded: DecodedHtlcLog,
+  query: EvmHtlcQuery,
+): EvmHtlcEvent | undefined {
+  switch (decoded.eventName) {
+    case "SwapCreated":
+      if (
+        decoded.claimAddress.toLowerCase() !== query.claimAddress.toLowerCase()
+      )
+        return undefined;
+      return { kind: "created", amount: decoded.amount, token: decoded.token };
+    case "SwapRedeemed":
+      return { kind: "redeemed", preimage: decoded.preimage };
+    case "SwapRefunded":
+      return { kind: "refunded" };
+  }
+}
+
+function unique<T>(values: T[]): T[] {
+  return [...new Set(values)];
 }
 
 /**

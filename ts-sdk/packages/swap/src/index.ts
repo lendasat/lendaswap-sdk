@@ -43,6 +43,8 @@ export {
   type EvmChainReader,
   EvmContractManager,
   type EvmContractManagerDeps,
+  type EvmHtlcQuery,
+  htlcQueryKey,
 } from "./contracts/evm-manager.js";
 export {
   createEvmRpcReader,
@@ -50,6 +52,7 @@ export {
   defaultEvmReaders,
   type EvmLogClient,
   evmReaderFromClient,
+  type RawLog,
 } from "./contracts/evm-reader-viem.js";
 export type * from "./contracts/types.js";
 export { htlcKey } from "./contracts/types.js";
