@@ -5925,10 +5925,18 @@ export class Client {
       };
     }
 
+    if (oldSwap.status === "clientrefundedserverfunded") {
+      return {
+        eligible: false,
+        reason:
+          "Swap is in a critical refund state. Please contact support before continuing.",
+        oldSwap,
+      };
+    }
+
     if (
       oldSwap.status !== "clientrefunded" &&
-      oldSwap.status !== "clientrefundedserverrefunded" &&
-      oldSwap.status !== "clientrefundedserverfunded"
+      oldSwap.status !== "clientrefundedserverrefunded"
     ) {
       return {
         eligible: false,
