@@ -27,11 +27,51 @@ describe("htlcFactsFromEsploraTxs", () => {
     });
   });
 
-  it("is mempool for an unconfirmed funding tx, with the funded amount", () => {
+  it("accepts an unconfirmed (non-RBF) funding as confirmed by default (0-conf)", () => {
     expect(htlcFactsFromEsploraTxs([fundingTx(false)], ADDR)).toEqual({
+      funding: "confirmed",
+      fundedSats: 5000,
+    });
+  });
+
+  it("never accepts an RBF-signaling funding at 0-conf (BIP-125)", () => {
+    const rbf = fundingTx(false);
+    rbf.vin[0].sequence = 0xfffffffd; // < 0xfffffffe ⟹ replaceable
+    expect(htlcFactsFromEsploraTxs([rbf], ADDR)).toEqual({
       funding: "mempool",
       fundedSats: 5000,
     });
+    // Once confirmed, RBF signaling no longer matters.
+    const rbfConfirmed = fundingTx(true);
+    rbfConfirmed.vin[0].sequence = 0xfffffffd;
+    expect(htlcFactsFromEsploraTxs([rbfConfirmed], ADDR).funding).toBe(
+      "confirmed",
+    );
+  });
+
+  it("minConfirmations: 1 restores the strict wait-for-a-block behavior", () => {
+    expect(
+      htlcFactsFromEsploraTxs([fundingTx(false)], ADDR, {
+        minConfirmations: 1,
+      }),
+    ).toEqual({ funding: "mempool", fundedSats: 5000 });
+    expect(
+      htlcFactsFromEsploraTxs([fundingTx(true)], ADDR, { minConfirmations: 1 })
+        .funding,
+    ).toBe("confirmed");
+  });
+
+  it("minConfirmations > 1 requires the depth (computed from tipHeight)", () => {
+    const confirmedAt100 = fundingTx(true);
+    confirmedAt100.status.block_height = 100;
+    const at = (tipHeight?: number) =>
+      htlcFactsFromEsploraTxs([confirmedAt100], ADDR, {
+        minConfirmations: 2,
+        tipHeight,
+      }).funding;
+    expect(at(100)).toBe("mempool"); // 1 conf < 2
+    expect(at(101)).toBe("confirmed"); // 2 confs
+    expect(at(undefined)).toBe("mempool"); // unknown tip → don't overclaim depth
   });
 
   it("is confirmed for a confirmed funding tx, summing the outputs to us", () => {
@@ -90,6 +130,23 @@ describe("esploraReader", () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       `http://backup/api/address/${ADDR}/txs`,
+    );
+  });
+
+  it("fetches the tip height only for depth policies beyond one confirmation", async () => {
+    const confirmedAt100 = fundingTx(true);
+    confirmedAt100.status.block_height = 100;
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.endsWith("/blocks/tip/height"))
+        return { ok: true, text: async () => "101" };
+      return { ok: true, json: async () => [confirmedAt100] };
+    }) as unknown as typeof fetch;
+    const reader = esploraReader("http://esplora/api", fetchImpl, {
+      minConfirmations: 2,
+    });
+    expect((await reader.getHtlcFacts(ADDR)).funding).toBe("confirmed");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://esplora/api/blocks/tip/height",
     );
   });
 

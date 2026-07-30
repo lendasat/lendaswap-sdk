@@ -25,6 +25,13 @@ export type BitcoinCreateConfig = {
   esploraUrl: string | string[];
   /** The current Bitcoin MTP (ms); typically `async () => (await client.getMtp()).mtp * 1000`. */
   chainTime?: () => Promise<number>;
+  /**
+   * Confirmations a funding tx needs before it observes as `confirmed`.
+   * Default `0`: accept an unconfirmed funding unless it signals RBF
+   * (BIP-125) — a replaceable funding stays `mempool` until it confirms,
+   * since the claim reveals the preimage against it. `1` = wait for a block.
+   */
+  minConfirmations?: number;
 };
 
 export type BitcoinContractManagerDeps = {
@@ -64,7 +71,9 @@ export class BitcoinContractManager implements ContractManager {
   ): Promise<BitcoinContractManager> {
     const { esploraReader } = await import("./bitcoin-reader-esplora.js");
     return BitcoinContractManager.fromDeps({
-      reader: esploraReader(config.esploraUrl),
+      reader: esploraReader(config.esploraUrl, undefined, {
+        minConfirmations: config.minConfirmations,
+      }),
       chainTime: config.chainTime,
     });
   }

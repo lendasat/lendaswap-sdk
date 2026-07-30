@@ -74,6 +74,12 @@ type TrackingConfig = {
   evmRpcUrls?: Record<number, string>;
   /** Esplora REST URL override for the Bitcoin manager; defaults to mainnet mempool.space. */
   esploraUrl?: string;
+  /**
+   * Confirmations a Bitcoin funding tx needs before it observes as
+   * `confirmed` (gating e.g. the evm→bitcoin claim). Default `0`: accept
+   * 0-conf unless the funding signals RBF (BIP-125). `1` = wait for a block.
+   */
+  bitcoinMinConfirmations?: number;
   /** Poll interval (ms) for advancing observations/clocks; defaults to 5s. */
   refreshIntervalMs?: number;
   /** Opt-in hint-driven auto-claim; unset leaves tracking observe-only. */
@@ -871,7 +877,8 @@ export class Client {
       return this.#managers;
     }
     const managers = new Map<Ledger, ContractManager>();
-    const { arkadeServerUrl, evmRpcUrls, esploraUrl } = this.#tracking;
+    const { arkadeServerUrl, evmRpcUrls, esploraUrl, bitcoinMinConfirmations } =
+      this.#tracking;
     // Arkade + Bitcoin share the Bitcoin MTP clock.
     const chainTime = async () => (await this.getMtp()).mtp * 1000;
 
@@ -911,6 +918,7 @@ export class Client {
       await BitcoinContractManager.create({
         esploraUrl: esploraUrl ? [esploraUrl] : DEFAULT_ESPLORA_URLS,
         chainTime,
+        minConfirmations: bitcoinMinConfirmations,
       }),
     );
     this.#managers = managers;
@@ -930,6 +938,7 @@ export class ClientBuilder {
   #serverUrl: string | undefined;
   #arkadeServerUrl: string | undefined;
   #esploraUrl: string | undefined;
+  #bitcoinMinConfirmations: number | undefined;
   #evmRpcUrls: Record<number, string> | undefined;
   #managers: Map<Ledger, ContractManager> | undefined;
   #autoClaim: AutoClaimConfig | undefined;
@@ -1011,6 +1020,18 @@ export class ClientBuilder {
   }
 
   /**
+   * Confirmations a Bitcoin funding tx needs before it observes as `confirmed`
+   * (gating e.g. the evm→bitcoin claim). Default `0`: accept an unconfirmed
+   * funding unless it signals RBF (BIP-125) — a replaceable funding stays
+   * unobserved-as-funded until it confirms, because claiming reveals the
+   * preimage against it. Set `1` (or more) for strict block-depth policies.
+   */
+  withBitcoinMinConfirmations(minConfirmations: number): this {
+    this.#bitcoinMinConfirmations = minConfirmations;
+    return this;
+  }
+
+  /**
    * Override the Ark server URL. Optional for tracking — it otherwise defaults to
    * the mainnet server; set this to track a non-mainnet (dev/signet) deployment.
    */
@@ -1066,6 +1087,7 @@ export class ClientBuilder {
       managers: this.#managers,
       arkadeServerUrl: this.#arkadeServerUrl,
       esploraUrl: this.#esploraUrl,
+      bitcoinMinConfirmations: this.#bitcoinMinConfirmations,
       evmRpcUrls: this.#evmRpcUrls,
       autoClaim: this.#autoClaim,
     });

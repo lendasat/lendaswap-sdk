@@ -16,19 +16,41 @@ type EsploraTx = {
   vin: Array<{
     witness?: string[];
     prevout?: { scriptpubkey_address?: string } | null;
+    sequence?: number;
   }>;
   vout: Array<{ scriptpubkey_address?: string; value?: number }>;
-  status?: { confirmed?: boolean };
+  status?: { confirmed?: boolean; block_height?: number };
 };
+
+/**
+ * When a funding tx counts as `confirmed` for observation purposes.
+ *
+ * `minConfirmations: 0` (the default) accepts an UNCONFIRMED funding — with one
+ * carve-out: a funding that signals RBF (BIP-125) stays `mempool` until it
+ * confirms, because a replaceable funding could be double-spent after the
+ * claim has already revealed the preimage in the mempool. `1` restores the
+ * strict wait-for-a-block behavior; higher values require the corresponding
+ * depth (the reader fetches the tip height to compute it).
+ */
+export type BitcoinConfirmationPolicy = {
+  minConfirmations?: number;
+};
+
+/** BIP-125: a tx signals replaceability iff any input's nSequence < 0xfffffffe. */
+function signalsRbf(tx: EsploraTx): boolean {
+  return tx.vin.some((vin) => (vin.sequence ?? 0xffffffff) < 0xfffffffe);
+}
 
 /**
  * Reduce an address's esplora tx history to HTLC facts. If a tx spends an output
  * at the address, that's the resolving spend (its witness classifies claim vs
- * refund); otherwise a tx paying the address is the funding.
+ * refund); otherwise a tx paying the address is the funding, gated by the
+ * confirmation policy (see {@link BitcoinConfirmationPolicy}).
  */
 export function htlcFactsFromEsploraTxs(
   txs: EsploraTx[],
   address: string,
+  opts?: BitcoinConfirmationPolicy & { tipHeight?: number },
 ): BitcoinHtlcFacts {
   for (const tx of txs) {
     const spend = tx.vin.find(
@@ -48,8 +70,19 @@ export function htlcFactsFromEsploraTxs(
     const fundedSats = funding.vout
       .filter((vout) => vout.scriptpubkey_address === address)
       .reduce((sum, vout) => sum + (vout.value ?? 0), 0);
+    const minConf = opts?.minConfirmations ?? 0;
+    let deepEnough: boolean;
+    if (funding.status?.confirmed) {
+      deepEnough =
+        minConf <= 1 ||
+        (opts?.tipHeight !== undefined &&
+          funding.status.block_height !== undefined &&
+          opts.tipHeight - funding.status.block_height + 1 >= minConf);
+    } else {
+      deepEnough = minConf === 0 && !signalsRbf(funding);
+    }
     return {
-      funding: funding.status?.confirmed ? "confirmed" : "mempool",
+      funding: deepEnough ? "confirmed" : "mempool",
       fundedSats,
     };
   }
@@ -75,10 +108,12 @@ export const DEFAULT_ESPLORA_URLS = [
 export function esploraReader(
   esploraUrls: string | string[],
   fetchImpl: typeof fetch = fetch,
+  policy?: BitcoinConfirmationPolicy,
 ): BitcoinChainReader {
   const bases = (Array.isArray(esploraUrls) ? esploraUrls : [esploraUrls]).map(
     (url) => url.replace(/\/+$/, ""),
   );
+  const minConf = policy?.minConfirmations ?? 0;
   let start = 0;
   return {
     async getHtlcFacts(address) {
@@ -91,10 +126,19 @@ export function esploraReader(
             `${base}/address/${encodeURIComponent(address)}/txs`,
           );
           if (!res.ok) throw new Error(`esplora ${res.status} at ${base}`);
-          return htlcFactsFromEsploraTxs(
-            (await res.json()) as EsploraTx[],
-            address,
-          );
+          const txs = (await res.json()) as EsploraTx[];
+          // Depth policies beyond 1 need the tip to compute confirmations;
+          // 0 and 1 read straight off the tx's confirmed flag.
+          let tipHeight: number | undefined;
+          if (minConf > 1) {
+            const tip = await fetchImpl(`${base}/blocks/tip/height`);
+            if (!tip.ok) throw new Error(`esplora ${tip.status} at ${base}`);
+            tipHeight = Number(await tip.text());
+          }
+          return htlcFactsFromEsploraTxs(txs, address, {
+            minConfirmations: minConf,
+            tipHeight,
+          });
         } catch (error) {
           lastError = error;
         }

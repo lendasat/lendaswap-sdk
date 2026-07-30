@@ -35,6 +35,7 @@ export {
   type BitcoinCreateConfig,
 } from "./contracts/bitcoin-manager.js";
 export {
+  type BitcoinConfirmationPolicy,
   DEFAULT_ESPLORA_URLS,
   esploraReader,
   htlcFactsFromEsploraTxs,
