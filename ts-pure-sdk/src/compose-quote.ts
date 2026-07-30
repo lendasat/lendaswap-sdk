@@ -300,13 +300,16 @@ export class UnsupportedComposeQuotePath extends Error {
   }
 }
 
+type BaseUnitAmount = bigint;
+type AmountInput = number | BaseUnitAmount;
+
 export interface ComposeQuoteParams {
   sourceChain: Chain;
   sourceToken: string;
   targetChain: Chain;
   targetToken: string;
-  sourceAmount?: number;
-  targetAmount?: number;
+  sourceAmount?: AmountInput;
+  targetAmount?: AmountInput;
   slippageBps?: number;
   /** Referral code — resolved to an extra-fee rate via `/referral-fee`. */
   referralCode?: string;

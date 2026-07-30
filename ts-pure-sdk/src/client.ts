@@ -11,6 +11,7 @@ import {
   type GetSwapResponse,
   type LightningToArkadeSwapResponse,
   type LightningToEvmSwapResponse,
+  type paths,
   type RedeemAndSwapResponse,
   type StatusResponse,
   type TokenInfos,
@@ -552,6 +553,13 @@ interface ArkadeVhtlcParams {
   preimageHash: string;
 }
 
+type BaseUnitAmount = bigint;
+type AmountInput = number | BaseUnitAmount;
+
+const serializeAmountInput = (
+  amount: AmountInput | undefined,
+): string | undefined => (amount == null ? undefined : amount.toString());
+
 /** Parameters for {@link Client.getQuote}. */
 export interface GetQuoteParams {
   /** Source blockchain (e.g. "Arkade", "Polygon", "Bitcoin"). */
@@ -563,9 +571,9 @@ export interface GetQuoteParams {
   /** Target token: contract address for EVM tokens, or "btc" for BTC. */
   targetToken: string;
   /** Amount in smallest unit of source token (mutually exclusive with targetAmount). */
-  sourceAmount?: number;
+  sourceAmount?: AmountInput;
   /** Amount in smallest unit of target token (mutually exclusive with sourceAmount). */
-  targetAmount?: number;
+  targetAmount?: AmountInput;
   /** Optional referral code to apply referral pricing to the quote. */
   referralCode?: string;
   /**
@@ -1659,8 +1667,8 @@ export class Client {
       source_token: sourceToken,
       target_chain: targetChain as WireChain,
       target_token: targetToken,
-      source_amount: params.sourceAmount,
-      target_amount: params.targetAmount,
+      source_amount: serializeAmountInput(params.sourceAmount),
+      target_amount: serializeAmountInput(params.targetAmount),
       bridge_target_chain: bridgeTargetChain,
       bridge_source_chain: bridgeSourceChain,
       bridge_source_token_address: bridgeSourceTokenAddress,
@@ -1671,7 +1679,10 @@ export class Client {
       extra_fees: params.extraFees,
     };
     const { data, error } = await this.#apiClient.GET("/quote", {
-      params: { query },
+      params: {
+        query:
+          query as unknown as paths["/quote"]["get"]["parameters"]["query"],
+      },
     });
     if (error) {
       throw new Error(`Failed to get quote: ${JSON.stringify(error)}`);
@@ -6101,7 +6112,7 @@ export class Client {
         sourceToken: info.token.address,
         targetChain: "Lightning",
         targetToken: "btc",
-        sourceAmount: Number(info.amount),
+        sourceAmount: BigInt(info.amount),
       });
       const targetSats = Number(quote.net_target_amount || quote.target_amount);
       if (!Number.isFinite(targetSats) || targetSats <= 0) {
