@@ -227,9 +227,7 @@ export class EvmContractManager implements ContractManager {
         return true;
       // A ref registered since the last scan has no observation yet —
       // register() itself never scans, so the gate must let it through.
-      return refs.some(
-        (r) => r.chainId === c && !this.#obs.has(htlcKey(r)),
-      );
+      return refs.some((r) => r.chainId === c && !this.#obs.has(htlcKey(r)));
     });
     await Promise.all(due.map((c) => this.#reconcileChain(c)));
   }

@@ -12,10 +12,16 @@ import {
   type Ledger,
 } from "./contracts/types.js";
 
-/** A monitor that only records what it was asked to register. */
+/** A monitor that records registrations and can replay chain observations. */
 class FakeManager implements ContractManager {
   readonly ledger: Ledger;
   readonly registered = new Set<string>();
+  /** htlcKey → the registered ref (so tests can emit for it). */
+  readonly refs = new Map<string, HtlcRef>();
+  readonly #states = new Map<string, HtlcObservation>();
+  readonly #cbs = new Set<(ref: HtlcRef, state: HtlcObservation) => void>();
+  /** Chain clock; leave undefined to keep derivations provisional. */
+  now: number | undefined = undefined;
   constructor(ledger: Ledger) {
     this.ledger = ledger;
   }
@@ -24,16 +30,29 @@ class FakeManager implements ContractManager {
   canObserve = (_ref: HtlcRef): boolean => this.observable;
   register = async (ref: HtlcRef): Promise<void> => {
     this.registered.add(htlcKey(ref));
+    this.refs.set(htlcKey(ref), ref);
   };
   unregister = async (ref: HtlcRef): Promise<void> => {
     this.registered.delete(htlcKey(ref));
+    this.refs.delete(htlcKey(ref));
   };
-  getState = (_ref: HtlcRef): HtlcObservation | undefined => undefined;
-  chainNow = (_ref: HtlcRef): number | undefined => undefined;
-  onEvent = (): (() => void) => () => {};
+  getState = (ref: HtlcRef): HtlcObservation | undefined =>
+    this.#states.get(htlcKey(ref));
+  chainNow = (_ref: HtlcRef): number | undefined => this.now;
+  onEvent = (
+    cb: (ref: HtlcRef, state: HtlcObservation) => void,
+  ): (() => void) => {
+    this.#cbs.add(cb);
+    return () => this.#cbs.delete(cb);
+  };
   refresh = async (): Promise<void> => {};
   reconcile = async (): Promise<void> => {};
   dispose = (): void => {};
+  /** Record `state` as this ref's chain observation and notify listeners. */
+  emit(ref: HtlcRef, state: HtlcObservation): void {
+    this.#states.set(htlcKey(ref), state);
+    for (const cb of this.#cbs) cb(ref, state);
+  }
 }
 
 /** A legacy-client stand-in that satisfies `instanceof` but returns canned swaps. */
@@ -280,6 +299,66 @@ describe("Client tracking", () => {
       }),
     ).resolves.toMatchObject({ refundTxId: "tx" });
     expect(m.arkade.registered.size).toBe(0);
+  });
+
+  it("re-fetches a stale stored status once the chain says the swap settled", async () => {
+    const m = managers();
+    m.arkade.now = 1_000;
+    m.evm.now = 1_000;
+    // Stored status says the swap is still active — the app was closed when it
+    // actually settled on-chain.
+    const stale = {
+      response: {
+        ...(arkadeEvmSwap as { response: object }).response,
+        status: "clientfunded",
+      },
+    } as unknown as StoredSwap;
+    const getSwap = vi.fn(async () => ({}) as never);
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, { listAllSwaps: async () => [stale], getSwap });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+
+    // Chain truth arrives: client HTLC funded, server HTLC claimed → the
+    // derived action is terminal `none`.
+    for (const ref of m.arkade.refs.values()) m.arkade.emit(ref, "confirmed");
+    for (const ref of m.evm.refs.values()) m.evm.emit(ref, "spent_claim");
+
+    // The client re-fetches and PERSISTS the swap, so the next session's
+    // settled-status filter stops re-tracking it.
+    await vi.waitFor(() => {
+      expect(getSwap).toHaveBeenCalledWith("swap-1", { updateStorage: true });
+    });
+    expect(getSwap).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-fetch when the stored status is already settled", async () => {
+    const m = managers();
+    m.arkade.now = 1_000;
+    m.evm.now = 1_000;
+    const swaps: StoredSwap[] = [arkadeEvmSwap]; // no status → tracked
+    const getSwap = vi.fn(async () => ({}) as never);
+    const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
+    Object.assign(legacy, {
+      listAllSwaps: async () => swaps,
+      getSwap,
+    });
+    const client = new Client(legacy, withManagers(m.map));
+    await client.startTracking();
+
+    // By the time the terminal derivation lands, storage already has the
+    // settled status (the normal path) — no server round-trip needed.
+    swaps[0] = {
+      response: {
+        ...(arkadeEvmSwap as { response: object }).response,
+        status: "serverredeemed",
+      },
+    } as unknown as StoredSwap;
+    for (const ref of m.arkade.refs.values()) m.arkade.emit(ref, "confirmed");
+    for (const ref of m.evm.refs.values()) m.evm.emit(ref, "spent_claim");
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getSwap).not.toHaveBeenCalled();
   });
 
   it("a concurrent startTracking awaits the in-flight start, not a boolean", async () => {

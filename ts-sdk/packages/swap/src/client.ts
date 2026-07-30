@@ -91,6 +91,8 @@ export class Client {
   /** Hint-driven auto-claim worker; only built when `withAutoClaim` opted in. */
   #worker: SwapWorker | undefined;
   #startPromise?: Promise<void>;
+  /** Swap ids whose settled status was already re-fetched this session. */
+  readonly #settledSyncDone = new Set<string>();
 
   /**
    * Creates a new Client instance.
@@ -673,6 +675,13 @@ export class Client {
       });
       this.#tracker = tracker;
       await tracker.startTracking(await this.#loadTrackedSwaps());
+      // Keep STORED statuses converging on chain truth: without this, a swap
+      // that settled while the app was closed keeps a stale active status and
+      // #loadTrackedSwaps re-tracks it on every future start. Dies with the
+      // tracker (stop() drops its subscribers), so no unsub bookkeeping.
+      tracker.subscribeToActions((swapId, actions) =>
+        this.#syncSettledStatus(swapId, actions),
+      );
       this.#startWorker(tracker);
     } catch (error) {
       // A partway failure (e.g. a ledger register/refresh erroring on an RPC or
@@ -685,6 +694,34 @@ export class Client {
       this.#tracker = undefined;
       throw error;
     }
+  }
+
+  /**
+   * The chain says this swap is finished (`none`) — if the STORED status still
+   * reads active, re-fetch and persist it so the next session's
+   * {@link #loadTrackedSwaps} settled-filter catches it (instead of tracking
+   * and scanning the swap once per session forever). Fire-and-forget with a
+   * per-session dedupe: a failed fetch just means one more one-scan round next
+   * session, which is exactly the current behavior. A swap whose stored status
+   * is already settled costs nothing (no server call).
+   */
+  #syncSettledStatus(swapId: string, actions: SwapActions): void {
+    if (actions.recommended !== "none") return;
+    if (this.#settledSyncDone.has(swapId)) return;
+    this.#settledSyncDone.add(swapId);
+    void (async () => {
+      const stored = (await this.listAllSwaps()).find(
+        (s) => s.response.id === swapId,
+      );
+      if (!stored || SETTLED_STORED_STATUSES.has(stored.response.status))
+        return;
+      await this.getSwap(swapId, { updateStorage: true });
+    })().catch((error) => {
+      console.warn(
+        `Client: refreshing settled status of swap ${swapId} failed:`,
+        error,
+      );
+    });
   }
 
   /** Every stored swap whose ledgers are observable, mapped to a {@link TrackedSwap}. */
