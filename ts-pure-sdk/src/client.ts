@@ -6143,6 +6143,7 @@ export class Client {
     const submitted = await this.cctpInbound.submitBalanceUserOp({
       swapId: created.response.id,
       signer: options.signer,
+      expectedMaxSourceAmount: BigInt(info.amount),
     });
 
     return {

@@ -116,6 +116,13 @@ export interface SubmitBalanceUserOpParams {
   noWait?: boolean;
   /** Optional debug simulation of each batched call. */
   preflightSimulate?: boolean;
+  /**
+   * Maximum amount this balance-based retry may spend, in source-token
+   * base units. The UserOp still spends the server-authored swap amount;
+   * this guard prevents unrelated smart-account balance from being folded
+   * into a retry if calldata ever asks for more than the recovered swap.
+   */
+  expectedMaxSourceAmount?: bigint;
   /** Optional logger sink. Silent by default. */
   logger?: Logger;
   /** Minimum log level to emit. Defaults to `silent`. */
@@ -161,6 +168,15 @@ async function sendBalanceUserOp(
     );
   }
   const server = data as unknown as UseropCalldataResponse;
+  const sourceAmount = BigInt(server.source_amount);
+  if (
+    params.expectedMaxSourceAmount != null &&
+    sourceAmount > params.expectedMaxSourceAmount
+  ) {
+    throw new Error(
+      `Balance-funding calldata requires ${sourceAmount} source units, but retry is capped at ${params.expectedMaxSourceAmount}.`,
+    );
+  }
 
   const {
     client: aaClient,
