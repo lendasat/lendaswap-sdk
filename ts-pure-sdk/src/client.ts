@@ -2097,7 +2097,17 @@ export class Client {
             "This swap may have been created before target address storage was implemented.",
         };
       }
-      if (isSolanaBridge && !options?.bridgeRecipient) {
+      // Explicit claim options win; otherwise fall back to the recipient
+      // pinned on the stored swap at create time — this is what lets a bare
+      // `claim(swapId)` (e.g. the background auto-claim worker) route the
+      // CCTP burn correctly.
+      const bridgeRecipient =
+        options?.bridgeRecipient ?? storedSwap.bridgeRecipient;
+      const bridgeRecipientWallet =
+        options?.bridgeRecipient !== undefined
+          ? options?.bridgeRecipientWallet
+          : storedSwap.bridgeRecipientWallet;
+      if (isSolanaBridge && !bridgeRecipient) {
         return {
           success: false,
           message:
@@ -2106,8 +2116,8 @@ export class Client {
         };
       }
       const gaslessResult = await this.claimViaGasless(id, destination, {
-        bridgeRecipient: options?.bridgeRecipient,
-        bridgeRecipientWallet: options?.bridgeRecipientWallet,
+        bridgeRecipient,
+        bridgeRecipientWallet,
       });
       return {
         success: true,
@@ -4384,8 +4394,8 @@ export class Client {
           await this.#signerStorage.setKeyIndex(current + n);
         }
       },
-      storeSwap: (swapId, swapParams, response) =>
-        this.#storeSwap(swapId, swapParams, response),
+      storeSwap: (swapId, swapParams, response, targetAddress, bridge) =>
+        this.#storeSwap(swapId, swapParams, response, targetAddress, bridge),
     };
   }
 
@@ -4398,6 +4408,7 @@ export class Client {
     swapParams: SwapParams,
     response: Record<string, unknown>,
     targetAddress?: string,
+    bridge?: { recipient?: string; recipientWallet?: string },
   ): Promise<void> {
     if (!this.#swapStorage) return;
 
@@ -4413,6 +4424,8 @@ export class Client {
       storedAt: Date.now(),
       updatedAt: Date.now(),
       targetAddress,
+      bridgeRecipient: bridge?.recipient,
+      bridgeRecipientWallet: bridge?.recipientWallet,
     };
 
     await this.#swapStorage.store(storedSwap);
@@ -4485,22 +4498,24 @@ export class Client {
             ? USDT0_ADDRESSES[chainName]
             : USDC_ADDRESSES[chainName],
           recipientSetup: options.bridgeRecipientSetup,
+          recipient: options.bridgeRecipient,
+          recipientWallet: options.bridgeRecipientWallet,
         };
         targetChain = "42161"; // Arbitrum
         tokenAddress = isUsdt0
           ? USDT0_ADDRESSES.Arbitrum
           : USDC_ADDRESSES.Arbitrum;
       }
-    } else if (
-      bridgeParams &&
-      options.bridgeRecipientSetup !== undefined &&
-      bridgeParams.recipientSetup === undefined
-    ) {
-      // Caller supplied `bridgeParams` without a `recipientSetup` but
-      // also passed the top-level hint — fold the hint in.
+    } else if (bridgeParams) {
+      // Caller supplied `bridgeParams` — fold in any top-level hints it
+      // didn't set itself (recipientSetup, and the pinned claim recipient).
       bridgeParams = {
         ...bridgeParams,
-        recipientSetup: options.bridgeRecipientSetup,
+        recipientSetup:
+          bridgeParams.recipientSetup ?? options.bridgeRecipientSetup,
+        recipient: bridgeParams.recipient ?? options.bridgeRecipient,
+        recipientWallet:
+          bridgeParams.recipientWallet ?? options.bridgeRecipientWallet,
       };
     }
 

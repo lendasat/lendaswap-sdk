@@ -66,4 +66,20 @@ export interface StoredSwap {
 
   /** Target address for receiving funds (e.g., BTC address for EVM→Bitcoin swaps) */
   targetAddress?: string;
+
+  /**
+   * Pinned CCTP bridge claim recipient for non-EVM destinations (Solana): the
+   * destination USDC ATA (base58), resolved at create time. Lets a bare
+   * `claim(swapId)` — e.g. the background auto-claim worker — route the burn
+   * without the caller re-deriving it.
+   */
+  bridgeRecipient?: string;
+
+  /**
+   * The Solana wallet pubkey owning {@link bridgeRecipient}, pinned only when
+   * the ATA still needs creation (`recipientSetup`) — its presence tells the
+   * claim to use the ATA-creating forwarder variant, matching the bridge fee
+   * committed at create time.
+   */
+  bridgeRecipientWallet?: string;
 }

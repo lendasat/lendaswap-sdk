@@ -81,10 +81,19 @@ export async function createBitcoinToEvmSwap(
     }
 
     // Store the swap if storage is configured
-    await ctx.storeSwap(data.id, swapParams, {
-      ...data,
-      direction: "bitcoin_to_evm",
-    });
+    await ctx.storeSwap(
+      data.id,
+      swapParams,
+      {
+        ...data,
+        direction: "bitcoin_to_evm",
+      },
+      undefined,
+      {
+        recipient: options.bridgeParams?.recipient,
+        recipientWallet: options.bridgeParams?.recipientWallet,
+      },
+    );
 
     return { response: data, swapParams };
   });

@@ -41,6 +41,19 @@ export interface UsdcBridgeParams {
    * conservative default (assumed-true for non-EVM).
    */
   recipientSetup?: boolean;
+  /**
+   * Optional claim recipient pinned at create for non-EVM destinations
+   * (Solana): the destination USDC ATA (base58). Persisted on the stored
+   * swap so a bare `claim(swapId)` — e.g. background auto-claim — can route
+   * the CCTP burn without the caller re-deriving it.
+   */
+  recipient?: string;
+  /**
+   * The Solana wallet pubkey owning `recipient`, supplied only when the ATA
+   * still needs creation (`recipientSetup`). Persisted alongside
+   * `recipient`; must match the setup decision the bridge fee was priced on.
+   */
+  recipientWallet?: string;
 }
 
 /**
@@ -397,6 +410,14 @@ export interface CreateSwapOptions {
    * passed straight through to the `/swap/*` endpoint.
    */
   bridgeRecipientSetup?: boolean;
+  /**
+   * Optional: for non-EVM CCTP destinations (Solana), the destination USDC
+   * ATA (base58) to pin on the stored swap for claim time. Folded into the
+   * auto-built `bridgeParams.recipient`. See `UsdcBridgeParams.recipient`.
+   */
+  bridgeRecipient?: string;
+  /** Optional: the Solana wallet owning `bridgeRecipient`, only when its ATA needs creation. */
+  bridgeRecipientWallet?: string;
   /** Optional: when set, source USDC originates on another CCTP chain and hops to Arbitrum via CCTPv2. Auto-populated when the source chain is CCTP-only. */
   inboundBridgeParams?: UsdcInboundBridgeParams;
 }
@@ -491,5 +512,6 @@ export interface CreateSwapContext {
     swapParams: SwapParams,
     response: Record<string, unknown>,
     targetAddress?: string,
+    bridge?: { recipient?: string; recipientWallet?: string },
   ) => Promise<void>;
 }

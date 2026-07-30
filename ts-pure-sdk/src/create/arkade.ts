@@ -90,11 +90,21 @@ export async function createArkadeToEvmSwapGeneric(
       throw new Error("No swap data returned");
     }
 
-    // Store the swap if storage is configured
-    await ctx.storeSwap(data.id, swapParams, {
-      ...data,
-      direction: "arkade_to_evm",
-    });
+    // Store the swap if storage is configured; pin the bridge claim
+    // recipient (Solana ATA) so a bare claim can route the CCTP burn.
+    await ctx.storeSwap(
+      data.id,
+      swapParams,
+      {
+        ...data,
+        direction: "arkade_to_evm",
+      },
+      undefined,
+      {
+        recipient: options.bridgeParams?.recipient,
+        recipientWallet: options.bridgeParams?.recipientWallet,
+      },
+    );
 
     return { response: data, swapParams };
   });
