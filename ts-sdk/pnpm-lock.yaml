@@ -145,7 +145,7 @@ importers:
         specifier: ^0.4.45
         version: 0.4.45(bufferutil@4.1.0)(utf-8-validate@6.0.6)
       '@lendasat/lendaswap-sdk-pure':
-        specifier: workspace:^0.4.0
+        specifier: workspace:^0.5.0
         version: link:../../../ts-pure-sdk
       '@noble/hashes':
         specifier: ^2.2.0
