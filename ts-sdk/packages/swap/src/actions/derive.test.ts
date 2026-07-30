@@ -88,6 +88,7 @@ describe("deriveSwapActions", () => {
       expect(result.actions).toEqual([
         {
           id: "none",
+          outcome: "expired",
           recommended: true,
           automation: "auto",
           reason: expect.any(String),
@@ -105,6 +106,7 @@ describe("deriveSwapActions", () => {
           actions: [
             {
               id: "wait",
+              waitingOn: "client_funding_confirmation",
               recommended: true,
               automation: "auto",
               reason: expect.any(String),
@@ -122,6 +124,7 @@ describe("deriveSwapActions", () => {
         actions: [
           {
             id: "wait",
+            waitingOn: "server_funding",
             recommended: true,
             automation: "auto",
             reason: expect.any(String),
@@ -220,6 +223,7 @@ describe("deriveSwapActions", () => {
         actions: [
           {
             id: "wait",
+            waitingOn: "claim_confirmation",
             recommended: true,
             automation: "auto",
             reason: expect.any(String),
@@ -239,6 +243,7 @@ describe("deriveSwapActions", () => {
         actions: [
           {
             id: "none",
+            outcome: "completed",
             recommended: true,
             automation: "auto",
             reason: expect.any(String),
@@ -255,6 +260,7 @@ describe("deriveSwapActions", () => {
         actions: [
           {
             id: "none",
+            outcome: "expired",
             recommended: true,
             automation: "auto",
             reason: expect.any(String),
@@ -298,16 +304,18 @@ describe("deriveSwapActions", () => {
 
   describe("terminal refunds / errors", () => {
     it.each([
-      "clientrefunded",
-      "clientrefundedserverrefunded",
-      "clientredeemedandclientrefunded",
-      "clientrefundedserverfunded",
-    ] as const)("%s → terminal none (nothing to do)", (status) => {
+      ["clientrefunded", "refunded"],
+      ["clientrefundedserverrefunded", "refunded"],
+      ["clientrefundedserverfunded", "refunded"],
+      // Anomalous both-sides state: the client holds funds — completed from its view.
+      ["clientredeemedandclientrefunded", "completed"],
+    ] as const)("%s → terminal none (outcome %s)", (status, outcome) => {
       expect(deriveSwapActions(input({ status }))).toEqual({
         recommended: "none",
         actions: [
           {
             id: "none",
+            outcome,
             recommended: true,
             automation: "auto",
             reason: expect.any(String),
@@ -342,11 +350,17 @@ describe("deriveSwapActions", () => {
   // Lightning payment, so there is no on-chain fund to recommend and nothing to
   // unilaterally refund — the Lightning wallet unwinds a hold invoice itself.
   describe("pay-on-Lightning (clientFunds: false)", () => {
-    it("pending → wait (never fund; the invoice is paid off-chain)", () => {
+    it("pending → wait on the client's payment (never fund; the invoice is paid off-chain)", () => {
       const result = deriveSwapActions(
         input({ status: "pending", clientFunds: false }),
       );
       expect(result.recommended).toBe("wait");
+      // Machine-readable: a consumer routes to its invoice/payment UI on this,
+      // instead of inferring "lightning-funded" from status + observations.
+      expect(result.actions[0]).toMatchObject({
+        id: "wait",
+        waitingOn: "client_payment",
+      });
       expect(result.actions.some((a) => a.id === "fund")).toBe(false);
     });
 
@@ -366,9 +380,41 @@ describe("deriveSwapActions", () => {
         }),
       );
       expect(result.recommended).toBe("none");
+      expect(result.actions[0]).toMatchObject({
+        id: "none",
+        outcome: "refunded",
+      });
       expect(result.actions.some((a) => a.id === "refund_unilateral")).toBe(
         false,
       );
+    });
+  });
+
+  // The refund-blocked waits carry `refund_timelock` — a consumer shows the
+  // countdown/refund surface, not a generic processing spinner.
+  describe("waitingOn: refund_timelock", () => {
+    it("serverfunded with the claim window closed", () => {
+      const result = deriveSwapActions(
+        input({
+          status: "serverfunded",
+          clientRefundLocktime: 20_000,
+          serverChainNow: 15_000,
+        }),
+      );
+      expect(result.actions[0]).toMatchObject({
+        id: "wait",
+        waitingOn: "refund_timelock",
+      });
+    });
+
+    it("failed statuses while the refund is still locked", () => {
+      const result = deriveSwapActions(
+        input({ status: "clientinvalidfunded", clientChainNow: 1_000 }),
+      );
+      expect(result.actions[0]).toMatchObject({
+        id: "wait",
+        waitingOn: "refund_timelock",
+      });
     });
   });
 });

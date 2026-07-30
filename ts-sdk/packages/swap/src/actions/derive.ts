@@ -37,6 +37,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       if (!clientFunds) {
         const wait: WaitAction = {
           id: "wait",
+          waitingOn: "client_payment",
           recommended: true,
           automation: "auto",
           reason: "Waiting for the Lightning payment to be locked in.",
@@ -54,6 +55,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       if (clientChainNow >= clientRefundLocktime + FUNDING_REAP_GRACE_MS) {
         const done: NoneAction = {
           id: "none",
+          outcome: "expired",
           recommended: true,
           automation: "auto",
           reason: "The funding window closed and no deposit ever appeared.",
@@ -77,6 +79,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // server funds its side). Nothing to refund until the HTLC confirms.
       const wait: WaitAction = {
         id: "wait",
+        waitingOn: "client_funding_confirmation",
         recommended: true,
         automation: "auto",
         reason: "Waiting for your funding transaction to confirm.",
@@ -102,6 +105,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // not-yet-runnable option, surfaced so the UI can show when it unlocks.
       const wait: WaitAction = {
         id: "wait",
+        waitingOn: "server_funding",
         recommended: true,
         automation: "auto",
         reason: "Waiting for the server to fund the swap.",
@@ -142,6 +146,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       if (!clientFunds) {
         const done: NoneAction = {
           id: "none",
+          outcome: "refunded",
           recommended: true,
           automation: "auto",
           reason:
@@ -171,6 +176,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // must not claim.
       const wait: WaitAction = {
         id: "wait",
+        waitingOn: "refund_timelock",
         recommended: true,
         automation: "auto",
         reason:
@@ -194,6 +200,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // the funds are received.
       const wait: WaitAction = {
         id: "wait",
+        waitingOn: "claim_confirmation",
         recommended: true,
         automation: "auto",
         reason: "Redeeming your funds — waiting for the claim to confirm.",
@@ -209,6 +216,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // it. Both are terminal successes — nothing to do.
       const done: NoneAction = {
         id: "none",
+        outcome: "completed",
         recommended: true,
         automation: "auto",
         reason: "Swap complete — you've received your funds.",
@@ -221,6 +229,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // funding, so nothing is locked and there is nothing to refund. Terminal.
       const done: NoneAction = {
         id: "none",
+        outcome: "expired",
         recommended: true,
         automation: "auto",
         reason: "The swap expired without funding — nothing was locked.",
@@ -237,6 +246,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // refunded — the server's problem, not the client's.) Nothing to do.
       const done: NoneAction = {
         id: "none",
+        outcome: "refunded",
         recommended: true,
         automation: "auto",
         reason: "Refunded — your deposit was returned.",
@@ -249,6 +259,8 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // Anomalous but terminal — nothing for the client to do.
       const done: NoneAction = {
         id: "none",
+        // The client holds both sides' funds — "completed" from its viewpoint.
+        outcome: "completed",
         recommended: true,
         automation: "auto",
         reason:
@@ -279,6 +291,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
       // Refund not unlocked yet: wait for the client timelock, then refund.
       const wait: WaitAction = {
         id: "wait",
+        waitingOn: "refund_timelock",
         recommended: true,
         automation: "auto",
         reason:

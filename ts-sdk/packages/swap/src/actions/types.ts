@@ -45,9 +45,39 @@ export type CctpClaimEvidence = {
   attestationAvailable: boolean;
 };
 
+/**
+ * What a `wait` is waiting FOR — machine-readable, so a consumer can pick the
+ * right surface (invoice page, "deposit seen…", processing spinner, refund
+ * countdown) by switching on this field instead of re-deriving it from
+ * status + observations.
+ *
+ * One caveat: `client_payment` covers the whole Lightning-funded window — the
+ * chain cannot see whether the invoice was already paid (the server is the
+ * only witness for that split), so a consumer that wants "invoice shown" vs
+ * "payment in flight" as separate screens still refines this one value with
+ * the server status.
+ */
+export type WaitingOn =
+  /** A Lightning payment to be made / locked in as a funded HTLC. */
+  | "client_payment"
+  /** The client's funding tx was seen and is awaiting confirmation. */
+  | "client_funding_confirmation"
+  /** The client funded; the server's HTLC hasn't appeared yet. */
+  | "server_funding"
+  /** The client's claim is in flight, awaiting confirmation. */
+  | "claim_confirmation"
+  /** Nothing will progress — waiting for the client refund timelock to pass. */
+  | "refund_timelock";
+
+/**
+ * How a finished swap ended — so a consumer can render success vs refund vs
+ * expiry from the terminal `none` action without interpreting `SwapStatus`.
+ */
+export type SwapOutcome = "completed" | "refunded" | "expired";
+
 // One variant per id. Evidence is required exactly where it applies, absent
 // elsewhere — accessing `.evidence` without narrowing on `id` is a type error.
-export type WaitAction = SwapActionBase & { id: "wait" };
+export type WaitAction = SwapActionBase & { id: "wait"; waitingOn: WaitingOn };
 export type FundAction = SwapActionBase & { id: "fund" };
 export type ClaimAction = SwapActionBase & { id: "claim" };
 export type RefundCollaborativeAction = SwapActionBase & {
@@ -61,7 +91,7 @@ export type RecoverCctpClaimAction = SwapActionBase & {
   id: "recover_cctp_claim";
   evidence: CctpClaimEvidence;
 };
-export type NoneAction = SwapActionBase & { id: "none" };
+export type NoneAction = SwapActionBase & { id: "none"; outcome: SwapOutcome };
 
 /** A single next-action option. Discriminated union on `id`. */
 export type SwapAction =
