@@ -1,5 +1,21 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 0.5.0
+
+### Minor Changes
+
+- 70976d8: Add Esplora fallback URLs for Bitcoin lookups and broadcasts. Mainnet now defaults to mempool.space with blockstream.info as fallback, tried in order. `withEsploraUrl` / `ClientConfig.esploraUrl` accept a list of URLs. Requests carry per-endpoint timeouts (2s lookups, 10s broadcasts) so a hung explorer fails over instead of stalling the claim/refund flow.
+- e2271fe: Add SDK support for continuing refunded EVM-source swaps. New APIs expose continuation eligibility, detect refunded balances in the Kernel account, create a replacement EVM-to-Arkade, EVM-to-Bitcoin, or EVM-to-Lightning swap, and submit the replacement funding UserOp from the recovered balance.
+
+  Add a balance-funding CCTP inbound UserOp path for swaps whose funds are already in the Kernel account. This skips `receiveMessage` and submits the `approve(Permit2) + executeAndCreateWithPermit2` batch.
+
+  Support split account-abstraction endpoints. `AaConfig` now accepts an optional `rpcUrl` for normal chain reads while `bundlerUrl` is used for UserOps, and `paymasterPolicyId` is optional so callers can send self-funded UserOps when no paymaster is configured.
+
+### Patch Changes
+
+- ea456e6: Improve the collaborative EVM refund error when the recorded depositor address is missing.
+- 10c95ce: Validate Arkade addresses before creating swaps. `createBitcoinToArkadeSwap`, `createLightningToArkadeSwap`, and `createEvmToArkadeSwapGeneric` now throw early on a malformed target address instead of sending it to the server. Adds `parseArkadeAddress` (returns the decoded `ArkAddress`) and `isValidArkadeAddress` helpers (full bech32m decode, optional network check).
+
 ## 0.4.0
 
 ### Minor Changes
