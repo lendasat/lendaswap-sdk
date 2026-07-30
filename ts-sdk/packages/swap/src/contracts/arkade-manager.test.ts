@@ -72,6 +72,10 @@ describe("ArkadeContractManager", () => {
   it("is absent when the VHTLC has no vtxos", async () => {
     const m = build();
     await m.register(ref);
+    // Registration is passive — a startup burst must not fan out into
+    // per-swap indexer scans. The tracker always follows with refresh().
+    expect(indexer.getVtxos).not.toHaveBeenCalled();
+    await m.refresh();
     expect(indexer.getVtxos).toHaveBeenCalledWith({ scripts: [ref.script] });
     expect(m.getState(ref)).toBe("absent");
   });
@@ -80,6 +84,7 @@ describe("ArkadeContractManager", () => {
     const m = build();
     indexer.vtxos = [vtxo({ state: "settled", value: 1000 })];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("confirmed");
   });
 
@@ -87,6 +92,7 @@ describe("ArkadeContractManager", () => {
     const m = build();
     indexer.vtxos = [vtxo({ state: "settled", value: 999 })];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("invalid");
   });
 
@@ -97,6 +103,7 @@ describe("ArkadeContractManager", () => {
     indexer.vtxos = [vtxo({ state: "spent", arkTxId: "spendtx" })];
     indexer.txs = [spendPsbt(preimage)];
     await m.register(ref);
+    await m.refresh();
     expect(indexer.getVirtualTxs).toHaveBeenCalledWith(["spendtx"]);
     expect(m.getState(ref)).toBe("spent_claim");
     expect(m.getPreimage(ref)).toEqual(preimage);
@@ -107,6 +114,7 @@ describe("ArkadeContractManager", () => {
     indexer.vtxos = [vtxo({ state: "spent", arkTxId: "spendtx" })];
     indexer.txs = [spendPsbt()];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("spent_refund");
     expect(m.getPreimage(ref)).toBeUndefined();
   });
@@ -116,6 +124,7 @@ describe("ArkadeContractManager", () => {
     indexer.vtxos = [vtxo({ state: "spent", spentBy: "spendtx" })];
     indexer.txs = [spendPsbt(preimage)];
     await m.register(ref);
+    await m.refresh();
     expect(indexer.getVirtualTxs).toHaveBeenCalledWith(["spendtx"]);
     expect(m.getState(ref)).toBe("spent_claim");
   });
@@ -124,7 +133,8 @@ describe("ArkadeContractManager", () => {
     const m = build();
     const seen: HtlcObservation[] = [];
     m.onEvent((_r, s) => seen.push(s));
-    await m.register(ref); // absent
+    await m.register(ref);
+    await m.refresh(); // absent
 
     indexer.vtxos = [vtxo({ state: "settled" })];
     await m.refresh();
@@ -137,6 +147,7 @@ describe("ArkadeContractManager", () => {
     indexer.vtxos = [vtxo({ state: "spent", arkTxId: "spendtx" })];
     indexer.txs = [spendPsbt(preimage)];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("spent_claim");
     // A later poll that only sees a funded vtxo must not revert the spend.
     indexer.vtxos = [vtxo({ state: "settled" })];
@@ -158,6 +169,7 @@ describe("ArkadeContractManager", () => {
     const m = build();
     indexer.vtxos = [vtxo({ state: "settled" })];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("confirmed");
     await m.unregister(ref);
     expect(m.getState(ref)).toBeUndefined();
@@ -211,6 +223,7 @@ describe("ArkadeContractManager push subscription", () => {
       [ref.script],
       undefined,
     );
+    await m.refresh();
     expect(m.getState(ref)).toBe("absent");
 
     indexer.vtxos = [vtxo({ state: "settled" })];
@@ -236,6 +249,25 @@ describe("ArkadeContractManager push subscription", () => {
 
     await m.reconcile(ref); // targeted verify — always hits the indexer
     expect(indexer.getVtxos).toHaveBeenCalledTimes(1);
+    m.dispose();
+  });
+
+  it("a ref registered inside the gate interval is caught up without a full rescan", async () => {
+    const indexer = new PushIndexer();
+    const m = ArkadeContractManager.fromDeps({
+      indexer,
+      fallbackScanIntervalMs: 60_000,
+    });
+    await m.register(ref);
+    await m.refresh(); // first scan stamps the gate
+    const ref2 = { ...ref, script: "feedface" } satisfies HtlcRef;
+    await m.register(ref2); // registration alone never scans
+    indexer.getVtxos.mockClear();
+
+    await m.refresh(); // gated, but ref2 has no observation yet
+    expect(indexer.getVtxos).toHaveBeenCalledTimes(1);
+    expect(indexer.getVtxos).toHaveBeenCalledWith({ scripts: [ref2.script] });
+    expect(m.getState(ref2)).toBe("absent");
     m.dispose();
   });
 

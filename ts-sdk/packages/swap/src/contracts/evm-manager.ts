@@ -175,7 +175,6 @@ export class EvmContractManager implements ContractManager {
     // Subscribe BEFORE the first scan so there is no gap: anything landing
     // mid-scan arrives as a push and just re-verifies (latched, so harmless).
     this.#syncPushFilter(ref.chainId);
-    await this.#reconcileChain(ref.chainId);
   }
 
   async unregister(ref: HtlcRef): Promise<void> {
@@ -219,11 +218,18 @@ export class EvmContractManager implements ContractManager {
    * extrapolates the clock in between.
    */
   async refresh(): Promise<void> {
-    const chainIds = new Set([...this.#refs.values()].map((r) => r.chainId));
+    const refs = [...this.#refs.values()];
+    const chainIds = new Set(refs.map((r) => r.chainId));
     const now = Date.now();
     const due = [...chainIds].filter((c) => {
       const last = this.#lastScanStartedAt.get(c);
-      return last === undefined || now - last >= this.#fallbackScanIntervalMs;
+      if (last === undefined || now - last >= this.#fallbackScanIntervalMs)
+        return true;
+      // A ref registered since the last scan has no observation yet —
+      // register() itself never scans, so the gate must let it through.
+      return refs.some(
+        (r) => r.chainId === c && !this.#obs.has(htlcKey(r)),
+      );
     });
     await Promise.all(due.map((c) => this.#reconcileChain(c)));
   }

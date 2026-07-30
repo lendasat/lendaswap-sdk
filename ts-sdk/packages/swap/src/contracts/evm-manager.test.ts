@@ -71,10 +71,17 @@ describe("EvmContractManager", () => {
     );
   });
 
-  it("seeds the observation and the chain clock on register", async () => {
+  it("register makes no RPC calls; the first refresh seeds observation and clock", async () => {
     const m = build();
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
     await m.register(ref);
+    // Registration is passive — a startup burst of registers must not fan out
+    // into per-swap chain scans. The tracker always follows with refresh().
+    expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
+    expect(reader.isActiveBatch).not.toHaveBeenCalled();
+    expect(m.getState(ref)).toBeUndefined();
+
+    await m.refresh();
     expect(m.getState(ref)).toBe("confirmed");
     expect(m.chainNow(ref)).toBeGreaterThanOrEqual(1_000);
     expect(reader.getHtlcEventsBatch).toHaveBeenCalledWith(
@@ -104,6 +111,7 @@ describe("EvmContractManager", () => {
     const m = build();
     reader.events = [{ kind: "created", amount: 999n, token: "0xwbtc" }];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("invalid");
   });
 
@@ -113,6 +121,7 @@ describe("EvmContractManager", () => {
     m.onEvent((_r, s) => seen.push(s));
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("confirmed");
 
     reader.events = [
@@ -132,6 +141,7 @@ describe("EvmContractManager", () => {
       { kind: "refunded" },
     ];
     await m.register(ref);
+    await m.refresh();
     expect(m.getState(ref)).toBe("spent_refund");
     // A stale read that no longer sees the refund must not revert it.
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
@@ -147,6 +157,7 @@ describe("EvmContractManager", () => {
     const ethRef = { ...ref, chainId: 1 } satisfies HtlcRef;
     await m.register(ref);
     await m.register(ethRef);
+    await m.refresh();
     expect(m.chainNow(ref) ?? 0).toBeLessThan(m.chainNow(ethRef) ?? 0);
   });
 
@@ -171,6 +182,7 @@ describe("EvmContractManager", () => {
       const m = build();
       reader.active.set(htlcQueryKey(tupleRef), true);
       await m.register(tupleRef);
+      await m.refresh();
       expect(m.getState(tupleRef)).toBe("confirmed");
       // isActive == true proves the terms — no logs needed at all.
       expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
@@ -183,6 +195,7 @@ describe("EvmContractManager", () => {
         { kind: "refunded" },
       ];
       await m.register(tupleRef); // active-map empty → inactive
+      await m.refresh();
       expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
       expect(m.getState(tupleRef)).toBe("spent_refund");
     });
@@ -193,6 +206,7 @@ describe("EvmContractManager", () => {
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
       await m.register(tupleRef);
+      await m.refresh();
       expect(m.getState(tupleRef)).toBe("confirmed");
       warn.mockRestore();
     });
@@ -204,6 +218,7 @@ describe("EvmContractManager", () => {
         { kind: "refunded" },
       ];
       await m.register(tupleRef);
+      await m.refresh();
       expect(m.getState(tupleRef)).toBe("spent_refund");
 
       reader.isActiveBatch.mockClear();
@@ -293,7 +308,8 @@ describe("EvmContractManager", () => {
 
     it("rate-limits passive refresh scans to the fallback interval", async () => {
       const m = build(60_000);
-      await m.register(ref); // scan #1 (register is never gated)
+      await m.register(ref);
+      await m.refresh(); // scan #1 (never-scanned chain → always due)
       reader.getHtlcEventsBatch.mockClear();
 
       await m.refresh(); // within the interval → no-op
@@ -303,6 +319,19 @@ describe("EvmContractManager", () => {
       vi.advanceTimersByTime(61_000);
       await m.refresh(); // interval elapsed → scans
       expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
+    });
+
+    it("a ref registered inside the gate interval is caught up by the next refresh", async () => {
+      const m = build(60_000);
+      await m.register(ref);
+      await m.refresh(); // scan #1 — gate now closed for the interval
+      const ref2 = { ...ref, preimageHash: "0xph2" } satisfies HtlcRef;
+      await m.register(ref2); // registration alone never scans
+      reader.getHtlcEventsBatch.mockClear();
+
+      await m.refresh(); // ref2 has no observation yet → bypasses the gate
+      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
+      expect(m.getState(ref2)).toBe("absent");
     });
 
     it("a targeted reconcile is never gated", async () => {
@@ -318,6 +347,7 @@ describe("EvmContractManager", () => {
     it("extrapolates chainNow between scans", async () => {
       const m = build(60_000);
       await m.register(ref);
+      await m.refresh();
       const at0 = m.chainNow(ref);
       vi.advanceTimersByTime(30_000);
       // No RPC in between — the clock still advances with wall time.

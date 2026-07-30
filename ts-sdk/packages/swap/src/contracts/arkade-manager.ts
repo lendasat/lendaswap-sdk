@@ -163,7 +163,6 @@ export class ArkadeContractManager implements ContractManager {
       );
     this.#refs.set(ref.script, ref);
     await this.#subscribeScript(ref.script);
-    await this.#reconcileRef(ref);
   }
 
   async unregister(ref: HtlcRef): Promise<void> {
@@ -203,12 +202,21 @@ export class ArkadeContractManager implements ContractManager {
    * not the signal; without subscription support every call scans.
    */
   async refresh(): Promise<void> {
-    if (
+    const gated =
       this.#streaming &&
-      Date.now() - this.#lastScanStartedAt < this.#fallbackScanIntervalMs
-    )
+      Date.now() - this.#lastScanStartedAt < this.#fallbackScanIntervalMs;
+    if (!gated) {
+      await this.#scanAll();
       return;
-    await this.#scanAll();
+    }
+    // Refs registered since the last scan have no observation yet — register()
+    // itself never scans, so catch just them up without a full rescan.
+    const fresh = [...this.#refs.values()].filter(
+      (r) => !this.#obs.has(r.script),
+    );
+    if (fresh.length === 0) return;
+    await this.#readClock();
+    await Promise.all(fresh.map((ref) => this.#reconcileRef(ref)));
   }
 
   /** Targeted verify (hint / pre-action path) — never gated. */
