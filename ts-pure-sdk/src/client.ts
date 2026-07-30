@@ -6101,7 +6101,7 @@ export class Client {
         targetAddress: options.targetAddress,
         sourceAmount: BigInt(info.amount),
       });
-    } else {
+    } else if (info.oldSwap.direction === "evm_to_lightning") {
       const target = options.targetAddress.trim();
       const isAddress = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
         target,
@@ -6134,6 +6134,10 @@ export class Client {
           `New Lightning swap requires ${needed} source units, but the recovered balance is ${info.amount}. Please use a smaller invoice/target amount.`,
         );
       }
+    } else {
+      throw new Error(
+        `Cannot continue refunded swap with direction ${info.oldSwap.direction}.`,
+      );
     }
 
     const submitted = await this.cctpInbound.submitBalanceUserOp({
