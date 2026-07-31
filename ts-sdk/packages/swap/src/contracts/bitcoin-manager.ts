@@ -4,10 +4,10 @@
  *
  * Modeled on the Arkade manager: reading is delegated to an injected
  * {@link BitcoinChainReader} (so the package stays free of a bundled esplora
- * client and the adapter is testable against a fake), and there's no event push,
- * so observations advance when {@link refresh} runs — the SwapTracker drives that.
- * The clock is Bitcoin MTP (the same source the Arkade manager uses), so
- * {@link chainNow} is ref-less.
+ * client and the adapter is testable against a fake). Observation is on-demand —
+ * {@link refresh} at seed time, targeted {@link reconcile}s from hints and the
+ * tracker's at-risk safety net. The clock is Bitcoin MTP (the same source the
+ * Arkade manager uses), so {@link chainNow} is ref-less.
  */
 import { hex } from "@scure/base";
 import type { HtlcObservation } from "../actions/types.js";
@@ -55,7 +55,8 @@ export class BitcoinContractManager implements ContractManager {
     (ref: HtlcRef, state: HtlcObservation) => void
   >();
 
-  #now: number | undefined;
+  /** Last MTP reading (ms) + when it was fetched, for extrapolation. */
+  #now: { mtpMs: number; fetchedAtMs: number } | undefined;
 
   private constructor(deps: BitcoinContractManagerDeps) {
     this.#reader = deps.reader;
@@ -106,7 +107,11 @@ export class BitcoinContractManager implements ContractManager {
 
   chainNow(_ref: HtlcRef): number | undefined {
     // Bitcoin timelocks share one clock (MTP), so the ref is unused.
-    return this.#now;
+    if (!this.#now) return undefined;
+    // Extrapolate between reads: MTP advances with wall-clock (lagging it by a
+    // roughly constant margin), so the clock stays current without polling.
+    // The worker re-verifies on-chain before acting on any flip this causes.
+    return this.#now.mtpMs + Math.max(0, Date.now() - this.#now.fetchedAtMs);
   }
 
   onEvent(cb: (ref: HtlcRef, state: HtlcObservation) => void): () => void {
@@ -115,7 +120,7 @@ export class BitcoinContractManager implements ContractManager {
   }
 
   async refresh(): Promise<void> {
-    if (this.#chainTime) this.#now = await this.#chainTime();
+    await this.#readClock();
     await Promise.all(
       [...this.#refs.values()].map((ref) => this.#reconcileRef(ref)),
     );
@@ -125,8 +130,14 @@ export class BitcoinContractManager implements ContractManager {
     if (ref.ledger !== "bitcoin") return;
     const tracked = this.#refs.get(ref.address);
     if (!tracked) return;
-    if (this.#chainTime) this.#now = await this.#chainTime();
+    await this.#readClock();
     await this.#reconcileRef(tracked);
+  }
+
+  /** Read and store the MTP clock (with fetch time, for extrapolation). */
+  async #readClock(): Promise<void> {
+    if (!this.#chainTime) return;
+    this.#now = { mtpMs: await this.#chainTime(), fetchedAtMs: Date.now() };
   }
 
   dispose(): void {

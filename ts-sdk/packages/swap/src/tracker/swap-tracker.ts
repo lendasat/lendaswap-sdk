@@ -34,11 +34,20 @@ export type ActionSubscriber = (swapId: string, actions: SwapActions) => void;
 
 export type SwapTrackerOptions = {
   /**
-   * How often (ms) to re-poll every manager to advance clocks and reconcile
-   * observations. Needed because some ledgers (Arkade) have no event push, so
-   * state only moves on a poll. `0` disables the timer (tests drive `refresh`).
+   * The local tick interval (ms). Each tick recomputes every tracked swap from
+   * extrapolated chain clocks — pure local work, NO chain reads — so timelock
+   * flips (a refund unlocking, a stale pending swap turning reapable) surface
+   * between hints. `0` disables the timer (tests drive `refresh` manually).
    */
   refreshIntervalMs?: number;
+  /**
+   * Minimum ms between chain reconciles of AT-RISK swaps — those whose client
+   * leg holds funds on-chain (≥ clientfunded, unresolved), where refund safety
+   * must not depend on the server. Everything else advances on server hints
+   * only ({@link applyHint}); a swap with nothing at stake costs zero chain
+   * reads. Default 60s.
+   */
+  atRiskReconcileIntervalMs?: number;
 };
 
 export class SwapTracker {
@@ -48,6 +57,8 @@ export class SwapTracker {
   readonly #lastActions = new Map<string, SwapActions>();
   readonly #subscribers = new Set<ActionSubscriber>();
   readonly #refreshIntervalMs: number;
+  readonly #atRiskReconcileIntervalMs: number;
+  #lastAtRiskReconcileAt = 0;
   #eventUnsubs: Array<() => void> = [];
   #timer: ReturnType<typeof setInterval> | undefined;
 
@@ -57,6 +68,8 @@ export class SwapTracker {
   ) {
     this.#managers = managers;
     this.#refreshIntervalMs = options?.refreshIntervalMs ?? 0;
+    this.#atRiskReconcileIntervalMs =
+      options?.atRiskReconcileIntervalMs ?? 60_000;
   }
 
   /**
@@ -94,7 +107,9 @@ export class SwapTracker {
     // recompute bails forever — nothing is ever emitted.
     await this.#refreshManagers();
     this.#recomputeAll();
-    // Poll onward: Arkade has no event push, and clocks advance with wall time.
+    // Tick onward: local recomputes off extrapolated clocks, plus the gated
+    // at-risk chain reconcile. The prime above counts as the first reconcile.
+    this.#lastAtRiskReconcileAt = Date.now();
     if (this.#refreshIntervalMs > 0)
       this.#timer = setInterval(
         () => void this.#tick(),
@@ -144,23 +159,65 @@ export class SwapTracker {
 
     // Seed/advance just the managers this swap touches (clock + observations),
     // then derive its first action — mirrors startTracking's prime step. Unlike
-    // registration, a failure here IS self-healing: the swap is fully registered,
-    // so the poll tick retries the refresh and recomputes. Leave it tracked.
+    // registration, a failure here IS self-healing: the swap is fully registered
+    // and unseeded legs count as at-risk, so the tick reconciles them. Leave it
+    // tracked.
     const managers = new Set(legsOf(swap).map((leg) => this.#managerFor(leg)));
     await Promise.all([...managers].map((manager) => manager.refresh()));
     this.#recompute(swap);
   }
 
+  /**
+   * The periodic tick: recompute every swap from extrapolated clocks (pure
+   * local work), and — at most every `atRiskReconcileIntervalMs` — re-read the
+   * chain for at-risk swaps. This is the trust boundary: the happy path rides
+   * server hints, but once the client's funds sit in an HTLC, refund
+   * availability (and the counterparty leg's state) is verified against the
+   * chain on a cadence the server can't influence.
+   */
   async #tick(): Promise<void> {
-    await this.#refreshManagers();
+    const now = Date.now();
+    if (now - this.#lastAtRiskReconcileAt >= this.#atRiskReconcileIntervalMs) {
+      this.#lastAtRiskReconcileAt = now;
+      const legs = [...this.#swaps.values()]
+        .filter((swap) => this.#isAtRisk(swap))
+        .flatMap((swap) => legsOf(swap));
+      await Promise.all(
+        legs.map((leg) =>
+          this.#managerFor(leg)
+            .reconcile(leg)
+            .catch((error) => {
+              console.warn("SwapTracker: at-risk reconcile failed:", error);
+            }),
+        ),
+      );
+    }
     this.#recomputeAll();
   }
 
   /**
-   * Re-poll the managers that have a registered leg — seeding/advancing their
-   * clocks and reconciling observations. Managers with nothing tracked are
-   * skipped: refreshing them still hits their clock source (e.g. Arkade/Bitcoin
-   * MTP via the API), so a swap that doesn't touch a ledger can't fail on that
+   * Whether a swap needs chain-verified monitoring independent of the server:
+   * its client leg holds (or held) funds on-chain, so knowing when a refund
+   * unlocks — or that the counterparty resolved a leg — must not depend on a
+   * hint arriving. An unfunded client leg (`absent`) is server-hint territory;
+   * an unseeded one (`undefined`, e.g. the prime failed on a flaky RPC) counts
+   * as at-risk so the tick heals it. A swap with no on-chain client leg
+   * (paying via Lightning) is at-risk while tracked: once the invoice is paid
+   * there is no on-chain trace of the client's exposure, and the server leg is
+   * the only thing left to watch.
+   */
+  #isAtRisk(swap: TrackedSwap): boolean {
+    if (!swap.clientHtlc) return true;
+    const obs = this.#managerFor(swap.clientHtlc).getState(swap.clientHtlc);
+    return obs !== "absent";
+  }
+
+  /**
+   * Refresh the managers that have a registered leg — seeding their clocks and
+   * reconciling observations (the on-demand full read backing startTracking's
+   * prime and track()'s seed). Managers with nothing tracked are skipped:
+   * refreshing them still hits their clock source (e.g. Arkade/Bitcoin MTP via
+   * the API), so a swap that doesn't touch a ledger can't fail on that
    * ledger's endpoint being down (the default client builds every manager).
    */
   async #refreshManagers(): Promise<void> {

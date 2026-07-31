@@ -18,16 +18,8 @@ import { ArkadeContractManager } from "./contracts/arkade-manager.js";
 import { defaultArkadeServerUrl } from "./contracts/arkade-network.js";
 import { BitcoinContractManager } from "./contracts/bitcoin-manager.js";
 import { DEFAULT_ESPLORA_URLS } from "./contracts/bitcoin-reader-esplora.js";
-import {
-  createEvmLogSubscriber,
-  DEFAULT_EVM_WSS,
-  type EvmLogSubscriber,
-} from "./contracts/evm-log-subscriber.js";
 import { EvmContractManager } from "./contracts/evm-manager.js";
-import {
-  defaultEvmReaders,
-  HTLC_EVENT_TOPICS,
-} from "./contracts/evm-reader-viem.js";
+import { defaultEvmReaders } from "./contracts/evm-reader-viem.js";
 import type { ContractManager, Ledger } from "./contracts/types.js";
 import { SwapWorker } from "./hints/swap-worker.js";
 import { WsStatusSource } from "./hints/ws-status-source.js";
@@ -80,7 +72,11 @@ type TrackingConfig = {
    * 0-conf unless the funding signals RBF (BIP-125). `1` = wait for a block.
    */
   bitcoinMinConfirmations?: number;
-  /** Poll interval (ms) for advancing observations/clocks; defaults to 5s. */
+  /**
+   * Local tick interval (ms) — recomputes actions off extrapolated clocks, no
+   * chain reads. Chain reads happen on server hints and, for swaps whose
+   * client leg holds funds, on the tracker's at-risk cadence. Defaults to 5s.
+   */
   refreshIntervalMs?: number;
   /** Opt-in hint-driven auto-claim; unset leaves tracking observe-only. */
   autoClaim?: AutoClaimConfig;
@@ -891,25 +887,9 @@ export class Client {
       );
     }
     // EVM tracks out of the box via tested default RPCs; overrides take priority.
-    // Push: a wss logs subscription per chain that has a free endpoint — the
-    // fast path that lets the HTTP pollers stay slow. Connects lazily (only
-    // while that chain has tracked swaps); chains without wss just poll.
     const readers = defaultEvmReaders(evmRpcUrls);
-    if (readers.size > 0) {
-      const subscribers = new Map<number, EvmLogSubscriber>();
-      for (const chainId of readers.keys()) {
-        const wss = DEFAULT_EVM_WSS[chainId];
-        if (wss)
-          subscribers.set(
-            chainId,
-            createEvmLogSubscriber(wss, { topics0: HTLC_EVENT_TOPICS }),
-          );
-      }
-      managers.set(
-        "evm",
-        EvmContractManager.fromDeps({ readers, subscribers }),
-      );
-    }
+    if (readers.size > 0)
+      managers.set("evm", EvmContractManager.fromDeps({ readers }));
     // Bitcoin observes on-chain HTLCs via esplora. Default to the public pair
     // (mempool.space + blockstream.info) with rotation/failover; an explicit URL
     // replaces them (a dev/regtest node must not fail over to mainnet).

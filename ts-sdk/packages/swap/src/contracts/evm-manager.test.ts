@@ -55,9 +55,7 @@ describe("EvmContractManager", () => {
     readers = new Map([[137, reader]]);
   });
 
-  /** Passive-scan gate off by default in tests: every refresh() rescans. */
-  const build = (fallbackScanIntervalMs = 0) =>
-    EvmContractManager.fromDeps({ readers, fallbackScanIntervalMs });
+  const build = () => EvmContractManager.fromDeps({ readers });
 
   it("rejects non-evm HTLCs", async () => {
     await expect(
@@ -230,122 +228,22 @@ describe("EvmContractManager", () => {
     });
   });
 
-  describe("push subscription wiring", () => {
-    class FakeSubscriber {
-      filter: { htlc: string; preimageHash: string }[] = [];
-      cb: ((hit?: {
-        htlc: `0x${string}`;
-        preimageHash: `0x${string}`;
-      }) => void)[] = [];
-      disposed = false;
-      setFilter = vi.fn((queries: { htlc: string; preimageHash: string }[]) => {
-        this.filter = queries;
-      });
-      onEvent = vi.fn(
-        (
-          cb: (hit?: {
-            htlc: `0x${string}`;
-            preimageHash: `0x${string}`;
-          }) => void,
-        ) => {
-          this.cb.push(cb);
-          return () => {};
-        },
-      );
-      dispose = vi.fn(() => {
-        this.disposed = true;
-      });
-      emit(hit?: { htlc: `0x${string}`; preimageHash: `0x${string}` }): void {
-        for (const cb of this.cb) cb(hit);
-      }
-    }
-    const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-    it("keeps the push filter aligned with tracked refs", async () => {
-      const sub = new FakeSubscriber();
-      const m = EvmContractManager.fromDeps({
-        readers,
-        subscribers: new Map([[137, sub]]),
-        fallbackScanIntervalMs: 0,
-      });
-      await m.register(ref);
-      expect(sub.filter).toEqual([{ htlc: "0xhtlc", preimageHash: "0xph" }]);
-      await m.unregister(ref);
-      expect(sub.filter).toEqual([]);
-      m.dispose();
-      expect(sub.disposed).toBe(true);
-    });
-
-    it("a pushed hit triggers ONE targeted verify; a reconnect rescans the chain", async () => {
-      const sub = new FakeSubscriber();
-      const m = EvmContractManager.fromDeps({
-        readers,
-        subscribers: new Map([[137, sub]]),
-        fallbackScanIntervalMs: 0,
-      });
-      const ref2 = { ...ref, preimageHash: "0xph2" } satisfies HtlcRef;
-      await m.register(ref);
-      await m.register(ref2);
-      reader.getHtlcEventsBatch.mockClear();
-
-      sub.emit({ htlc: "0xhtlc", preimageHash: "0xph" });
-      await tick();
-      // Only the hit ref was re-verified, not the whole chain.
-      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
-      expect(reader.getHtlcEventsBatch.mock.calls[0][0]).toHaveLength(1);
-
-      reader.getHtlcEventsBatch.mockClear();
-      sub.emit(undefined); // (re)connect → catch-up scan of the chain
-      await tick();
-      expect(reader.getHtlcEventsBatch.mock.calls[0][0]).toHaveLength(2);
-      m.dispose();
-    });
-  });
-
   describe("with fake time", () => {
     beforeEach(() => vi.useFakeTimers());
     afterEach(() => vi.useRealTimers());
 
-    it("rate-limits passive refresh scans to the fallback interval", async () => {
-      const m = build(60_000);
-      await m.register(ref);
-      await m.refresh(); // scan #1 (never-scanned chain → always due)
-      reader.getHtlcEventsBatch.mockClear();
-
-      await m.refresh(); // within the interval → no-op
-      await m.refresh();
-      expect(reader.getHtlcEventsBatch).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(61_000);
-      await m.refresh(); // interval elapsed → scans
-      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
-    });
-
-    it("a ref registered inside the gate interval is caught up by the next refresh", async () => {
-      const m = build(60_000);
-      await m.register(ref);
-      await m.refresh(); // scan #1 — gate now closed for the interval
-      const ref2 = { ...ref, preimageHash: "0xph2" } satisfies HtlcRef;
-      await m.register(ref2); // registration alone never scans
-      reader.getHtlcEventsBatch.mockClear();
-
-      await m.refresh(); // ref2 has no observation yet → bypasses the gate
-      expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(1);
-      expect(m.getState(ref2)).toBe("absent");
-    });
-
-    it("a targeted reconcile is never gated", async () => {
-      const m = build(60_000);
+    it("a targeted reconcile hits the chain immediately", async () => {
+      const m = build();
       await m.register(ref);
       reader.getHtlcEventsBatch.mockClear();
 
-      await m.reconcile(ref); // hint path — must hit the chain immediately
+      await m.reconcile(ref); // hint / at-risk path
       await m.reconcile(ref);
       expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(2);
     });
 
-    it("extrapolates chainNow between scans", async () => {
-      const m = build(60_000);
+    it("extrapolates chainNow between reads", async () => {
+      const m = build();
       await m.register(ref);
       await m.refresh();
       const at0 = m.chainNow(ref);

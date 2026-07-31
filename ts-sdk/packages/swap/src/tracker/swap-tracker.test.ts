@@ -380,4 +380,76 @@ describe("SwapTracker", () => {
     arkade.emit(clientHtlc, "confirmed"); // same state, but now the clock is known
     expect(sub).toHaveBeenCalledTimes(1);
   });
+
+  describe("at-risk chain reconciles (fake time)", () => {
+    const buildTimed = () => {
+      vi.useFakeTimers();
+      const arkade = new FakeManager("arkade", 1_000);
+      const evm = new FakeManager("evm", 1_000);
+      const tracker = new SwapTracker(
+        new Map<Ledger, ContractManager>([
+          ["arkade", arkade],
+          ["evm", evm],
+        ]),
+        { refreshIntervalMs: 1_000, atRiskReconcileIntervalMs: 60_000 },
+      );
+      return { arkade, evm, tracker };
+    };
+
+    it("re-reads the chain for a swap whose client leg holds funds", async () => {
+      const { arkade, evm, tracker } = buildTimed();
+      try {
+        await tracker.startTracking([swap]);
+        arkade.emit(clientHtlc, "confirmed"); // client funds on-chain → at risk
+        evm.emit(serverHtlc, "absent");
+
+        await vi.advanceTimersByTimeAsync(59_000);
+        expect(arkade.reconciled).toHaveLength(0); // within the interval: free
+
+        await vi.advanceTimersByTimeAsync(2_000);
+        // Both legs re-read: refund availability AND the counterparty's state.
+        expect(arkade.reconciled.map(htlcKey)).toEqual([htlcKey(clientHtlc)]);
+        expect(evm.reconciled.map(htlcKey)).toEqual([htlcKey(serverHtlc)]);
+      } finally {
+        tracker.stop();
+        vi.useRealTimers();
+      }
+    });
+
+    it("costs zero chain reads while the client leg is unfunded (hints only)", async () => {
+      const { arkade, evm, tracker } = buildTimed();
+      try {
+        await tracker.startTracking([swap]);
+        arkade.emit(clientHtlc, "absent"); // nothing at stake yet
+        evm.emit(serverHtlc, "absent");
+
+        await vi.advanceTimersByTimeAsync(180_000);
+        expect(arkade.reconciled).toHaveLength(0);
+        expect(evm.reconciled).toHaveLength(0);
+      } finally {
+        tracker.stop();
+        vi.useRealTimers();
+      }
+    });
+
+    it("treats a swap with no on-chain client leg (Lightning pay-in) as at risk", async () => {
+      const { evm, tracker } = buildTimed();
+      try {
+        const lnSwap: TrackedSwap = {
+          swapId: "ln1",
+          serverHtlc,
+          clientRefundLocktime: 20_000,
+          serverRefundLocktime: 10_000,
+        };
+        await tracker.startTracking([lnSwap]);
+        evm.emit(serverHtlc, "absent");
+
+        await vi.advanceTimersByTimeAsync(61_000);
+        expect(evm.reconciled.map(htlcKey)).toEqual([htlcKey(serverHtlc)]);
+      } finally {
+        tracker.stop();
+        vi.useRealTimers();
+      }
+    });
+  });
 });

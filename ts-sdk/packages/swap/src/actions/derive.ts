@@ -58,7 +58,7 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
           outcome: "expired",
           recommended: true,
           automation: "auto",
-          reason: "The funding window closed and no deposit ever appeared.",
+          reason: "The funding window closed.",
         };
         return { recommended: "none", actions: [done] };
       }

@@ -13,7 +13,6 @@
  */
 import type { HtlcObservation } from "../actions/types.js";
 import { type EvmHtlcEvent, evmObservation } from "./evm.js";
-import type { EvmHtlcHit, EvmLogSubscriber } from "./evm-log-subscriber.js";
 import {
   type ContractManager,
   type HtlcRef,
@@ -83,24 +82,7 @@ export type EvmChainReader = {
 export type EvmContractManagerDeps = {
   /** A chain reader per EVM `chainId` this manager serves. */
   readers: Map<number, EvmChainReader>;
-  /**
-   * Minimum ms between PASSIVE full-chain rescans (the tracker's periodic
-   * `refresh()`). Targeted verifies — `register` and `reconcile(ref)`, i.e. the
-   * hint/auto-claim path — are never gated. The passive scan is only the safety
-   * net for a missed hint, so it can be slow; this is what keeps background
-   * traffic against rate-limited public RPCs near zero. Default 3 minutes;
-   * `0` disables the gate (scan on every refresh — tests).
-   */
-  fallbackScanIntervalMs?: number;
-  /**
-   * Optional push feeds per chainId (`eth_subscribe("logs")` over wss). A
-   * pushed log triggers one targeted verify; a (re)connect triggers a chain
-   * catch-up scan. Owned by the manager once passed — disposed with it.
-   */
-  subscribers?: Map<number, EvmLogSubscriber>;
 };
-
-const DEFAULT_FALLBACK_SCAN_INTERVAL_MS = 180_000;
 
 /** A chain clock reading: block.timestamp/number plus when we fetched it. */
 type ChainClock = {
@@ -128,7 +110,6 @@ export class EvmContractManager implements ContractManager {
   readonly ledger: Ledger = "evm";
 
   readonly #readers: Map<number, EvmChainReader>;
-  readonly #fallbackScanIntervalMs: number;
   /** htlcKey → the ref we're tracking. */
   readonly #refs = new Map<string, EvmRef>();
   /** htlcKey → last known observation. */
@@ -137,20 +118,12 @@ export class EvmContractManager implements ContractManager {
   readonly #preimages = new Map<string, `0x${string}`>();
   /** chainId → its last clock reading (extrapolated in {@link chainNow}). */
   readonly #now = new Map<number, ChainClock>();
-  /** chainId → when its last full scan STARTED (gates passive rescans). */
-  readonly #lastScanStartedAt = new Map<number, number>();
   readonly #listeners = new Set<
     (ref: HtlcRef, state: HtlcObservation) => void
   >();
-  readonly #subscribers: Map<number, EvmLogSubscriber> | undefined;
-  /** chainId → unsubscribe for its push-event listener (wired lazily). */
-  readonly #pushUnsubs = new Map<number, () => void>();
 
   private constructor(deps: EvmContractManagerDeps) {
     this.#readers = deps.readers;
-    this.#subscribers = deps.subscribers;
-    this.#fallbackScanIntervalMs =
-      deps.fallbackScanIntervalMs ?? DEFAULT_FALLBACK_SCAN_INTERVAL_MS;
   }
 
   static fromDeps(deps: EvmContractManagerDeps): EvmContractManager {
@@ -172,9 +145,6 @@ export class EvmContractManager implements ContractManager {
         `no EVM reader for chain ${ref.chainId} — configure it via ClientBuilder.withEvmRpcUrls()`,
       );
     this.#refs.set(htlcKey(ref), ref);
-    // Subscribe BEFORE the first scan so there is no gap: anything landing
-    // mid-scan arrives as a push and just re-verifies (latched, so harmless).
-    this.#syncPushFilter(ref.chainId);
   }
 
   async unregister(ref: HtlcRef): Promise<void> {
@@ -183,12 +153,9 @@ export class EvmContractManager implements ContractManager {
     this.#refs.delete(key);
     this.#obs.delete(key);
     this.#preimages.delete(key);
-    this.#syncPushFilter(ref.chainId);
     // Drop the chain's state once nothing on it is tracked anymore.
-    if (![...this.#refs.values()].some((r) => r.chainId === ref.chainId)) {
+    if (![...this.#refs.values()].some((r) => r.chainId === ref.chainId))
       this.#now.delete(ref.chainId);
-      this.#lastScanStartedAt.delete(ref.chainId);
-    }
   }
 
   getState(ref: HtlcRef): HtlcObservation | undefined {
@@ -212,24 +179,14 @@ export class EvmContractManager implements ContractManager {
   }
 
   /**
-   * The PASSIVE safety-net scan, called on the tracker's periodic tick. Gated
-   * per chain by `fallbackScanIntervalMs`: most ticks are free no-ops, because
-   * the hint feed (`reconcile`) covers timely reaction and {@link chainNow}
-   * extrapolates the clock in between.
+   * Full reconcile of every tracked chain — seeds clocks + observations. Called
+   * on demand (tracker start / newly tracked swap), NOT periodically: onward,
+   * hints drive targeted `reconcile`s and the tracker's at-risk safety net
+   * re-reads only swaps with client funds on the line.
    */
   async refresh(): Promise<void> {
-    const refs = [...this.#refs.values()];
-    const chainIds = new Set(refs.map((r) => r.chainId));
-    const now = Date.now();
-    const due = [...chainIds].filter((c) => {
-      const last = this.#lastScanStartedAt.get(c);
-      if (last === undefined || now - last >= this.#fallbackScanIntervalMs)
-        return true;
-      // A ref registered since the last scan has no observation yet —
-      // register() itself never scans, so the gate must let it through.
-      return refs.some((r) => r.chainId === c && !this.#obs.has(htlcKey(r)));
-    });
-    await Promise.all(due.map((c) => this.#reconcileChain(c)));
+    const chainIds = new Set([...this.#refs.values()].map((r) => r.chainId));
+    await Promise.all([...chainIds].map((c) => this.#reconcileChain(c)));
   }
 
   /** Targeted verify (hint / pre-action path) — never gated. */
@@ -244,56 +201,7 @@ export class EvmContractManager implements ContractManager {
   }
 
   dispose(): void {
-    for (const unsub of this.#pushUnsubs.values()) unsub();
-    this.#pushUnsubs.clear();
-    if (this.#subscribers)
-      for (const sub of this.#subscribers.values()) sub.dispose();
     this.#listeners.clear();
-  }
-
-  /** Align a chain's push subscription with its tracked refs (lazy-wired). */
-  #syncPushFilter(chainId: number): void {
-    const subscriber = this.#subscribers?.get(chainId);
-    if (!subscriber) return;
-    if (!this.#pushUnsubs.has(chainId))
-      this.#pushUnsubs.set(
-        chainId,
-        subscriber.onEvent((hit) => this.#onPush(chainId, hit)),
-      );
-    subscriber.setFilter(
-      [...this.#refs.values()]
-        .filter((r) => r.chainId === chainId)
-        .map((r) => ({ htlc: r.htlc, preimageHash: r.preimageHash })),
-    );
-  }
-
-  /**
-   * A push event: a specific log → one targeted verify of that HTLC; a
-   * (re)connect (`hit` undefined) → a chain catch-up scan for whatever the
-   * disconnected gap missed. The push is only ever a TRIGGER — both paths
-   * re-read the chain.
-   */
-  #onPush(chainId: number, hit?: EvmHtlcHit): void {
-    const run = async (): Promise<void> => {
-      const reader = this.#readers.get(chainId);
-      if (!reader) return;
-      if (!hit) {
-        await this.#reconcileChain(chainId);
-        return;
-      }
-      const ref = [...this.#refs.values()].find(
-        (r) => r.chainId === chainId && htlcQueryKey(r) === htlcQueryKey(hit),
-      );
-      if (!ref) return;
-      await this.#readClock(reader, chainId);
-      await this.#reconcileRefs(reader, chainId, [ref]);
-    };
-    void run().catch((error) => {
-      console.warn(
-        `EVM push-triggered verify failed (chain ${chainId}):`,
-        error,
-      );
-    });
   }
 
   /** The preimage a claim revealed on this HTLC, if one was seen. */
@@ -315,7 +223,6 @@ export class EvmContractManager implements ContractManager {
   async #reconcileChain(chainId: number): Promise<void> {
     const reader = this.#readers.get(chainId);
     if (!reader) return;
-    this.#lastScanStartedAt.set(chainId, Date.now());
     await this.#readClock(reader, chainId);
     const refs = [...this.#refs.values()].filter((r) => r.chainId === chainId);
     await this.#reconcileRefs(reader, chainId, refs);
