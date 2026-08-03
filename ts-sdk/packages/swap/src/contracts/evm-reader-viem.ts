@@ -34,7 +34,7 @@ import {
 
 /**
  * Tested public RPC endpoints per supported chainId, tried in order via viem's
- * ranked `fallback`. Mirrors the frontend's `evmTransport.ts` list — the client
+ * `fallback`. Mirrors the frontend's `evmTransport.ts` list — the client
  * uses these by default so Arkade↔EVM tracking works out of the box; a caller can
  * override per chain with `ClientBuilder.withEvmRpcUrls`.
  */
@@ -46,15 +46,15 @@ export const DEFAULT_EVM_RPCS: Record<number, string[]> = {
     "https://tenderly.rpc.polygon.community",
     "https://polygon-bor-rpc.publicnode.com",
   ],
-  1: [
-    "https://ethereum-rpc.publicnode.com",
-    "https://rpc.ankr.com/eth",
-    "https://eth.drpc.org",
-  ],
+  // No publicnode: it rate-limits by IP across its whole fleet (403s), and as
+  // a PRIMARY that costs a full retry cycle per read before failing over.
+  // Both entries verified for eth_getLogs + eth_call from a browser origin.
+  1: ["https://eth.drpc.org", "https://rpc.mevblocker.io"],
+  // The official gateway first; publicnode last (see above).
   42161: [
-    "https://arbitrum-one-rpc.publicnode.com",
-    "https://rpc.ankr.com/arbitrum",
     "https://arb1.arbitrum.io/rpc",
+    "https://arbitrum.drpc.org",
+    "https://arbitrum-one-rpc.publicnode.com",
   ],
 };
 
@@ -292,17 +292,16 @@ function unique<T>(values: T[]): T[] {
 
 /**
  * Build an {@link EvmChainReader} over one or more EVM JSON-RPC endpoints. With
- * several, viem's ranked `fallback` picks the healthiest and fails over.
+ * several, viem's `fallback` tries them in order and fails over on error.
+ * Deliberately NOT ranked: ranking health-pings every listed endpoint on an
+ * interval from every open tab, which is exactly the background burst that got
+ * public RPCs rate-limiting us (publicnode 403s) — and it contradicts this
+ * package's near-zero-RPC design.
  */
 export function createEvmRpcReader(rpcUrls: string | string[]): EvmChainReader {
   const urls = Array.isArray(rpcUrls) ? rpcUrls : [rpcUrls];
   const transport =
-    urls.length > 1
-      ? fallback(
-          urls.map((url) => http(url)),
-          { rank: { interval: 60_000, sampleCount: 3, timeout: 1_000 } },
-        )
-      : http(urls[0]);
+    urls.length > 1 ? fallback(urls.map((url) => http(url))) : http(urls[0]);
   const client = createPublicClient({ transport });
   return evmReaderFromClient(client as unknown as EvmLogClient);
 }
