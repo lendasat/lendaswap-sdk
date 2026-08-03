@@ -34,19 +34,19 @@ describe("htlcFactsFromEsploraTxs", () => {
     });
   });
 
-  it("never accepts an RBF-signaling funding at 0-conf (BIP-125)", () => {
+  it("accepts an RBF-signaling funding at 0-conf too (funder is trusted)", () => {
+    // 0-conf inherently trusts the funder not to double-spend; RBF signalling
+    // doesn't change that (full-RBF miners replace non-signalling txs anyway),
+    // so it isn't a separate gate. Use minConfirmations >= 1 to not trust.
     const rbf = fundingTx(false);
     rbf.vin[0].sequence = 0xfffffffd; // < 0xfffffffe ⟹ replaceable
     expect(htlcFactsFromEsploraTxs([rbf], ADDR)).toEqual({
-      funding: "mempool",
+      funding: "confirmed",
       fundedSats: 5000,
     });
-    // Once confirmed, RBF signaling no longer matters.
-    const rbfConfirmed = fundingTx(true);
-    rbfConfirmed.vin[0].sequence = 0xfffffffd;
-    expect(htlcFactsFromEsploraTxs([rbfConfirmed], ADDR).funding).toBe(
-      "confirmed",
-    );
+    expect(
+      htlcFactsFromEsploraTxs([rbf], ADDR, { minConfirmations: 1 }).funding,
+    ).toBe("mempool");
   });
 
   it("minConfirmations: 1 restores the strict wait-for-a-block behavior", () => {

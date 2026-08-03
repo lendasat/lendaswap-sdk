@@ -28,12 +28,12 @@ trustless refund watch.
   key hashes amount/token/addresses/timelock). Anything it can't prove is
   classified from a single batched `eth_getLogs` per chain, lower-bounded
   near the swaps' creation blocks.
-- **Bitcoin 0-conf by default.** A Bitcoin funding tx observes as
-  `confirmed` as soon as it hits the mempool, unless it signals RBF
-  (BIP-125) — a replaceable funding stays `mempool` until mined, since
-  claiming reveals the preimage against it.
-  `ClientBuilder.withBitcoinMinConfirmations(n)` restores strict block-depth
-  policies.
+- **Bitcoin 0-conf by default.** A Bitcoin funding tx observes as `confirmed`
+  as soon as it hits the mempool, so an evm→bitcoin swap claims immediately
+  instead of waiting ~10min for a block. This trusts the funder not to
+  double-spend the funding after the claim publishes the preimage.
+  `ClientBuilder.withBitcoinMinConfirmations(n)` restores block-depth policies
+  for callers who don't want that assumption.
 - **Lifecycle fixes.** `startTracking()` is safe to call concurrently
   (single-flight); swaps that settle while the app is closed persist their
   final status to storage so later sessions skip them; a `pending` swap that

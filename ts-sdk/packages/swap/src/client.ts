@@ -69,7 +69,7 @@ type TrackingConfig = {
   /**
    * Confirmations a Bitcoin funding tx needs before it observes as
    * `confirmed` (gating e.g. the evm→bitcoin claim). Default `0`: accept
-   * 0-conf unless the funding signals RBF (BIP-125). `1` = wait for a block.
+   * 0-conf, trusting the funder not to double-spend. `1` = wait for a block.
    */
   bitcoinMinConfirmations?: number;
   /**
@@ -1001,10 +1001,11 @@ export class ClientBuilder {
 
   /**
    * Confirmations a Bitcoin funding tx needs before it observes as `confirmed`
-   * (gating e.g. the evm→bitcoin claim). Default `0`: accept an unconfirmed
-   * funding unless it signals RBF (BIP-125) — a replaceable funding stays
-   * unobserved-as-funded until it confirms, because claiming reveals the
-   * preimage against it. Set `1` (or more) for strict block-depth policies.
+   * (gating e.g. the evm→bitcoin claim). Default `0`: claim as soon as the
+   * funding hits the mempool, which TRUSTS the funder not to double-spend it
+   * (claiming publishes the preimage, so a funder that then replaced its
+   * funding could take both legs). Set `1` (or more) for a block-depth policy
+   * that doesn't rely on the funder's good behaviour.
    */
   withBitcoinMinConfirmations(minConfirmations: number): this {
     this.#bitcoinMinConfirmations = minConfirmations;

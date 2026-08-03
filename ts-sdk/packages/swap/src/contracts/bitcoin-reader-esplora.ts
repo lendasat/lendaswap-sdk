@@ -16,7 +16,6 @@ type EsploraTx = {
   vin: Array<{
     witness?: string[];
     prevout?: { scriptpubkey_address?: string } | null;
-    sequence?: number;
   }>;
   vout: Array<{ scriptpubkey_address?: string; value?: number }>;
   status?: { confirmed?: boolean; block_height?: number };
@@ -25,21 +24,18 @@ type EsploraTx = {
 /**
  * When a funding tx counts as `confirmed` for observation purposes.
  *
- * `minConfirmations: 0` (the default) accepts an UNCONFIRMED funding — with one
- * carve-out: a funding that signals RBF (BIP-125) stays `mempool` until it
- * confirms, because a replaceable funding could be double-spent after the
- * claim has already revealed the preimage in the mempool. `1` restores the
- * strict wait-for-a-block behavior; higher values require the corresponding
- * depth (the reader fetches the tip height to compute it).
+ * `minConfirmations: 0` (the default) accepts an UNCONFIRMED funding, so a swap
+ * claims as soon as the funding hits the mempool instead of waiting ~10min for
+ * a block. This TRUSTS the funder not to double-spend: claiming publishes the
+ * preimage, so a funder who then replaces its funding tx could take both legs.
+ * Our own server therefore broadcasts HTLC fundings without signalling RBF.
+ * Note that a non-signalling tx is still replaceable by full-RBF miners — set
+ * `1` (or more) for a policy that doesn't rely on the funder's good behaviour;
+ * values above 1 make the reader fetch the tip height to compute depth.
  */
 export type BitcoinConfirmationPolicy = {
   minConfirmations?: number;
 };
-
-/** BIP-125: a tx signals replaceability iff any input's nSequence < 0xfffffffe. */
-function signalsRbf(tx: EsploraTx): boolean {
-  return tx.vin.some((vin) => (vin.sequence ?? 0xffffffff) < 0xfffffffe);
-}
 
 /**
  * Reduce an address's esplora tx history to HTLC facts. If a tx spends an output
@@ -79,7 +75,7 @@ export function htlcFactsFromEsploraTxs(
           funding.status.block_height !== undefined &&
           opts.tipHeight - funding.status.block_height + 1 >= minConf);
     } else {
-      deepEnough = minConf === 0 && !signalsRbf(funding);
+      deepEnough = minConf === 0;
     }
     return {
       funding: deepEnough ? "confirmed" : "mempool",

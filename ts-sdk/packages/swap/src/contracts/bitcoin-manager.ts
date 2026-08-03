@@ -27,9 +27,9 @@ export type BitcoinCreateConfig = {
   chainTime?: () => Promise<number>;
   /**
    * Confirmations a funding tx needs before it observes as `confirmed`.
-   * Default `0`: accept an unconfirmed funding unless it signals RBF
-   * (BIP-125) — a replaceable funding stays `mempool` until it confirms,
-   * since the claim reveals the preimage against it. `1` = wait for a block.
+   * Default `0`: accept an unconfirmed funding, trusting the funder not to
+   * double-spend it (the claim reveals the preimage against it). `1` = wait
+   * for a block.
    */
   minConfirmations?: number;
 };
