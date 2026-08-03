@@ -6,8 +6,7 @@ Chain-derived swap tracking: richer actions, hint-driven monitoring, and a
 trustless refund watch.
 
 - **Typed action semantics.** `WaitAction` gains `waitingOn`
-  (`"client_payment" | "client_funding_confirmation" | "server_funding" |
-  "claim_confirmation" | "refund_timelock"`) and terminal `NoneAction` gains
+  (`"client_payment" | "client_funding_confirmation" | "server_funding" | "claim_confirmation" | "refund_timelock"`) and terminal `NoneAction` gains
   `outcome` (`"completed" | "refunded" | "expired"`), so a consumer can pick
   the right surface by switching on typed fields. Tracker emissions also
   carry `observations` — the raw chain facts (is each HTLC leg funded/spent)
