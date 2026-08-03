@@ -10,6 +10,7 @@ import type {
   LightningToEvmSwapResponse,
 } from "../api/client.js";
 import { buildRedeemDigest, signEvmDigest } from "../evm/index.js";
+import { CLIENT_AGENT, SATORA_SERVER_VERSION } from "../version.js";
 import type { ClaimGaslessResult } from "./types.js";
 
 /** Swap types that support gasless claiming */
@@ -117,7 +118,11 @@ export async function claimViaGasless(
   // Send to server with DEX calldata if applicable
   const response = await fetch(`${baseUrl}/swap/${swap.id}/claim-gasless`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Lendaswap-Client": CLIENT_AGENT,
+      "x-satora-server-version": SATORA_SERVER_VERSION,
+    },
     body: JSON.stringify({
       secret: secretHex,
       destination,

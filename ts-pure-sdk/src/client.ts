@@ -175,6 +175,7 @@ import {
   type WireSwapPairsResponse,
 } from "./types/index.js";
 import { USDT0_ADDRESSES } from "./usdt0-bridge/constants.js";
+import { CLIENT_AGENT, SATORA_SERVER_VERSION } from "./version.js";
 import {
   createSwapStatusWatcher,
   type SwapStatusHandler,
@@ -991,6 +992,15 @@ export class Client {
       logger: config.logger,
       logLevel: config.logLevel,
     });
+  }
+
+  #apiHeaders(extra?: Record<string, string>): Record<string, string> {
+    return {
+      "X-Lendaswap-Client": CLIENT_AGENT,
+      "x-satora-server-version": SATORA_SERVER_VERSION,
+      ...(this.#config.defaultHeaders ?? {}),
+      ...(extra ?? {}),
+    };
   }
 
   /**
@@ -5335,7 +5345,7 @@ export class Client {
     const baseUrl = this.#config.baseUrl.replace(/\/$/, "");
     const url = `${baseUrl}/swap/${swapId}/swap-and-lock-calldata-permit2`;
 
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: this.#apiHeaders() });
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(
@@ -5505,7 +5515,7 @@ export class Client {
     const baseUrl = this.#config.baseUrl.replace(/\/$/, "");
     const url = `${baseUrl}/swap/${swapId}/swap-and-lock-calldata-permit2`;
 
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: this.#apiHeaders() });
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(
@@ -6235,7 +6245,7 @@ export class Client {
     const baseUrl = this.#config.baseUrl.replace(/\/$/, "");
     const url = `${baseUrl}/swap/${swapId}/swap-and-lock-calldata-permit2`;
 
-    const resp = await fetch(url);
+    const resp = await fetch(url, { headers: this.#apiHeaders() });
     if (!resp.ok) {
       const body = await resp.text();
       throw new Error(
@@ -6340,9 +6350,9 @@ export class Client {
     const fundUrl = `${baseUrl}/swap/${swapId}/fund-gasless`;
     const fundResp = await fetch(fundUrl, {
       method: "POST",
-      headers: {
+      headers: this.#apiHeaders({
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         permit2_nonce: nonce.toString(),
         permit2_deadline: Number(deadline),

@@ -44,6 +44,15 @@ This SDK supports the following swap directions:
 
 ## Usage
 
+### Compatibility headers
+
+SDK requests include:
+
+- `X-Lendaswap-Client: <sdk-name>/<sdk-version>`
+- `x-satora-server-version: <server-api-semver>`
+
+The server-version header declares the server/API version this SDK was built against. It is logged by the API for compatibility diagnostics and is not enforced yet.
+
 ### Setup
 
 ```typescript

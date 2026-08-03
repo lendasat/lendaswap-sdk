@@ -1,5 +1,11 @@
 # @lendasat/lendaswap-sdk-pure
 
+## Unreleased
+
+### Patch Changes
+
+- Add `x-satora-server-version` to SDK API requests. The header is the semver server/API version the SDK was built against.
+
 ## 0.5.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # @satora/swap
 
+## Unreleased
+
+### Patch Changes
+
+- Send `x-satora-server-version` on API requests via the underlying pure SDK. The header is the semver server/API version the SDK was built against.
+
 ## 0.2.0
 
 ### Minor Changes

@@ -32,6 +32,10 @@ Published as `@lendasat/lendaswap-sdk-pure`. **Still fully supported and
 working** — `@satora/swap` wraps it — but new code should prefer `@satora/swap`,
 where new features land. Existing integrations do not need to migrate urgently.
 
+## Compatibility headers
+
+SDK HTTP clients send `X-Lendaswap-Client: <sdk-name>/<semver>` and `x-satora-server-version: <server-api-semver>` on API requests. The server-version header identifies the server/API version the SDK was built against; the backend logs it for compatibility diagnostics and does not enforce it yet.
+
 ## Building
 
 This project uses [Just](https://github.com/casey/just) as a command runner.

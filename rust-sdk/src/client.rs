@@ -53,6 +53,10 @@ pub const DEFAULT_BASE_URL: &str = "https://api.satora.io";
 /// staying well under any HTTP / API rate limit a user could hit
 /// during one swap creation.
 const MAX_KEY_INDEX_GRIND_ATTEMPTS: u32 = 1000;
+const CLIENT_AGENT_HEADER: &str = "X-Lendaswap-Client";
+const SATORA_SERVER_VERSION_HEADER: &str = "x-satora-server-version";
+const CLIENT_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+const SATORA_SERVER_VERSION: &str = "0.2.25";
 
 /// Detect the backend's "this preimage hash already exists" rejection.
 /// Anchored on HTTP 409 + a substring match (case-insensitive) on
@@ -149,7 +153,11 @@ impl Client {
     pub async fn send<E: Endpoint>(&self, req: E) -> Result<E::Response> {
         let url = self.url(E::PATH)?;
         tracing::debug!(%url, "sending request");
-        let builder = self.http.request(E::METHOD, url);
+        let builder = self
+            .http
+            .request(E::METHOD, url)
+            .header(CLIENT_AGENT_HEADER, CLIENT_AGENT)
+            .header(SATORA_SERVER_VERSION_HEADER, SATORA_SERVER_VERSION);
         let builder = attach_payload(builder, &req, E::PAYLOAD);
         let resp = builder.send().await?;
         tracing::debug!(status = %resp.status(), "response received");
@@ -165,7 +173,13 @@ impl Client {
     pub async fn health(&self) -> Result<String> {
         let url = self.url("health")?;
         tracing::debug!(%url, "sending health probe");
-        let resp = self.http.get(url).send().await?;
+        let resp = self
+            .http
+            .get(url)
+            .header(CLIENT_AGENT_HEADER, CLIENT_AGENT)
+            .header(SATORA_SERVER_VERSION_HEADER, SATORA_SERVER_VERSION)
+            .send()
+            .await?;
         tracing::debug!(status = %resp.status(), "response received");
         let resp = check_status(resp).await?;
         Ok(resp.text().await?)

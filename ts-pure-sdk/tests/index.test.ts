@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { SDK_COMMIT_HASH, SDK_VERSION } from "../src/index.js";
+import {
+  SATORA_SERVER_VERSION,
+  SDK_COMMIT_HASH,
+  SDK_VERSION,
+} from "../src/index.js";
 
 describe("ts-pure-sdk", () => {
   it("exports a semver SDK_VERSION", () => {
@@ -9,5 +13,9 @@ describe("ts-pure-sdk", () => {
   it("exports a SDK_COMMIT_HASH string", () => {
     expect(typeof SDK_COMMIT_HASH).toBe("string");
     expect(SDK_COMMIT_HASH.length).toBeGreaterThan(0);
+  });
+
+  it("exports a semver SATORA_SERVER_VERSION", () => {
+    expect(SATORA_SERVER_VERSION).toMatch(/^\d+\.\d+\.\d+/);
   });
 });

@@ -16,6 +16,10 @@ New code should import `@satora/swap`.
 npm install @satora/swap
 ```
 
+## Compatibility headers
+
+API requests include `X-Lendaswap-Client: <sdk-name>/<semver>` and `x-satora-server-version: <server-api-semver>`. The server-version header declares the server/API version this SDK was built against; the API logs it for diagnostics and does not enforce compatibility yet.
+
 ## Supported swaps
 
 | Direction | Source                      | Target                      |

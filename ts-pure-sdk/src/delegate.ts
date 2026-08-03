@@ -46,6 +46,7 @@ import {
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   StrictVhtlcScript,
 } from "./strict-vhtlc.js";
+import { CLIENT_AGENT, SATORA_SERVER_VERSION } from "./version.js";
 
 function secondsToTimelock(
   seconds: number,
@@ -140,7 +141,12 @@ export async function fetchCosignerPk(
   lendaswapApiUrl: string,
 ): Promise<string> {
   const url = `${lendaswapApiUrl.replace(/\/$/, "")}/api/delegate/cosigner-pk`;
-  const res = await fetch(url);
+  const res = await fetch(url, {
+    headers: {
+      "X-Lendaswap-Client": CLIENT_AGENT,
+      "x-satora-server-version": SATORA_SERVER_VERSION,
+    },
+  });
   if (!res.ok) {
     throw new Error(
       `Failed to fetch cosigner pk: ${res.status} ${await res.text()}`,
@@ -456,7 +462,11 @@ async function settleDelegate(
   const settleUrl = `${lendaswapApiUrl.replace(/\/$/, "")}/api/delegate/settle`;
   const settleRes = await fetch(settleUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Lendaswap-Client": CLIENT_AGENT,
+      "x-satora-server-version": SATORA_SERVER_VERSION,
+    },
     body: JSON.stringify({
       intent_proof: intentProofBase64,
       intent_message: intentMessageJson,

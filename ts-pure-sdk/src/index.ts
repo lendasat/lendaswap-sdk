@@ -346,6 +346,7 @@ export {
 // Version metadata, generated from package.json by scripts/sync-version.mjs.
 export {
   CLIENT_AGENT,
+  SATORA_SERVER_VERSION,
   SDK_COMMIT_HASH,
   SDK_NAME,
   SDK_VERSION,
