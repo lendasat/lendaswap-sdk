@@ -33,6 +33,12 @@ export interface WorkerHintSource {
   subscribe(swapIds: string[]): void;
   unsubscribe(swapIds: string[]): void;
   onStatus(cb: (update: { swapId: string }) => void): () => void;
+  /**
+   * Optional: fires when the feed comes back up after an outage, during which
+   * pushed transitions were lost for good. The worker answers by re-verifying
+   * every tracked swap against the chain.
+   */
+  onReconnect?(cb: () => void): () => void;
 }
 
 /** Backoff policy for retrying a failed auto-claim. */
@@ -112,6 +118,17 @@ export class SwapWorker {
         });
       }),
     );
+    // Hints were dead while the feed was down and pushed transitions are lost
+    // for good — anything may have happened, including funding an `absent`
+    // client leg, the one state nothing else re-reads (it is outside the
+    // tracker's at-risk cadence). The server's resubscribe snapshot usually
+    // re-triggers applyHint for subscribed ids, but this sweep is the
+    // client-side guarantee: it doesn't depend on the server sending one, and
+    // it also covers over-cap queued ids that never get hints.
+    if (this.#hintSource.onReconnect)
+      this.#unsubs.push(
+        this.#hintSource.onReconnect(() => this.#reverifyAllTracked()),
+      );
     this.#hintSource.start();
 
     this.#unsubs.push(
@@ -130,6 +147,18 @@ export class SwapWorker {
     for (const { timer } of this.#retries.values()) clearTimeout(timer);
     this.#retries.clear();
     this.#executing.clear();
+  }
+
+  /** Chain-reconcile every tracked swap (the post-outage catch-up sweep). */
+  #reverifyAllTracked(): void {
+    for (const swapId of this.#tracker.trackedSwapIds()) {
+      void this.#tracker.applyHint(swapId).catch((error) => {
+        console.warn(
+          `SwapWorker: post-reconnect re-verify of ${swapId} failed:`,
+          error,
+        );
+      });
+    }
   }
 
   #onActions(swapId: string, actions: SwapActions): void {

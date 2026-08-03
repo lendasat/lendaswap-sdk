@@ -231,6 +231,43 @@ describe("WsStatusSource", () => {
     });
   });
 
+  it("does not emit onReconnect for the pristine first open", () => {
+    const { src, last } = build();
+    const reconnects = vi.fn();
+    src.onReconnect(reconnects);
+    src.start();
+    last().open();
+    expect(reconnects).not.toHaveBeenCalled();
+  });
+
+  it("emits onReconnect when the socket comes back after a drop", () => {
+    vi.useFakeTimers();
+    const { src, last } = build();
+    const reconnects = vi.fn();
+    src.onReconnect(reconnects);
+    src.start();
+    last().open();
+
+    last().onclose?.(); // socket drops — hints lost until it's back
+    vi.advanceTimersByTime(10);
+    last().open();
+    expect(reconnects).toHaveBeenCalledTimes(1);
+  });
+
+  it("a retried first connect counts as a reconnect (hints were dead since start)", () => {
+    vi.useFakeTimers();
+    const { src, sockets, last } = build();
+    const reconnects = vi.fn();
+    src.onReconnect(reconnects);
+    src.start();
+
+    last().onclose?.(); // first connect fails before ever opening
+    vi.advanceTimersByTime(10);
+    expect(sockets.length).toBe(2);
+    last().open();
+    expect(reconnects).toHaveBeenCalledTimes(1);
+  });
+
   it("stop() closes the socket and does not reconnect", () => {
     vi.useFakeTimers();
     const { src, sockets, last } = build();

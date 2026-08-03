@@ -62,15 +62,18 @@ export class WsStatusSource {
   /**
    * Ids we want but have no slot for. Promoted FIFO as slots free (the worker
    * unsubscribes each swap when it reaches a terminal action, so they do free).
-   * A pending swap is not broken, only slower: it gets no hints, so it advances
-   * on the tracker's chain poll instead.
+   * A queued swap is not broken, only slower: it gets no hints, so it advances
+   * on the tracker's at-risk reconciles and the worker's reconnect sweep.
    */
   readonly #pending = new Set<string>();
   readonly #listeners = new Set<(update: SwapStatusUpdate) => void>();
+  readonly #reconnectListeners = new Set<() => void>();
 
   #ws: WebSocketLike | undefined;
   #open = false;
   #stopped = false;
+  /** A connect failed or the socket dropped — the next open is a RE-connect. */
+  #hadDisruption = false;
   #backoffMs: number;
   #reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -103,6 +106,19 @@ export class WsStatusSource {
   onStatus(cb: (update: SwapStatusUpdate) => void): () => void {
     this.#listeners.add(cb);
     return () => this.#listeners.delete(cb);
+  }
+
+  /**
+   * Emit whenever the socket comes (back) up after a disruption — a drop, or a
+   * first connect that had to be retried. NOT emitted on a pristine first open:
+   * hints were never live before it, so there is no gap to recover from. While
+   * the socket was down, pushed transitions were lost for good (the server only
+   * snapshots on subscribe), so a consumer should re-verify its world against
+   * the chain on this signal.
+   */
+  onReconnect(cb: () => void): () => void {
+    this.#reconnectListeners.add(cb);
+    return () => this.#reconnectListeners.delete(cb);
   }
 
   /**
@@ -174,6 +190,10 @@ export class WsStatusSource {
       this.#open = true;
       if (this.#active.size > 0)
         this.#sendFrame("subscribe", [...this.#active]);
+      if (this.#hadDisruption) {
+        this.#hadDisruption = false;
+        for (const cb of this.#reconnectListeners) cb();
+      }
     };
     ws.onmessage = (event) => this.#handleMessage(event.data);
     ws.onclose = () => this.#onDisconnect();
@@ -183,6 +203,7 @@ export class WsStatusSource {
   #onDisconnect(): void {
     this.#open = false;
     this.#ws = undefined;
+    this.#hadDisruption = true;
     if (this.#stopped || this.#reconnectTimer) return;
     const delay = this.#backoffMs;
     this.#backoffMs = Math.min(this.#backoffMs * 2, this.#reconnectMaxMs);

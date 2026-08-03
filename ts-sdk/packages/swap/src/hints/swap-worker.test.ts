@@ -61,8 +61,18 @@ class FakeHintSource implements WorkerHintSource {
       this.#cb = undefined;
     };
   }
+  onReconnect(cb: () => void): () => void {
+    this.#reconnectCb = cb;
+    return () => {
+      this.#reconnectCb = undefined;
+    };
+  }
+  #reconnectCb: (() => void) | undefined;
   hint(swapId: string): void {
     this.#cb?.({ swapId });
+  }
+  reconnect(): void {
+    this.#reconnectCb?.();
   }
 }
 
@@ -152,6 +162,17 @@ describe("SwapWorker", () => {
       "s2",
       expect.objectContaining({ recommended: "refund_unilateral" }),
     );
+  });
+
+  it("re-verifies every tracked swap against chain when the hint feed reconnects", () => {
+    const { tracker, hintSource, worker } = setup();
+    tracker.ids = ["s1", "s2"];
+    worker.start();
+
+    // An outage loses pushed transitions for good — on reconnect the worker
+    // must not wait for hints (a funded-while-down `absent` leg never gets one).
+    hintSource.reconnect();
+    expect(tracker.applied).toEqual(["s1", "s2"]);
   });
 
   it("surfaces a refund instead of running it", () => {
