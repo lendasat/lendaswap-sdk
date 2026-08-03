@@ -105,6 +105,37 @@ describe("EvmContractManager", () => {
     ]);
   });
 
+  it("scans unknown-age refs separately so they don't drag the batch to genesis", async () => {
+    const m = build();
+    reader.blockTimeMs = 10_000_000;
+    reader.blockNumber = 50_000n;
+    const knownRef = {
+      ...ref,
+      preimageHash: "0xknown",
+      createdAtMs: 9_000_000,
+    } satisfies HtlcRef;
+    const legacyRef = { ...ref, preimageHash: "0xlegacy" } satisfies HtlcRef;
+    await m.register(knownRef);
+    await m.register(legacyRef);
+    await m.refresh();
+
+    // Two batches: the known-age ref keeps its near-creation lower bound; the
+    // legacy ref (no created_at) still gets the full-range scan it needs —
+    // bounding it by the other ref's estimate could miss its events entirely.
+    expect(reader.getHtlcEventsBatch).toHaveBeenCalledTimes(2);
+    const calls = reader.getHtlcEventsBatch.mock.calls;
+    const bounded = calls.find((c) =>
+      c[0].some((q) => q.preimageHash === "0xknown"),
+    );
+    const genesis = calls.find((c) =>
+      c[0].some((q) => q.preimageHash === "0xlegacy"),
+    );
+    expect(bounded?.[0]).toHaveLength(1);
+    expect(bounded?.[1]).toBeGreaterThan(0n);
+    expect(genesis?.[0]).toHaveLength(1);
+    expect(genesis?.[1]).toBe(0n);
+  });
+
   it("is invalid when the HTLC is funded below the expected amount", async () => {
     const m = build();
     reader.events = [{ kind: "created", amount: 999n, token: "0xwbtc" }];

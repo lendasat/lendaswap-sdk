@@ -273,15 +273,43 @@ export class EvmContractManager implements ContractManager {
     }
     if (needLogs.length === 0) return;
 
+    // Split by whether the creation time is known: known-age refs share a scan
+    // lower-bounded near the oldest creation block, unknown-age refs (legacy
+    // stored swaps without created_at) get their own full-range scan. One
+    // batch for both would force the WORSE bound on everyone — genesis for the
+    // whole batch, or (if unknowns were just filtered from the estimate)
+    // possibly missing an old ref's events and misreading it as never funded.
+    const known = needLogs.filter((r) => r.createdAtMs !== undefined);
+    const unknown = needLogs.filter((r) => r.createdAtMs === undefined);
+    await Promise.all(
+      (
+        [
+          [known, this.#estimateFromBlock(chainId, known)],
+          [unknown, 0n],
+        ] as const
+      )
+        .filter(([refs]) => refs.length > 0)
+        .map(([refs, fromBlock]) =>
+          this.#classifyFromLogs(reader, refs, fromBlock),
+        ),
+    );
+  }
+
+  /** Read the refs' lifecycle logs (from `fromBlock`) and set observations. */
+  async #classifyFromLogs(
+    reader: EvmChainReader,
+    refs: EvmRef[],
+    fromBlock: bigint,
+  ): Promise<void> {
     const events = await reader.getHtlcEventsBatch(
-      needLogs.map((r) => ({
+      refs.map((r) => ({
         htlc: r.htlc,
         preimageHash: r.preimageHash,
         claimAddress: r.claimAddress,
       })),
-      this.#estimateFromBlock(chainId, needLogs),
+      fromBlock,
     );
-    for (const ref of needLogs) {
+    for (const ref of refs) {
       const { observation, preimage } = evmObservation(
         events.get(htlcQueryKey(ref)) ?? [],
         { amount: ref.expectedAmount, token: ref.expectedToken },
