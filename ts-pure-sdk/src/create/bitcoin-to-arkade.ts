@@ -72,6 +72,8 @@ export async function createBitcoinToArkadeSwap(
       target_arkade_address: options.targetAddress,
       referral_code: options.referralCode,
       extra_fees: options.extraFees,
+      btc_htlc_script_version: 1,
+      arkade_htlc_script_version: 1,
     };
 
     const { data, error } = await ctx.apiClient.POST("/swap/bitcoin/arkade", {

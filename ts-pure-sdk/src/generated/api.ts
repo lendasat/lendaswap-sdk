@@ -1405,6 +1405,7 @@ export interface components {
             btc_hash_lock: string;
             /** @description On-chain Bitcoin HTLC P2WSH address (user sends BTC here) */
             btc_htlc_address: string;
+            btc_htlc_script_version?: number;
             /**
              * Format: int64
              * @description On-chain BTC refund locktime (unix timestamp)
@@ -1543,6 +1544,7 @@ export interface components {
             arkade_server_pk: string;
             /** @description Arkade VHTLC address */
             arkade_vhtlc_address: string;
+            arkade_htlc_script_version?: number;
             /**
              * Format: int64
              * @description Amount user must send in satoshis
@@ -2675,6 +2677,7 @@ export interface components {
             arkade_server_pk: string;
             /** @description Arkade VHTLC address (server creates, user claims) */
             arkade_vhtlc_address: string;
+            arkade_htlc_script_version?: number;
             /** @description Lightning invoice to pay */
             bolt11_invoice: string;
             /**

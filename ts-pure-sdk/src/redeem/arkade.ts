@@ -30,13 +30,16 @@ import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { base64, hex } from "@scure/base";
 import { SigHash } from "@scure/btc-signer";
-
 import {
   getNetworkHrp,
   getNetworkName,
   resolveArkadeServerUrlByName,
 } from "../arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "../logging.js";
+import {
+  ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+  StrictVhtlcScript,
+} from "../strict-vhtlc.js";
 
 /** Parameters needed to build an Arkade claim */
 export interface ArkadeClaimParams {
@@ -66,6 +69,8 @@ export interface ArkadeClaimParams {
   destinationAddress: string;
   /** Bitcoin network (mainnet, signet, etc.) */
   network: string;
+  /** Arkade HTLC script version. Defaults to legacy version 0. */
+  arkadeHtlcScriptVersion?: number;
   /** Arkade server URL (optional, uses default based on network) */
   arkadeServerUrl?: string;
   /** Optional logger sink. Silent by default. */
@@ -154,6 +159,7 @@ export async function buildArkadeClaim(
     unilateralRefundWithoutReceiverDelay,
     destinationAddress,
     network,
+    arkadeHtlcScriptVersion,
     arkadeServerUrl,
   } = params;
 
@@ -220,7 +226,7 @@ export async function buildArkadeClaim(
 
   // Construct VHTLC with the same parameters as the original swap
   // For claim: lendaswap is the SENDER, user is the RECEIVER
-  const vhtlc = new VHTLC.Script({
+  const vhtlcOptions = {
     sender: lendaswapPkBytes,
     receiver: userPkBytes,
     server: serverPkBytes,
@@ -231,7 +237,11 @@ export async function buildArkadeClaim(
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+  const vhtlc =
+    arkadeHtlcScriptVersion === ARKADE_HTLC_SCRIPT_VERSION_STRICT
+      ? new StrictVhtlcScript(vhtlcOptions)
+      : new VHTLC.Script(vhtlcOptions);
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);
@@ -395,6 +405,7 @@ export async function continueArkadeClaim(
     unilateralRefundWithoutReceiverDelay,
     // destinationAddress not needed — we continue an existing pending tx
     network,
+    arkadeHtlcScriptVersion,
     arkadeServerUrl,
   } = params;
 
@@ -446,7 +457,7 @@ export async function continueArkadeClaim(
 
   // Construct VHTLC with the same parameters as the original swap
   // For claim: lendaswap is the SENDER, user is the RECEIVER
-  const vhtlc = new VHTLC.Script({
+  const vhtlcOptions = {
     sender: lendaswapPkBytes,
     receiver: userPkBytes,
     server: serverPkBytes,
@@ -457,7 +468,11 @@ export async function continueArkadeClaim(
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+  const vhtlc =
+    arkadeHtlcScriptVersion === ARKADE_HTLC_SCRIPT_VERSION_STRICT
+      ? new StrictVhtlcScript(vhtlcOptions)
+      : new VHTLC.Script(vhtlcOptions);
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);

@@ -54,6 +54,7 @@ export async function createBitcoinToEvmSwap(
 
     const body = {
       hash_lock: hashLock,
+      btc_htlc_script_version: 1,
       refund_pk: refundPk,
       user_id: userId,
       claiming_address: claimingAddress,

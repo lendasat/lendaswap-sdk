@@ -46,6 +46,8 @@ export interface OnchainClaimParams {
   feeRateSatPerVb: number;
   /** Bitcoin network */
   network: BitcoinNetwork;
+  /** Bitcoin HTLC script version. Defaults to legacy version 0. */
+  btcHtlcScriptVersion?: number;
 }
 
 /** Result of building a claim transaction */
@@ -86,6 +88,8 @@ export interface OnchainRefundParams {
   feeRateSatPerVb: number;
   /** Bitcoin network */
   network: BitcoinNetwork;
+  /** Bitcoin HTLC script version. Defaults to legacy version 0. */
+  btcHtlcScriptVersion?: number;
 }
 
 /** Result of building a refund transaction */
@@ -152,14 +156,20 @@ function getNetwork(
 function buildHashlockScript(
   hashLock: Uint8Array,
   serverPubKey: Uint8Array,
+  btcHtlcScriptVersion = 0,
 ): Uint8Array {
-  return btc.Script.encode([
-    serverPubKey,
-    "CHECKSIGVERIFY",
-    "HASH160",
-    hashLock,
-    "EQUAL",
-  ]);
+  const script = [serverPubKey, "CHECKSIGVERIFY"] as Parameters<
+    typeof btc.Script.encode
+  >[0];
+  if (btcHtlcScriptVersion === 1) {
+    script.push("SIZE", 32, "EQUALVERIFY");
+  } else if (btcHtlcScriptVersion !== 0) {
+    throw new Error(
+      `Unsupported BTC HTLC script version: ${btcHtlcScriptVersion}`,
+    );
+  }
+  script.push("HASH160", hashLock, "EQUAL");
+  return btc.Script.encode(script);
 }
 
 /**
@@ -202,12 +212,17 @@ function buildHtlcTaprootInfo(
   serverPubKey: Uint8Array,
   userPubKey: Uint8Array,
   refundLocktime: number,
+  btcHtlcScriptVersion = 0,
 ): {
   hashlockScript: Uint8Array;
   timelockScript: Uint8Array;
   p2tr: ReturnType<typeof btc.p2tr>;
 } {
-  const hashlockScript = buildHashlockScript(hashLock, serverPubKey);
+  const hashlockScript = buildHashlockScript(
+    hashLock,
+    serverPubKey,
+    btcHtlcScriptVersion,
+  );
   const timelockScript = buildTimelockScript(userPubKey, refundLocktime);
 
   // Build the taproot tree with two leaves
@@ -329,6 +344,7 @@ export function buildOnchainClaimTransaction(
     userClaimPkBytes,
     serverRefundPkBytes,
     refundLocktime,
+    params.btcHtlcScriptVersion,
   );
 
   // Calculate fee
@@ -502,6 +518,7 @@ export function buildOnchainRefundTransaction(
     serverPkBytes,
     userPkBytes,
     refundLocktime,
+    params.btcHtlcScriptVersion,
   );
 
   // Calculate fee

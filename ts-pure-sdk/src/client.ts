@@ -551,6 +551,7 @@ interface ArkadeVhtlcParams {
   network: string;
   preimage: string;
   preimageHash: string;
+  arkadeHtlcScriptVersion?: number;
 }
 
 type BaseUnitAmount = bigint;
@@ -2744,6 +2745,7 @@ export class Client {
     let unilateralRefundDelay: number;
     let unilateralRefundWithoutReceiverDelay: number;
     let network: string;
+    let arkadeHtlcScriptVersion: number | undefined;
 
     if (swap.direction === "btc_to_arkade") {
       const s = swap as BtcToArkadeSwapResponse & {
@@ -2758,6 +2760,7 @@ export class Client {
       unilateralRefundWithoutReceiverDelay =
         s.unilateral_refund_without_receiver_delay;
       network = s.network;
+      arkadeHtlcScriptVersion = s.arkade_htlc_script_version;
     } else if (swap.direction === "evm_to_arkade") {
       const s = swap as {
         sender_pk: string;
@@ -2768,6 +2771,7 @@ export class Client {
         unilateral_refund_delay: number;
         unilateral_refund_without_receiver_delay: number;
         network: string;
+        arkade_htlc_script_version?: number;
       };
       lendaswapPubKey = s.sender_pk;
       arkadeServerPubKey = s.arkade_server_pk;
@@ -2778,6 +2782,7 @@ export class Client {
       unilateralRefundWithoutReceiverDelay =
         s.unilateral_refund_without_receiver_delay;
       network = s.network;
+      arkadeHtlcScriptVersion = s.arkade_htlc_script_version;
     } else if (swap.direction === "lightning_to_arkade") {
       lendaswapPubKey = swap.sender_pk;
       arkadeServerPubKey = swap.arkade_server_pk;
@@ -2788,6 +2793,7 @@ export class Client {
       unilateralRefundWithoutReceiverDelay =
         swap.unilateral_refund_without_receiver_delay;
       network = swap.network;
+      arkadeHtlcScriptVersion = swap.arkade_htlc_script_version;
     } else {
       throw Error(`Unsupported direction for Arkade claim: ${swap.direction}`);
     }
@@ -2805,6 +2811,7 @@ export class Client {
       network,
       preimage: storedSwap.preimage,
       preimageHash: storedSwap.preimageHash,
+      arkadeHtlcScriptVersion,
     };
   }
 
@@ -3141,6 +3148,7 @@ export class Client {
         destinationAddress,
         feeRateSatPerVb: options?.feeRateSatPerVb ?? 2,
         network,
+        btcHtlcScriptVersion: (swap as { btc_htlc_script_version?: number }).btc_htlc_script_version,
       });
 
       // Broadcast, retrying transient failures (e.g. the broadcast node has
@@ -3380,6 +3388,7 @@ export class Client {
         destinationAddress: options.destinationAddress,
         feeRateSatPerVb: options.feeRateSatPerVb ?? 2,
         network,
+        btcHtlcScriptVersion: (swap as { btc_htlc_script_version?: number }).btc_htlc_script_version,
       });
 
       // If dry run, just return the transaction without broadcasting

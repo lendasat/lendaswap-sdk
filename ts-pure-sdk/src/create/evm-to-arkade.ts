@@ -74,6 +74,7 @@ export async function createEvmToArkadeSwapGeneric(
         referral_code: options.referralCode,
         extra_fees: options.extraFees,
         gasless: options.gasless ?? false,
+        arkade_htlc_script_version: 1,
         bridge_source_chain: options.inboundBridgeParams?.sourceChain,
         bridge_source_token_address:
           options.inboundBridgeParams?.sourceTokenAddress,

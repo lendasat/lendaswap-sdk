@@ -58,6 +58,7 @@ export async function createEvmToBitcoinSwap(
     const { data, error } = await ctx.apiClient.POST("/swap/evm/bitcoin", {
       body: {
         hash_lock: hashLock,
+        btc_htlc_script_version: 1,
         claim_pk: claimPk,
         user_id: userId,
         token_address: options.tokenAddress,
