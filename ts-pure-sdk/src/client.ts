@@ -3069,6 +3069,9 @@ export class Client {
         ? serverRefundPkRaw.slice(2)
         : serverRefundPkRaw;
 
+    const btcHtlcScriptVersion = (swap as { btc_htlc_script_version?: number })
+      .btc_htlc_script_version;
+
     // Verify HTLC address matches our reconstruction
     const addressMatches = verifyHtlcAddress(
       btcHtlcAddress,
@@ -3077,6 +3080,7 @@ export class Client {
       serverRefundPk, // refunder = server (goes in timelock position)
       btcRefundLocktime,
       network,
+      btcHtlcScriptVersion,
     );
 
     if (!addressMatches) {
@@ -3148,7 +3152,7 @@ export class Client {
         destinationAddress,
         feeRateSatPerVb: options?.feeRateSatPerVb ?? 2,
         network,
-        btcHtlcScriptVersion: (swap as { btc_htlc_script_version?: number }).btc_htlc_script_version,
+        btcHtlcScriptVersion,
       });
 
       // Broadcast, retrying transient failures (e.g. the broadcast node has
@@ -3309,6 +3313,9 @@ export class Client {
         ? serverPubKeyFull.slice(2)
         : serverPubKeyFull;
 
+    const btcHtlcScriptVersion = (swap as { btc_htlc_script_version?: number })
+      .btc_htlc_script_version;
+
     // Verify that our computed HTLC address matches the server's address
     const addressMatches = verifyHtlcAddress(
       btcHtlcAddress,
@@ -3317,6 +3324,7 @@ export class Client {
       userPubKey,
       btcRefundLocktime,
       network,
+      btcHtlcScriptVersion,
     );
 
     if (!addressMatches) {
@@ -3388,7 +3396,7 @@ export class Client {
         destinationAddress: options.destinationAddress,
         feeRateSatPerVb: options.feeRateSatPerVb ?? 2,
         network,
-        btcHtlcScriptVersion: (swap as { btc_htlc_script_version?: number }).btc_htlc_script_version,
+        btcHtlcScriptVersion,
       });
 
       // If dry run, just return the transaction without broadcasting

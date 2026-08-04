@@ -602,6 +602,7 @@ export function buildOnchainRefundTransaction(
  * @param userPubKey - User's x-only public key (32-byte hex)
  * @param refundLocktime - Refund locktime (unix timestamp)
  * @param network - Bitcoin network
+ * @param btcHtlcScriptVersion - Bitcoin HTLC script version. Defaults to legacy version 0.
  * @returns true if the address matches, false otherwise
  */
 export function verifyHtlcAddress(
@@ -611,6 +612,7 @@ export function verifyHtlcAddress(
   userPubKey: string,
   refundLocktime: number,
   network: BitcoinNetwork,
+  btcHtlcScriptVersion = 0,
 ): boolean {
   const hashLockBytes = hex.decode(hashLock);
   const serverPkBytes = hex.decode(serverPubKey);
@@ -621,6 +623,7 @@ export function verifyHtlcAddress(
     serverPkBytes,
     userPkBytes,
     refundLocktime,
+    btcHtlcScriptVersion,
   );
 
   const networkConfig = getNetwork(network);
