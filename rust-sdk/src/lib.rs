@@ -31,6 +31,7 @@ mod wire;
 // alloy node RPC) doesn't panic on rustls 0.23's missing-provider
 // guard.
 mod crypto_init;
+mod strict_vhtlc;
 
 pub use client::Client;
 pub use client::ClientBuilder;

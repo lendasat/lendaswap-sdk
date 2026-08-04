@@ -25,6 +25,10 @@
 use crate::client::Client;
 use crate::error::Error;
 use crate::error::Result;
+use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_LEGACY;
+use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
+use crate::strict_vhtlc::StrictVhtlcOptions;
+use crate::strict_vhtlc::StrictVhtlcScript;
 use ark_bdk_wallet::Wallet;
 use ark_rs::client::Blockchain;
 use ark_rs::client::BoltzReferralId;
@@ -69,6 +73,7 @@ use bitcoin::secp256k1;
 use bitcoin::secp256k1::Keypair;
 use bitcoin::secp256k1::schnorr;
 use bitcoin::taproot::LeafVersion;
+use bitcoin::taproot::TaprootSpendInfo;
 use esplora_client::OutputStatus;
 use std::io::Write;
 use std::path::PathBuf;
@@ -789,6 +794,7 @@ pub(crate) struct VhtlcClaimContext {
     pub receiver_pk: String,
     pub arkade_server_pk: String,
     pub vhtlc_refund_locktime: u64,
+    pub arkade_htlc_script_version: i64,
     pub unilateral_claim_delay: u64,
     pub unilateral_refund_delay: u64,
     pub unilateral_refund_without_receiver_delay: u64,
@@ -805,6 +811,7 @@ impl VhtlcClaimContext {
                 receiver_pk: r.receiver_pk,
                 arkade_server_pk: r.arkade_server_pk,
                 vhtlc_refund_locktime: r.vhtlc_refund_locktime,
+                arkade_htlc_script_version: r.arkade_htlc_script_version,
                 unilateral_claim_delay: r.unilateral_claim_delay,
                 unilateral_refund_delay: r.unilateral_refund_delay,
                 unilateral_refund_without_receiver_delay: r
@@ -817,6 +824,7 @@ impl VhtlcClaimContext {
                 receiver_pk: r.receiver_pk,
                 arkade_server_pk: r.arkade_server_pk,
                 vhtlc_refund_locktime: r.vhtlc_refund_locktime,
+                arkade_htlc_script_version: r.arkade_htlc_script_version,
                 unilateral_claim_delay: r.unilateral_claim_delay,
                 unilateral_refund_delay: r.unilateral_refund_delay,
                 unilateral_refund_without_receiver_delay: r
@@ -837,11 +845,53 @@ impl VhtlcClaimContext {
     }
 }
 
+enum VersionedVhtlcScript {
+    Legacy(VhtlcScript),
+    Strict(StrictVhtlcScript),
+}
+
+impl VersionedVhtlcScript {
+    fn address(&self) -> ArkAddress {
+        match self {
+            Self::Legacy(v) => v.address(),
+            Self::Strict(v) => v.address(),
+        }
+    }
+
+    fn taproot_spend_info(&self) -> &TaprootSpendInfo {
+        match self {
+            Self::Legacy(v) => v.taproot_spend_info(),
+            Self::Strict(v) => v.taproot_spend_info(),
+        }
+    }
+
+    fn claim_script(&self) -> bitcoin::ScriptBuf {
+        match self {
+            Self::Legacy(v) => v.claim_script(),
+            Self::Strict(v) => v.claim_script(),
+        }
+    }
+
+    fn script_pubkey(&self) -> bitcoin::ScriptBuf {
+        match self {
+            Self::Legacy(v) => v.script_pubkey(),
+            Self::Strict(v) => v.script_pubkey(),
+        }
+    }
+
+    fn tapscripts(self) -> Vec<bitcoin::ScriptBuf> {
+        match self {
+            Self::Legacy(v) => v.tapscripts(),
+            Self::Strict(v) => v.tapscripts(),
+        }
+    }
+}
+
 fn build_vhtlc_script(
     ctx: &VhtlcClaimContext,
     swap_params: &crate::signer::SwapParams,
     network: Network,
-) -> Result<VhtlcScript> {
+) -> Result<VersionedVhtlcScript> {
     let sender = parse_xonly_pubkey(&ctx.sender_pk, "sender_pk")?;
     let receiver = parse_xonly_pubkey(&ctx.receiver_pk, "receiver_pk")?;
     let server = parse_xonly_pubkey(&ctx.arkade_server_pk, "arkade_server_pk")?;
@@ -880,18 +930,38 @@ fn build_vhtlc_script(
         parse_sequence_number(ctx.unilateral_refund_without_receiver_delay as i64)
             .map_err(|e| Error::Decode(format!("unilateral_refund_without_receiver_delay: {e}")))?;
 
-    VhtlcScript::new(
-        VhtlcOptions {
-            sender,
-            receiver,
-            server,
-            preimage_hash,
-            refund_locktime,
-            unilateral_claim_delay,
-            unilateral_refund_delay,
-            unilateral_refund_without_receiver_delay,
-        },
-        network,
-    )
-    .map_err(|e| Error::Decode(format!("VhtlcScript::new: {e}")))
+    match ctx.arkade_htlc_script_version {
+        ARKADE_HTLC_SCRIPT_VERSION_LEGACY => VhtlcScript::new(
+            VhtlcOptions {
+                sender,
+                receiver,
+                server,
+                preimage_hash,
+                refund_locktime,
+                unilateral_claim_delay,
+                unilateral_refund_delay,
+                unilateral_refund_without_receiver_delay,
+            },
+            network,
+        )
+        .map(VersionedVhtlcScript::Legacy)
+        .map_err(|e| Error::Decode(format!("VhtlcScript::new: {e}"))),
+        ARKADE_HTLC_SCRIPT_VERSION_STRICT => StrictVhtlcScript::new(
+            StrictVhtlcOptions {
+                sender,
+                receiver,
+                server,
+                preimage_hash,
+                refund_locktime,
+                unilateral_claim_delay,
+                unilateral_refund_delay,
+                unilateral_refund_without_receiver_delay,
+            },
+            network,
+        )
+        .map(VersionedVhtlcScript::Strict),
+        other => Err(Error::InvalidSwap(format!(
+            "unsupported Arkade HTLC script version: {other}"
+        ))),
+    }
 }

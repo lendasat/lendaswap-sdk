@@ -244,6 +244,7 @@ fn evm_to_arkade_swap_response_matches_spec() {
         receiver_pk: "02receiver".to_string(),
         arkade_server_pk: "02server".to_string(),
         vhtlc_refund_locktime: 1_000_000,
+        arkade_htlc_script_version: 1,
         unilateral_claim_delay: 144,
         unilateral_refund_delay: 288,
         unilateral_refund_without_receiver_delay: 432,
