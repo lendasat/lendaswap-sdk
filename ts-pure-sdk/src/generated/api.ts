@@ -1127,6 +1127,8 @@ export interface components {
         };
         /** @description Arkade → EVM swap response */
         ArkadeToEvmSwapResponse: {
+            /** Format: int64 */
+            arkade_htlc_script_version: number;
             arkade_server_pk: string;
             /** @description CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap. */
             bridge_target_chain?: string | null;
@@ -1284,6 +1286,16 @@ export interface components {
             vhtlc_refund_locktime: number;
         };
         BitcoinToArkadeSwapRequest: {
+            /**
+             * Format: int64
+             * @description Arkade VHTLC script version. New swaps must use version 1.
+             */
+            arkade_htlc_script_version: number;
+            /**
+             * Format: int64
+             * @description Bitcoin HTLC script version. New swaps must use version 1.
+             */
+            btc_htlc_script_version: number;
             /** @description User's claim public key for the Arkade VHTLC */
             claim_pk: string;
             /**
@@ -1352,6 +1364,11 @@ export interface components {
             bridge_target_chain?: string | null;
             /** @description Optional: USDC address on the bridge destination chain. */
             bridge_target_token_address?: string | null;
+            /**
+             * Format: int64
+             * @description Bitcoin HTLC script version. New swaps must use version 1.
+             */
+            btc_htlc_script_version: number;
             /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
             claiming_address: string;
             /**
@@ -1405,7 +1422,8 @@ export interface components {
             btc_hash_lock: string;
             /** @description On-chain Bitcoin HTLC P2WSH address (user sends BTC here) */
             btc_htlc_address: string;
-            btc_htlc_script_version?: number;
+            /** Format: int64 */
+            btc_htlc_script_version: number;
             /**
              * Format: int64
              * @description On-chain BTC refund locktime (unix timestamp)
@@ -1540,11 +1558,12 @@ export interface components {
             arkade_claim_txid?: string | null;
             /** @description Arkade VHTLC fund transaction ID */
             arkade_fund_txid?: string | null;
+            /** Format: int64 */
+            arkade_htlc_script_version: number;
             /** @description Arkade server's public key */
             arkade_server_pk: string;
             /** @description Arkade VHTLC address */
             arkade_vhtlc_address: string;
-            arkade_htlc_script_version?: number;
             /**
              * Format: int64
              * @description Amount user must send in satoshis
@@ -1557,6 +1576,8 @@ export interface components {
             btc_fund_txid?: string | null;
             /** @description On-chain Bitcoin HTLC P2WSH address (user sends BTC here) */
             btc_htlc_address: string;
+            /** Format: int64 */
+            btc_htlc_script_version: number;
             /**
              * Format: int64
              * @description On-chain refund locktime (unix timestamp)
@@ -1881,10 +1902,20 @@ export interface components {
             cosigner_pk: string;
         };
         CreateVtxoSwapRequest: {
+            /**
+             * Format: int64
+             * @description Client Arkade HTLC script version. New swaps must use version 1.
+             */
+            client_arkade_htlc_script_version: number;
             /** @description Client's public key for the VHTLC */
             client_pk: string;
             /** @description SHA256(preimage) - client generates the secret */
             preimage_hash: string;
+            /**
+             * Format: int64
+             * @description Server Arkade HTLC script version. New swaps must use version 1.
+             */
+            server_arkade_htlc_script_version: number;
             /** @description User ID for recovery purposes */
             user_id: string;
             /** @description List of VTXO outpoints to refresh */
@@ -2240,6 +2271,11 @@ export interface components {
              */
             amount_out?: number | null;
             /**
+             * Format: int64
+             * @description Arkade HTLC script version. New swaps must use version 1.
+             */
+            arkade_htlc_script_version: number;
+            /**
              * @description Optional: CCTP bridge source chain (e.g., "Ethereum", "Optimism"). When set,
              *     the user's source USDC originates on this chain and hops through CCTPv2 to
              *     Arbitrum before the HTLC is created. The backend pads `deposit_amount` by
@@ -2278,6 +2314,8 @@ export interface components {
         };
         /** @description EVM → Arkade (generic) swap response */
         EvmToArkadeSwapResponse: {
+            /** Format: int64 */
+            arkade_htlc_script_version: number;
             arkade_server_pk: string;
             /**
              * @description CCTP bridge source chain. Set when the source USDC originated on
@@ -2356,6 +2394,11 @@ export interface components {
             bridge_source_chain?: string | null;
             /** @description Optional: USDC address on the bridge source chain. */
             bridge_source_token_address?: string | null;
+            /**
+             * Format: int64
+             * @description Bitcoin HTLC script version. New swaps must use version 1.
+             */
+            btc_htlc_script_version: number;
             /** @description User's BTC public key for claiming BTC from the on-chain Taproot HTLC. */
             claim_pk: string;
             /**
@@ -2404,6 +2447,8 @@ export interface components {
             btc_hash_lock: string;
             /** @description On-chain BTC Taproot HTLC address (server creates, user claims) */
             btc_htlc_address: string;
+            /** Format: int64 */
+            btc_htlc_script_version: number;
             /**
              * Format: int64
              * @description BTC HTLC refund locktime (unix timestamp)
@@ -2673,11 +2718,12 @@ export interface components {
             arkade_claim_txid?: string | null;
             /** @description Arkade VHTLC fund transaction ID */
             arkade_fund_txid?: string | null;
+            /** Format: int64 */
+            arkade_htlc_script_version: number;
             /** @description Arkade server's public key */
             arkade_server_pk: string;
             /** @description Arkade VHTLC address (server creates, user claims) */
             arkade_vhtlc_address: string;
-            arkade_htlc_script_version?: number;
             /** @description Lightning invoice to pay */
             bolt11_invoice: string;
             /**
@@ -3349,6 +3395,8 @@ export interface components {
         VtxoSwapResponse: {
             arkade_server_pk: string;
             /** Format: int64 */
+            client_arkade_htlc_script_version: number;
+            /** Format: int64 */
             client_fund_amount_sats: number;
             /** Format: int64 */
             client_locktime: number;
@@ -3374,6 +3422,8 @@ export interface components {
             id: string;
             network: string;
             preimage_hash: string;
+            /** Format: int64 */
+            server_arkade_htlc_script_version: number;
             /** Format: int64 */
             server_fund_amount_sats: number;
             /** Format: int64 */

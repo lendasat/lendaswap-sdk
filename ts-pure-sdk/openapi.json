@@ -6,7 +6,7 @@
     "license": {
       "name": ""
     },
-    "version": "0.2.49"
+    "version": "0.2.52"
   },
   "servers": [
     {
@@ -2457,12 +2457,17 @@
           "receiver_pk",
           "arkade_server_pk",
           "vhtlc_refund_locktime",
+          "arkade_htlc_script_version",
           "unilateral_claim_delay",
           "unilateral_refund_delay",
           "unilateral_refund_without_receiver_delay",
           "network"
         ],
         "properties": {
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
+          },
           "arkade_server_pk": {
             "type": "string"
           },
@@ -2781,9 +2786,21 @@
           "claim_pk",
           "refund_pk",
           "hash_lock",
+          "btc_htlc_script_version",
+          "arkade_htlc_script_version",
           "user_id"
         ],
         "properties": {
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Arkade VHTLC script version. New swaps must use version 1."
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bitcoin HTLC script version. New swaps must use version 1."
+          },
           "claim_pk": {
             "type": "string",
             "description": "User's claim public key for the Arkade VHTLC"
@@ -2830,6 +2847,7 @@
           "evm_chain_id",
           "token_address",
           "hash_lock",
+          "btc_htlc_script_version",
           "refund_pk",
           "user_id"
         ],
@@ -2857,6 +2875,11 @@
           "bridge_target_token_address": {
             "type": ["string", "null"],
             "description": "Optional: USDC address on the bridge destination chain."
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bitcoin HTLC script version. New swaps must use version 1."
           },
           "claiming_address": {
             "type": "string",
@@ -2916,6 +2939,7 @@
           "btc_hash_lock",
           "btc_server_pk",
           "btc_refund_locktime",
+          "btc_htlc_script_version",
           "network",
           "created_at",
           "chain",
@@ -2956,6 +2980,10 @@
           "btc_htlc_address": {
             "type": "string",
             "description": "On-chain Bitcoin HTLC P2WSH address (user sends BTC here)"
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "btc_refund_locktime": {
             "type": "integer",
@@ -3156,6 +3184,7 @@
           "fee_sats",
           "hash_lock",
           "btc_refund_locktime",
+          "btc_htlc_script_version",
           "arkade_vhtlc_address",
           "target_arkade_address",
           "network",
@@ -3163,6 +3192,7 @@
           "server_vhtlc_pk",
           "arkade_server_pk",
           "vhtlc_refund_locktime",
+          "arkade_htlc_script_version",
           "unilateral_claim_delay",
           "unilateral_refund_delay",
           "unilateral_refund_without_receiver_delay",
@@ -3179,6 +3209,10 @@
           "arkade_fund_txid": {
             "type": ["string", "null"],
             "description": "Arkade VHTLC fund transaction ID"
+          },
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "arkade_server_pk": {
             "type": "string",
@@ -3204,6 +3238,10 @@
           "btc_htlc_address": {
             "type": "string",
             "description": "On-chain Bitcoin HTLC P2WSH address (user sends BTC here)"
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "btc_refund_locktime": {
             "type": "integer",
@@ -3692,8 +3730,20 @@
       },
       "CreateVtxoSwapRequest": {
         "type": "object",
-        "required": ["vtxos", "preimage_hash", "client_pk", "user_id"],
+        "required": [
+          "vtxos",
+          "preimage_hash",
+          "client_arkade_htlc_script_version",
+          "server_arkade_htlc_script_version",
+          "client_pk",
+          "user_id"
+        ],
         "properties": {
+          "client_arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Client Arkade HTLC script version. New swaps must use version 1."
+          },
           "client_pk": {
             "type": "string",
             "description": "Client's public key for the VHTLC"
@@ -3701,6 +3751,11 @@
           "preimage_hash": {
             "type": "string",
             "description": "SHA256(preimage) - client generates the secret"
+          },
+          "server_arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Server Arkade HTLC script version. New swaps must use version 1."
           },
           "user_id": {
             "type": "string",
@@ -4138,6 +4193,7 @@
           "evm_chain_id",
           "token_address",
           "hash_lock",
+          "arkade_htlc_script_version",
           "receiver_pk",
           "user_address",
           "user_id"
@@ -4154,6 +4210,11 @@
             "format": "int64",
             "description": "Desired BTC output in sats (mutually exclusive with `amount_in`).",
             "minimum": 0
+          },
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Arkade HTLC script version. New swaps must use version 1."
           },
           "bridge_source_chain": {
             "type": ["string", "null"],
@@ -4235,6 +4296,7 @@
           "receiver_pk",
           "arkade_server_pk",
           "vhtlc_refund_locktime",
+          "arkade_htlc_script_version",
           "unilateral_claim_delay",
           "unilateral_refund_delay",
           "unilateral_refund_without_receiver_delay",
@@ -4242,6 +4304,10 @@
           "gasless"
         ],
         "properties": {
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
+          },
           "arkade_server_pk": {
             "type": "string"
           },
@@ -4362,6 +4428,7 @@
           "evm_chain_id",
           "token_address",
           "hash_lock",
+          "btc_htlc_script_version",
           "claim_pk",
           "user_id"
         ],
@@ -4385,6 +4452,11 @@
           "bridge_source_token_address": {
             "type": ["string", "null"],
             "description": "Optional: USDC address on the bridge source chain."
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Bitcoin HTLC script version. New swaps must use version 1."
           },
           "claim_pk": {
             "type": "string",
@@ -4457,6 +4529,7 @@
           "btc_user_claim_pk",
           "btc_server_refund_pk",
           "btc_refund_locktime",
+          "btc_htlc_script_version",
           "wbtc_address",
           "network",
           "gasless"
@@ -4487,6 +4560,10 @@
           "btc_htlc_address": {
             "type": "string",
             "description": "On-chain BTC Taproot HTLC address (server creates, user claims)"
+          },
+          "btc_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "btc_refund_locktime": {
             "type": "integer",
@@ -5115,6 +5192,7 @@
           "bolt11_invoice",
           "boltz_swap_id",
           "arkade_vhtlc_address",
+          "arkade_htlc_script_version",
           "target_arkade_address",
           "sender_pk",
           "receiver_pk",
@@ -5133,6 +5211,10 @@
           "arkade_fund_txid": {
             "type": ["string", "null"],
             "description": "Arkade VHTLC fund transaction ID"
+          },
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "arkade_server_pk": {
             "type": "string",
@@ -6218,6 +6300,7 @@
           "client_unilateral_claim_delay",
           "client_unilateral_refund_delay",
           "client_unilateral_refund_without_receiver_delay",
+          "client_arkade_htlc_script_version",
           "server_vhtlc_address",
           "server_fund_amount_sats",
           "server_pk",
@@ -6225,6 +6308,7 @@
           "server_unilateral_claim_delay",
           "server_unilateral_refund_delay",
           "server_unilateral_refund_without_receiver_delay",
+          "server_arkade_htlc_script_version",
           "arkade_server_pk",
           "preimage_hash",
           "fee_sats",
@@ -6233,6 +6317,10 @@
         "properties": {
           "arkade_server_pk": {
             "type": "string"
+          },
+          "client_arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "client_fund_amount_sats": {
             "type": "integer",
@@ -6280,6 +6368,10 @@
           },
           "preimage_hash": {
             "type": "string"
+          },
+          "server_arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64"
           },
           "server_fund_amount_sats": {
             "type": "integer",

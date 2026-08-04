@@ -82,7 +82,10 @@ describe("API Client - Type Safety", () => {
 
     const _createBitcoinToPolygon = () =>
       client.POST("/swap/bitcoin/evm", {
-        body: evmBody,
+        body: {
+          ...evmBody,
+          btc_htlc_script_version: 1,
+        },
       });
 
     expect(_createArkadeToPolygon).toBeDefined();
