@@ -85,6 +85,7 @@ pub(crate) struct CreateEvmToArkadeSwapRequestWire {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) amount_out: Option<u64>,
     pub(crate) gasless: bool,
+    pub(crate) arkade_htlc_script_version: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) bridge_source_chain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,6 +115,7 @@ impl From<CreateEvmToArkadeSwapRequest> for CreateEvmToArkadeSwapRequestWire {
             amount_in,
             amount_out,
             gasless: r.gasless,
+            arkade_htlc_script_version: 1,
             bridge_source_chain: r.bridge_source_chain,
             bridge_source_token_address: r.bridge_source_token_address,
             referral_code: r.referral_code,

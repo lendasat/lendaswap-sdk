@@ -312,6 +312,7 @@ async fn create_evm_to_arkade_swap_posts_high_level_request() {
     assert_eq!(body["amount_in"], 100_000_000);
     assert!(body.get("amount_out").is_none() || body["amount_out"].is_null());
     assert_eq!(body["gasless"], true);
+    assert_eq!(body["arkade_htlc_script_version"], 1);
     // Swap-request body uses `referral_code` (the quote endpoint renames it
     // to `ref`; the two endpoints differ on this field name).
     assert_eq!(body["referral_code"], "TEST_REF");
