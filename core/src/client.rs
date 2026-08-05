@@ -565,6 +565,7 @@ impl<S: WalletStorage, SS: SwapStorage, VSS: VtxoSwapStorage> Client<S, SS, VSS>
             amount_in: source_amount,
             amount_out: target_amount,
             hash_lock: format!("0x{}", hex::encode(swap_params.preimage_hash)),
+            arkade_htlc_script_version: 1,
             refund_pk: hex::encode(swap_params.public_key.serialize()),
             user_id: hex::encode(swap_params.user_id.serialize()),
             referral_code,

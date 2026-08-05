@@ -2356,6 +2356,7 @@
           "evm_chain_id",
           "token_address",
           "hash_lock",
+          "arkade_htlc_script_version",
           "refund_pk",
           "user_id"
         ],
@@ -2407,6 +2408,11 @@
           "hash_lock": {
             "type": "string",
             "description": "Hash lock provided by the client (32-byte hex string with 0x prefix)."
+          },
+          "arkade_htlc_script_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Arkade HTLC script version. New swaps must use version 1."
           },
           "referral_code": {
             "type": ["string", "null"],

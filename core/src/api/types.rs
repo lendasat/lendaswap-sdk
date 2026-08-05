@@ -921,6 +921,8 @@ pub struct ArkadeToEvmSwapRequest {
     pub amount_out: Option<u64>,
     /// Hash lock (32-byte hex string with 0x prefix).
     pub hash_lock: String,
+    /// Arkade HTLC script version. New swaps must use version 1.
+    pub arkade_htlc_script_version: i64,
     /// Refund public key for the Arkade VHTLC.
     pub refund_pk: String,
     /// User ID for recovery purposes.

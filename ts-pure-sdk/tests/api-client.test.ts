@@ -65,6 +65,7 @@ describe("API Client - Type Safety", () => {
       token_address: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
       evm_chain_id: 137,
       hash_lock: `0x${"ab".repeat(32)}`,
+      arkade_htlc_script_version: 1,
       refund_pk: `02${"cd".repeat(32)}`,
       user_id: `03${"ef".repeat(32)}`,
       amount_in: 100000,

@@ -1111,6 +1111,11 @@ export interface components {
             gasless?: boolean;
             /** @description Hash lock provided by the client (32-byte hex string with 0x prefix). */
             hash_lock: string;
+            /**
+             * Format: int64
+             * @description Arkade HTLC script version. New swaps must use version 1.
+             */
+            arkade_htlc_script_version: number;
             /** @description Optional referral code for tracking. */
             referral_code?: string | null;
             /** @description Refund public key used to generate the Arkade VHTLC. */

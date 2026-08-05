@@ -60,6 +60,7 @@ export async function createArkadeToEvmSwapGeneric(
 
     const body = {
       hash_lock: hashLock,
+      arkade_htlc_script_version: 1,
       refund_pk: refundPk,
       user_id: userId,
       claiming_address: claimingAddress,
