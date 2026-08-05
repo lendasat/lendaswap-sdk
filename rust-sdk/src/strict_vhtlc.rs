@@ -85,19 +85,21 @@ impl StrictVhtlcOptions {
         Ok(())
     }
 
-    fn preimage_check_script(builder: bitcoin::script::Builder) -> bitcoin::script::Builder {
+    fn preimage_check_script(
+        builder: bitcoin::script::Builder,
+        preimage_hash: &ripemd160::Hash,
+    ) -> bitcoin::script::Builder {
         builder
             .push_opcode(OP_SIZE)
             .push_int(32)
             .push_opcode(OP_EQUALVERIFY)
             .push_opcode(OP_HASH160)
+            .push_slice(preimage_hash.as_byte_array())
+            .push_opcode(OP_EQUALVERIFY)
     }
 
     pub fn claim_script(&self) -> ScriptBuf {
-        Self::preimage_check_script(ScriptBuf::builder())
-            .push_slice(self.preimage_hash.as_byte_array())
-            .push_opcode(OP_EQUAL)
-            .push_opcode(OP_VERIFY)
+        Self::preimage_check_script(ScriptBuf::builder(), &self.preimage_hash)
             .push_x_only_key(&self.receiver)
             .push_opcode(OP_CHECKSIGVERIFY)
             .push_x_only_key(&self.server)
@@ -129,10 +131,7 @@ impl StrictVhtlcOptions {
     }
 
     pub fn unilateral_claim_script(&self) -> ScriptBuf {
-        Self::preimage_check_script(ScriptBuf::builder())
-            .push_slice(self.preimage_hash.as_byte_array())
-            .push_opcode(OP_EQUAL)
-            .push_opcode(OP_VERIFY)
+        Self::preimage_check_script(ScriptBuf::builder(), &self.preimage_hash)
             .push_int(self.unilateral_claim_delay.to_consensus_u32() as i64)
             .push_opcode(OP_CSV)
             .push_opcode(OP_DROP)
