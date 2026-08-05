@@ -56,7 +56,7 @@ const MAX_KEY_INDEX_GRIND_ATTEMPTS: u32 = 1000;
 const CLIENT_AGENT_HEADER: &str = "X-Lendaswap-Client";
 const SATORA_SERVER_VERSION_HEADER: &str = "x-satora-server-version";
 const CLIENT_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-const SATORA_SERVER_VERSION: &str = "0.2.25";
+const SATORA_SERVER_VERSION: &str = env!("SATORA_SERVER_VERSION");
 
 /// Detect the backend's "this preimage hash already exists" rejection.
 /// Anchored on HTTP 409 + a substring match (case-insensitive) on

@@ -6,6 +6,7 @@ name = "lendaswap-sdk"
 version = "0.0.1"
 edition = "2024"
 include = [
+  "/build.rs",
   "/Cargo.lock",
   "/Cargo.toml",
   "/README.md",
@@ -78,6 +79,9 @@ esplora-client = { version = "0.11", default-features = false, features = ["asyn
 # from `Client::new` / `ClientBuilder::build`; the `ring` feature pins
 # the backend we want without leaving the choice to feature unification.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+
+[build-dependencies]
+serde_json = "1"
 
 [dev-dependencies]
 jsonschema = { version = "0.46.4", default-features = false }
