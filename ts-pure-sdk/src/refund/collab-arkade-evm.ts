@@ -38,6 +38,11 @@ import {
   getNetworkName,
   resolveArkadeServerUrlByName,
 } from "../arkade-network.js";
+import {
+  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
+  ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+  StrictVhtlcScript,
+} from "../strict-vhtlc.js";
 
 // P2A is the zero-value anchor output (OP_1 0x4e73)
 const P2A_SCRIPT = new Uint8Array([0x51, 0x02, 0x4e, 0x73]);
@@ -106,6 +111,7 @@ interface BaseCollabRefundArkadeToEvmParams {
   arkadeServerUrl?: string;
   swapId: string;
   apiClient: ApiClient;
+  arkadeHtlcScriptVersion?: number;
 }
 
 export type CollabRefundArkadeToEvmParams = BaseCollabRefundArkadeToEvmParams;
@@ -126,7 +132,7 @@ function buildRefundScriptVhtlc(params: BaseCollabRefundArkadeToEvmParams) {
 
   const networkName = getNetworkName(params.network);
 
-  const vhtlc = new VHTLC.Script({
+  const options = {
     sender: userPkBytes,
     receiver: lendaswapPkBytes,
     server: serverPkBytes,
@@ -137,7 +143,23 @@ function buildRefundScriptVhtlc(params: BaseCollabRefundArkadeToEvmParams) {
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       params.unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+
+  const vhtlc = (() => {
+    switch (
+      params.arkadeHtlcScriptVersion ??
+      ARKADE_HTLC_SCRIPT_VERSION_LEGACY
+    ) {
+      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
+        return new VHTLC.Script(options);
+      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
+        return new StrictVhtlcScript(options);
+      default:
+        throw new Error(
+          `Unsupported Arkade HTLC script version: ${params.arkadeHtlcScriptVersion}`,
+        );
+    }
+  })();
 
   const hrp = getNetworkHrp(networkName);
   const computedAddress = vhtlc.address(hrp, serverPkBytes).encode();

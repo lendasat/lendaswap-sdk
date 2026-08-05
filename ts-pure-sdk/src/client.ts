@@ -3565,6 +3565,7 @@ export class Client {
         s.unilateral_refund_without_receiver_delay,
       destinationAddress: options.destinationAddress,
       network: s.network,
+      arkadeHtlcScriptVersion: s.arkade_htlc_script_version,
     };
 
     // Try collaborative refund first (instant, no locktime wait).
