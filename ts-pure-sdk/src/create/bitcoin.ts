@@ -3,6 +3,7 @@
  */
 
 import { bytesToHex } from "../signer/index.js";
+import { BTC_HTLC_SCRIPT_VERSION_STRICT } from "../strict-vhtlc.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
   BitcoinToEvmSwapOptions,
@@ -54,7 +55,7 @@ export async function createBitcoinToEvmSwap(
 
     const body = {
       hash_lock: hashLock,
-      btc_htlc_script_version: 1,
+      btc_htlc_script_version: BTC_HTLC_SCRIPT_VERSION_STRICT,
       refund_pk: refundPk,
       user_id: userId,
       claiming_address: claimingAddress,

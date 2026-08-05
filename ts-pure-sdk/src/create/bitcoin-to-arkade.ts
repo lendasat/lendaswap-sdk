@@ -8,6 +8,10 @@
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { parseArkadeAddress } from "../arkade-address.js";
 import { bytesToHex } from "../signer/index.js";
+import {
+  ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+  BTC_HTLC_SCRIPT_VERSION_STRICT,
+} from "../strict-vhtlc.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
   BitcoinToArkadeSwapOptions,
@@ -72,8 +76,8 @@ export async function createBitcoinToArkadeSwap(
       target_arkade_address: options.targetAddress,
       referral_code: options.referralCode,
       extra_fees: options.extraFees,
-      btc_htlc_script_version: 1,
-      arkade_htlc_script_version: 1,
+      btc_htlc_script_version: BTC_HTLC_SCRIPT_VERSION_STRICT,
+      arkade_htlc_script_version: ARKADE_HTLC_SCRIPT_VERSION_STRICT,
     };
 
     const { data, error } = await ctx.apiClient.POST("/swap/bitcoin/arkade", {

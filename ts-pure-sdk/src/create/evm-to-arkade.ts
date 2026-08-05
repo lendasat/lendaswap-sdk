@@ -6,6 +6,7 @@
 
 import { parseArkadeAddress } from "../arkade-address.js";
 import { bytesToHex } from "../signer/index.js";
+import { ARKADE_HTLC_SCRIPT_VERSION_STRICT } from "../strict-vhtlc.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
   CreateSwapContext,
@@ -74,7 +75,7 @@ export async function createEvmToArkadeSwapGeneric(
         referral_code: options.referralCode,
         extra_fees: options.extraFees,
         gasless: options.gasless ?? false,
-        arkade_htlc_script_version: 1,
+        arkade_htlc_script_version: ARKADE_HTLC_SCRIPT_VERSION_STRICT,
         bridge_source_chain: options.inboundBridgeParams?.sourceChain,
         bridge_source_token_address:
           options.inboundBridgeParams?.sourceTokenAddress,

@@ -6,6 +6,7 @@
  */
 
 import { bytesToHex } from "../signer/index.js";
+import { BTC_HTLC_SCRIPT_VERSION_STRICT } from "../strict-vhtlc.js";
 import { retryOnHashCollision } from "./retry.js";
 import type {
   CreateSwapContext,
@@ -58,7 +59,7 @@ export async function createEvmToBitcoinSwap(
     const { data, error } = await ctx.apiClient.POST("/swap/evm/bitcoin", {
       body: {
         hash_lock: hashLock,
-        btc_htlc_script_version: 1,
+        btc_htlc_script_version: BTC_HTLC_SCRIPT_VERSION_STRICT,
         claim_pk: claimPk,
         user_id: userId,
         token_address: options.tokenAddress,

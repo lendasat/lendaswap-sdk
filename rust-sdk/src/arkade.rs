@@ -26,7 +26,7 @@ use crate::client::Client;
 use crate::error::Error;
 use crate::error::Result;
 use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_LEGACY;
-use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
+pub use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
 use crate::strict_vhtlc::StrictVhtlcOptions;
 use crate::strict_vhtlc::StrictVhtlcScript;
 use ark_bdk_wallet::Wallet;

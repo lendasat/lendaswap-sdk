@@ -5,6 +5,9 @@
 use rust_decimal::Decimal;
 use serde::Deserialize;
 use serde::Serialize;
+
+pub const ARKADE_HTLC_SCRIPT_VERSION_STRICT: i64 = 1;
+pub const BTC_HTLC_SCRIPT_VERSION_STRICT: i64 = 1;
 use time::OffsetDateTime;
 use uuid::Uuid;
 

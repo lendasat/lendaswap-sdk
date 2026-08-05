@@ -5,6 +5,7 @@
 use lendaswap_sdk::Client;
 use lendaswap_sdk::Error;
 use lendaswap_sdk::SwapFunding;
+use lendaswap_sdk::arkade::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
 use lendaswap_sdk::types::Address;
 use lendaswap_sdk::types::Chain;
 use lendaswap_sdk::types::KnownChain;
@@ -257,7 +258,7 @@ async fn create_evm_to_arkade_swap_posts_high_level_request() {
             "receiver_pk": "02receiver",
             "arkade_server_pk": "02arkade",
             "vhtlc_refund_locktime": 1_000_000,
-            "arkade_htlc_script_version": 1,
+            "arkade_htlc_script_version": ARKADE_HTLC_SCRIPT_VERSION_STRICT,
             "unilateral_claim_delay": 144,
             "unilateral_refund_delay": 288,
             "unilateral_refund_without_receiver_delay": 432,
@@ -367,7 +368,7 @@ async fn create_swap_dispatcher_routes_to_evm_to_arkade() {
             "receiver_pk": "02receiver",
             "arkade_server_pk": "02arkade",
             "vhtlc_refund_locktime": 1_000_000,
-            "arkade_htlc_script_version": 1,
+            "arkade_htlc_script_version": ARKADE_HTLC_SCRIPT_VERSION_STRICT,
             "unilateral_claim_delay": 144,
             "unilateral_refund_delay": 288,
             "unilateral_refund_without_receiver_delay": 432,

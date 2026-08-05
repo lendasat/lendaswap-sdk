@@ -12,6 +12,7 @@
 //! evolve them (rename fields, change types, drop them entirely) without it
 //! counting as a breaking change in the public API.
 
+use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
 use crate::types::Chain;
 use crate::types::CreateArkadeToLightningSwapRequest;
 use crate::types::CreateEvmToArkadeSwapRequest;
@@ -115,7 +116,7 @@ impl From<CreateEvmToArkadeSwapRequest> for CreateEvmToArkadeSwapRequestWire {
             amount_in,
             amount_out,
             gasless: r.gasless,
-            arkade_htlc_script_version: 1,
+            arkade_htlc_script_version: ARKADE_HTLC_SCRIPT_VERSION_STRICT,
             bridge_source_chain: r.bridge_source_chain,
             bridge_source_token_address: r.bridge_source_token_address,
             referral_code: r.referral_code,

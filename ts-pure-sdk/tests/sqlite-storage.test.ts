@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { GetSwapResponse } from "../src/api/client.js";
+import { BTC_HTLC_SCRIPT_VERSION_STRICT } from "../src/index.js";
 import { type StoredSwap, SWAP_STORAGE_VERSION } from "../src/storage/index.js";
 import {
   SqliteSwapStorage,
@@ -70,7 +71,7 @@ const createTestResponse = (id: string): GetSwapResponse => ({
   status: "pending",
   btc_hash_lock: "ab".repeat(20),
   btc_htlc_address: "tb1qtestaddress000000000000000000000000000",
-  btc_htlc_script_version: 1,
+  btc_htlc_script_version: BTC_HTLC_SCRIPT_VERSION_STRICT,
   btc_refund_locktime: 1_700_000_000,
   btc_server_pk: `02${"1".repeat(64)}`,
   chain: "Polygon",

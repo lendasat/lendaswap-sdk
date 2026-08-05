@@ -4,6 +4,7 @@ use crate::Network;
 use crate::SwapParams;
 use crate::VhtlcAmounts;
 use crate::Wallet;
+use crate::api::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
 use crate::api::ArkadeToEvmSwapCreateResponse;
 use crate::api::ArkadeToEvmSwapRequest;
 use crate::api::BtcToArkadeSwapRequest;
@@ -565,7 +566,7 @@ impl<S: WalletStorage, SS: SwapStorage, VSS: VtxoSwapStorage> Client<S, SS, VSS>
             amount_in: source_amount,
             amount_out: target_amount,
             hash_lock: format!("0x{}", hex::encode(swap_params.preimage_hash)),
-            arkade_htlc_script_version: 1,
+            arkade_htlc_script_version: ARKADE_HTLC_SCRIPT_VERSION_STRICT,
             refund_pk: hex::encode(swap_params.public_key.serialize()),
             user_id: hex::encode(swap_params.user_id.serialize()),
             referral_code,
