@@ -29,6 +29,11 @@ import {
   resolveArkadeServerUrlByName,
 } from "../arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "../logging.js";
+import {
+  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
+  ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+  StrictVhtlcScript,
+} from "../strict-vhtlc.js";
 
 /** Parameters needed to build an Arkade refund */
 export interface ArkadeRefundParams {
@@ -56,6 +61,8 @@ export interface ArkadeRefundParams {
   destinationAddress: string;
   /** Bitcoin network (mainnet, signet, etc.) */
   network: string;
+  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  arkadeHtlcScriptVersion?: number;
   /** Arkade server URL (optional, uses default based on network) */
   arkadeServerUrl?: string;
   /** Optional logger sink. Silent by default. */
@@ -136,6 +143,7 @@ export async function buildArkadeRefund(
     unilateralRefundWithoutReceiverDelay,
     destinationAddress,
     network,
+    arkadeHtlcScriptVersion,
     arkadeServerUrl,
   } = params;
 
@@ -183,7 +191,7 @@ export async function buildArkadeRefund(
 
   // Construct VHTLC with the same parameters as the original swap
   // For refund: user is the SENDER (refunding), lendaswap is the RECEIVER
-  const vhtlc = new VHTLC.Script({
+  const vhtlcOptions = {
     sender: userPkBytes,
     receiver: lendaswapPkBytes,
     server: serverPkBytes,
@@ -194,7 +202,19 @@ export async function buildArkadeRefund(
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+  const vhtlc = (() => {
+    switch (arkadeHtlcScriptVersion ?? ARKADE_HTLC_SCRIPT_VERSION_LEGACY) {
+      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
+        return new VHTLC.Script(vhtlcOptions);
+      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
+        return new StrictVhtlcScript(vhtlcOptions);
+      default:
+        throw new Error(
+          `Unsupported Arkade HTLC script version: ${arkadeHtlcScriptVersion}`,
+        );
+    }
+  })();
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);

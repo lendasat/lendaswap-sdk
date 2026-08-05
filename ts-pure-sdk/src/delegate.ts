@@ -41,6 +41,11 @@ import {
   resolveArkadeServerUrlByName,
 } from "./arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "./logging.js";
+import {
+  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
+  ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+  StrictVhtlcScript,
+} from "./strict-vhtlc.js";
 
 function secondsToTimelock(
   seconds: number,
@@ -53,6 +58,20 @@ function parseXOnlyPubKey(pubKeyHex: string): Uint8Array {
   if (bytes.length === 33) return bytes.slice(1);
   if (bytes.length === 32) return bytes;
   throw new Error(`Invalid public key length: ${bytes.length}`);
+}
+
+function buildVersionedVhtlc(
+  options: VHTLC.Options,
+  version?: number,
+): VHTLC.Script | StrictVhtlcScript {
+  switch (version ?? ARKADE_HTLC_SCRIPT_VERSION_LEGACY) {
+    case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
+      return new VHTLC.Script(options);
+    case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
+      return new StrictVhtlcScript(options);
+    default:
+      throw new Error(`Unsupported Arkade HTLC script version: ${version}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +96,8 @@ export interface DelegateClaimParams {
   /** Lendaswap API base URL (e.g. http://localhost:3333) */
   lendaswapApiUrl: string;
   arkadeServerUrl?: string;
+  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  arkadeHtlcScriptVersion?: number;
   /** Optional swap ID — enables the backend to mark swap as ClientRedeemed. */
   swapId?: string;
   /** Optional logger sink. Silent by default. */
@@ -100,6 +121,8 @@ export interface DelegateRefundParams {
   network: string;
   lendaswapApiUrl: string;
   arkadeServerUrl?: string;
+  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  arkadeHtlcScriptVersion?: number;
   /** Optional logger sink. Silent by default. */
   logger?: Logger;
   /** Minimum log level to emit. Defaults to `silent`. */
@@ -149,7 +172,7 @@ export async function delegateClaim(
 
   // Build VHTLC — for claim: lendaswap=sender, user=receiver
   const networkName = getNetworkName(params.network);
-  const vhtlc = new VHTLC.Script({
+  const vhtlcOptions = {
     sender: lendaswapPkBytes,
     receiver: userPkBytes,
     server: serverPkBytes,
@@ -160,7 +183,11 @@ export async function delegateClaim(
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       params.unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+  const vhtlc = buildVersionedVhtlc(
+    vhtlcOptions,
+    params.arkadeHtlcScriptVersion,
+  );
 
   const hrp = getNetworkHrp(networkName);
   const computedAddr = vhtlc.address(hrp, serverPkBytes).encode();
@@ -204,7 +231,7 @@ export async function delegateRefund(
 
   // Build VHTLC — for refund: user=sender, lendaswap=receiver
   const networkName = getNetworkName(params.network);
-  const vhtlc = new VHTLC.Script({
+  const vhtlcOptions = {
     sender: userPkBytes,
     receiver: lendaswapPkBytes,
     server: serverPkBytes,
@@ -215,7 +242,11 @@ export async function delegateRefund(
     unilateralRefundWithoutReceiverDelay: secondsToTimelock(
       params.unilateralRefundWithoutReceiverDelay,
     ),
-  });
+  };
+  const vhtlc = buildVersionedVhtlc(
+    vhtlcOptions,
+    params.arkadeHtlcScriptVersion,
+  );
 
   const hrp = getNetworkHrp(networkName);
   const computedAddr = vhtlc.address(hrp, serverPkBytes).encode();

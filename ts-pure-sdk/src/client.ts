@@ -3819,6 +3819,7 @@ export class Client {
       unilateralRefundWithoutReceiverDelay: number;
       destinationAddress: string;
       network: string;
+      arkadeHtlcScriptVersion?: number;
     },
     options: ArkadeRefundOptions,
   ): Promise<RefundResult> {
@@ -3865,6 +3866,7 @@ export class Client {
       unilateralRefundWithoutReceiverDelay: number;
       destinationAddress: string;
       network: string;
+      arkadeHtlcScriptVersion?: number;
     },
     options: ArkadeRefundOptions,
   ): Promise<RefundResult> {
