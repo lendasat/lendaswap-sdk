@@ -40,6 +40,7 @@ async fn version_returns_decoded_response() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/version"))
+        .and(header("X-Lendaswap-Client", "satora-rust-sdk/0.0.1"))
         .and(header("x-satora-server-version", openapi_version()))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "tag": "v0.2.30",

@@ -1,4 +1,4 @@
-# lendaswap-sdk
+# satora-rust-sdk
 
 Rust client SDK for the Lendaswap API.
 

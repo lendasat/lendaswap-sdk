@@ -3177,34 +3177,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lendaswap-sdk"
-version = "0.0.1"
-dependencies = [
- "alloy",
- "alloy-provider",
- "ark-bdk-wallet",
- "ark-rs",
- "bip39",
- "bitcoin",
- "esplora-client",
- "hex",
- "jsonschema",
- "rand 0.8.6",
- "reqwest 0.13.3",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "thiserror 1.0.69",
- "tiny-keccak",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "url",
- "wiremock",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.186"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4660,6 +4632,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "satora-rust-sdk"
+version = "0.0.1"
+dependencies = [
+ "alloy",
+ "alloy-provider",
+ "ark-bdk-wallet",
+ "ark-rs",
+ "bip39",
+ "bitcoin",
+ "esplora-client",
+ "hex",
+ "jsonschema",
+ "rand 0.8.6",
+ "reqwest 0.13.3",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 1.0.69",
+ "tiny-keccak",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "wiremock",
 ]
 
 [[package]]
