@@ -65,6 +65,7 @@ type ArkadeVhtlcFields = {
   unilateral_claim_delay: number;
   unilateral_refund_delay: number;
   unilateral_refund_without_receiver_delay: number;
+  arkade_htlc_script_version?: number;
 };
 
 function arkadeLeg(
@@ -84,6 +85,7 @@ function arkadeLeg(
     unilateralRefundWithoutReceiverDelay:
       r.unilateral_refund_without_receiver_delay,
     expectedSats,
+    arkadeHtlcScriptVersion: r.arkade_htlc_script_version,
   });
 }
 
@@ -253,6 +255,7 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           unilateralRefundWithoutReceiverDelay:
             r.unilateral_refund_without_receiver_delay,
           expectedSats: Number(r.target_amount),
+          arkadeHtlcScriptVersion: r.arkade_htlc_script_version,
         }),
         clientRefundLocktime: ms(r.btc_refund_locktime),
         serverRefundLocktime: ms(r.vhtlc_refund_locktime),

@@ -7,12 +7,27 @@
  * legacy SDK's `VHTLC.Script` construction, so the mapper and manager stay free
  * of VHTLC internals.
  */
+
 import { VHTLC, VHTLCContractHandler } from "@arkade-os/sdk";
+import {
+  CLTVMultisigTapscript,
+  ConditionCSVMultisigTapscript,
+  ConditionMultisigTapscript,
+  CSVMultisigTapscript,
+  MultisigTapscript,
+  VHTLC,
+  VHTLCContractHandler,
+  VtxoScript,
+  type RelativeTimelock,
+} from "@arkade-os/sdk";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { hex } from "@scure/base";
 import type { HtlcRef } from "./types.js";
 
 type ArkadeRef = Extract<HtlcRef, { ledger: "arkade" }>;
+
+export const ARKADE_HTLC_SCRIPT_VERSION_LEGACY = 0;
+export const ARKADE_HTLC_SCRIPT_VERSION_STRICT = 1;
 
 export type ArkadeVhtlcInput = {
   /** Pubkey hex (x-only or compressed) for each VHTLC role. */
@@ -35,6 +50,8 @@ export type ArkadeVhtlcInput = {
   unilateralRefundWithoutReceiverDelay: number;
   /** Expected funding amount in sats (a short funding is `invalid`, not confirmed). */
   expectedSats: number;
+  /** Arkade HTLC script version. Missing means legacy v0 for old stored swaps. */
+  arkadeHtlcScriptVersion?: number;
 };
 
 function strip0x(value: string): string {
@@ -51,6 +68,71 @@ function xOnly(pubKeyHex: string): Uint8Array {
 
 const seconds = (value: number) =>
   ({ type: "seconds", value: BigInt(value) }) as const;
+
+function strictConditionScript(preimageHash: Uint8Array): Uint8Array {
+  if (preimageHash.length !== 20)
+    throw new Error("preimage hash must be 20 bytes");
+  return new Uint8Array([
+    0x82, // OP_SIZE
+    0x01, // push one byte
+    0x20, // 32
+    0x88, // OP_EQUALVERIFY
+    0xa9, // OP_HASH160
+    0x14, // push 20 bytes
+    ...preimageHash,
+    0x87, // OP_EQUAL
+  ]);
+}
+
+type StrictVhtlcParams = {
+  sender: Uint8Array;
+  receiver: Uint8Array;
+  server: Uint8Array;
+  preimageHash: Uint8Array;
+  refundLocktime: bigint;
+  unilateralClaimDelay: RelativeTimelock;
+  unilateralRefundDelay: RelativeTimelock;
+  unilateralRefundWithoutReceiverDelay: RelativeTimelock;
+};
+
+class StrictVhtlcScript extends VtxoScript {
+  constructor(options: StrictVhtlcParams) {
+    const conditionScript = strictConditionScript(options.preimageHash);
+    const claimScript = ConditionMultisigTapscript.encode({
+      conditionScript,
+      pubkeys: [options.receiver, options.server],
+    }).script;
+    const refundScript = MultisigTapscript.encode({
+      pubkeys: [options.sender, options.receiver, options.server],
+    }).script;
+    const refundWithoutReceiverScript = CLTVMultisigTapscript.encode({
+      absoluteTimelock: options.refundLocktime,
+      pubkeys: [options.sender, options.server],
+    }).script;
+    const unilateralClaimScript = ConditionCSVMultisigTapscript.encode({
+      conditionScript,
+      timelock: options.unilateralClaimDelay,
+      pubkeys: [options.receiver],
+    }).script;
+    const unilateralRefundScript = CSVMultisigTapscript.encode({
+      timelock: options.unilateralRefundDelay,
+      pubkeys: [options.sender, options.receiver],
+    }).script;
+    const unilateralRefundWithoutReceiverScript = CSVMultisigTapscript.encode({
+      timelock: options.unilateralRefundWithoutReceiverDelay,
+      pubkeys: [options.sender],
+    }).script;
+
+    super([
+      claimScript,
+      refundScript,
+      refundWithoutReceiverScript,
+      unilateralClaimScript,
+      unilateralRefundScript,
+      unilateralRefundWithoutReceiverScript,
+    ]);
+  }
+}
 
 /**
  * The VHTLC always commits to `ripemd160(sha256(preimage))` (HASH160). When
@@ -75,7 +157,21 @@ export function buildArkadeVhtlcRef(input: ArkadeVhtlcInput): ArkadeRef {
       input.unilateralRefundWithoutReceiverDelay,
     ),
   };
-  const vhtlc = new VHTLC.Script(params);
+  const vhtlc = (() => {
+    switch (
+      input.arkadeHtlcScriptVersion ??
+      ARKADE_HTLC_SCRIPT_VERSION_LEGACY
+    ) {
+      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
+        return new VHTLC.Script(params);
+      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
+        return new StrictVhtlcScript(params);
+      default:
+        throw new Error(
+          `Unsupported Arkade HTLC script version: ${input.arkadeHtlcScriptVersion}`,
+        );
+    }
+  })();
   return {
     ledger: "arkade",
     script: hex.encode(vhtlc.pkScript),
