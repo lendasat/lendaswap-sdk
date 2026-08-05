@@ -1323,7 +1323,9 @@ export class Client {
    */
   async getSupportAgents(): Promise<SupportAgentInfo[]> {
     const baseUrl = this.#config.baseUrl.replace(/\/$/, "");
-    const resp = await fetch(`${baseUrl}/support-agents`);
+    const resp = await fetch(`${baseUrl}/support-agents`, {
+      headers: this.#apiHeaders(),
+    });
     if (!resp.ok) {
       throw new Error(`Failed to get support agents: ${resp.status}`);
     }
