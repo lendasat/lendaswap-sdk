@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security vulnerability
+    url: https://satora.io/security
+    about: Please do not open public GitHub issues for security vulnerabilities. Email security@satora.io instead.
