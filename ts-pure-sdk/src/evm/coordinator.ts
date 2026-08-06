@@ -141,7 +141,7 @@ const EIP712_DOMAIN_TYPEHASH =
 const REDEEM_TYPEHASH =
   "Redeem(bytes32 preimage,uint256 amount,address token,address sender,uint256 timelock,address caller,address destination,address sweepToken,uint256 minAmountOut,bytes32 callsHash)";
 const HTLC_NAME = "HTLCErc20";
-const HTLC_VERSION = "3";
+const HTLC_VERSION = "4";
 
 // ── redeemAndExecute selector ────────────────────────────────────────────────
 // keccak256("redeemAndExecute(bytes32,uint256,address,address,uint256,(address,uint256,bytes)[],address,uint256,address,uint8,bytes32,bytes32)")
