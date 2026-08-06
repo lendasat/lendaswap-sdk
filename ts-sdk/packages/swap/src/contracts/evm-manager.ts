@@ -28,6 +28,18 @@ export type EvmHtlcQuery = {
   preimageHash: `0x${string}`;
   /** A `SwapCreated` counts only when it pays this address (term check). */
   claimAddress: `0x${string}`;
+  /**
+   * The rest of the swap-key tuple, when the swap response exposed it. With it,
+   * a settlement is attributed by swap key rather than by `preimageHash` — which
+   * identifies no single swap, since any number may share one hash. Absent (a
+   * stored swap missing fields), settlements are read as before.
+   */
+  terms?: {
+    amount: bigint;
+    token: `0x${string}`;
+    sender: `0x${string}`;
+    timelockSec: number;
+  };
 };
 
 /** The result key for one {@link EvmHtlcQuery} in a batch. */
@@ -302,11 +314,20 @@ export class EvmContractManager implements ContractManager {
     fromBlock: bigint,
   ): Promise<void> {
     const events = await reader.getHtlcEventsBatch(
-      refs.map((r) => ({
-        htlc: r.htlc,
-        preimageHash: r.preimageHash,
-        claimAddress: r.claimAddress,
-      })),
+      refs.map((r) => {
+        const full = activeQuery(r);
+        return {
+          htlc: r.htlc,
+          preimageHash: r.preimageHash,
+          claimAddress: r.claimAddress,
+          terms: full && {
+            amount: full.amount,
+            token: full.token,
+            sender: full.sender,
+            timelockSec: full.timelockSec,
+          },
+        };
+      }),
       fromBlock,
     );
     for (const ref of refs) {

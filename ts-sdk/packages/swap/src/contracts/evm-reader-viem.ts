@@ -18,9 +18,11 @@ import {
   createPublicClient,
   decodeEventLog,
   decodeFunctionResult,
+  encodeAbiParameters,
   encodeFunctionData,
   fallback,
   http,
+  keccak256,
   numberToHex,
   parseAbiItem,
   toEventSelector,
@@ -58,16 +60,46 @@ export const DEFAULT_EVM_RPCS: Record<number, string[]> = {
   ],
 };
 
-// The three `HTLCErc20` lifecycle events, each indexed by `preimageHash`.
+// The three `HTLCErc20` lifecycle events, each indexed by `preimageHash` and each
+// carrying `key` — the commitment to the swap's full parameter set, and the only
+// field that says which swap an event belongs to.
 const SWAP_CREATED = parseAbiItem(
-  "event SwapCreated(bytes32 indexed preimageHash, address indexed refundAddress, address indexed claimAddress, address token, uint256 amount, uint256 timelock)",
+  "event SwapCreated(bytes32 indexed preimageHash, address indexed refundAddress, address indexed claimAddress, address token, uint256 amount, uint256 timelock, bytes32 key)",
 );
 const SWAP_REDEEMED = parseAbiItem(
-  "event SwapRedeemed(bytes32 indexed preimageHash, bytes32 preimage)",
+  "event SwapRedeemed(bytes32 indexed preimageHash, bytes32 indexed key, bytes32 preimage)",
 );
 const SWAP_REFUNDED = parseAbiItem(
-  "event SwapRefunded(bytes32 indexed preimageHash)",
+  "event SwapRefunded(bytes32 indexed preimageHash, bytes32 indexed key)",
 );
+
+/** The six-parameter tuple `HTLCErc20._key` hashes, as `abi.encode` lays it out. */
+const SWAP_KEY_PARAMS = [
+  { type: "bytes32" },
+  { type: "uint256" },
+  { type: "address" },
+  { type: "address" },
+  { type: "address" },
+  { type: "uint256" },
+] as const;
+
+/**
+ * The swap key for a query whose terms are known, matching `HTLCErc20.computeKey`.
+ * `undefined` when the query didn't carry the full tuple.
+ */
+function expectedSwapKey(query: EvmHtlcQuery): `0x${string}` | undefined {
+  if (!query.terms) return undefined;
+  return keccak256(
+    encodeAbiParameters(SWAP_KEY_PARAMS, [
+      query.preimageHash,
+      query.terms.amount,
+      query.terms.token,
+      query.terms.sender,
+      query.claimAddress,
+      BigInt(query.terms.timelockSec),
+    ]),
+  );
+}
 const HTLC_EVENTS_ABI = [SWAP_CREATED, SWAP_REDEEMED, SWAP_REFUNDED] as const;
 /** topic0 of the three lifecycle events — the batched getLogs OR-filter. */
 const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
@@ -239,13 +271,19 @@ type DecodedHtlcLog =
       claimAddress: `0x${string}`;
       token: `0x${string}`;
       amount: bigint;
+      key: `0x${string}`;
     }
   | {
       eventName: "SwapRedeemed";
       preimageHash: `0x${string}`;
       preimage: `0x${string}`;
+      key: `0x${string}`;
     }
-  | { eventName: "SwapRefunded"; preimageHash: `0x${string}` };
+  | {
+      eventName: "SwapRefunded";
+      preimageHash: `0x${string}`;
+      key: `0x${string}`;
+    };
 
 /** Decode one raw log against the three-event ABI; undefined for foreign logs. */
 function tryDecode(log: RawLog): DecodedHtlcLog | undefined {
@@ -262,28 +300,37 @@ function tryDecode(log: RawLog): DecodedHtlcLog | undefined {
 }
 
 /**
- * Map a decoded log to the manager's event, applying the per-query guard: a
- * `SwapCreated` counts only when its `claimAddress` matches the swap's — the
- * batched filter can't express that per-hash, so it is enforced here (the event
- * is indexed only by preimageHash, so amount/token/recipient are all unverified
- * until this check plus `evmObservation`'s term checks).
+ * Map a decoded log to the manager's event, applying the per-query guards the
+ * batched filter can't express per-hash.
+ *
+ * The filter matches on `preimageHash`, which identifies no single swap — any
+ * number may share one hash, each with its own terms and lifecycle. A settlement
+ * is therefore attributed by `key`, the commitment to the full parameter set,
+ * whenever the query carried enough to derive it; a settlement for a different
+ * key belongs to a different swap and is dropped. Without terms, the query cannot
+ * derive a key and settlements are taken as before.
+ *
+ * `SwapCreated` keeps the `claimAddress` check rather than a key match: it is the
+ * event that first reports the funded amount, which may differ from the expected
+ * one, so its key is not predictable. `evmObservation` term-checks it afterwards.
  */
 function toHtlcEvent(
   decoded: DecodedHtlcLog,
   query: EvmHtlcQuery,
 ): EvmHtlcEvent | undefined {
-  switch (decoded.eventName) {
-    case "SwapCreated":
-      if (
-        decoded.claimAddress.toLowerCase() !== query.claimAddress.toLowerCase()
-      )
-        return undefined;
-      return { kind: "created", amount: decoded.amount, token: decoded.token };
-    case "SwapRedeemed":
-      return { kind: "redeemed", preimage: decoded.preimage };
-    case "SwapRefunded":
-      return { kind: "refunded" };
+  if (decoded.eventName === "SwapCreated") {
+    if (decoded.claimAddress.toLowerCase() !== query.claimAddress.toLowerCase())
+      return undefined;
+    return { kind: "created", amount: decoded.amount, token: decoded.token };
   }
+
+  const expected = expectedSwapKey(query);
+  if (expected && decoded.key.toLowerCase() !== expected.toLowerCase())
+    return undefined;
+
+  return decoded.eventName === "SwapRedeemed"
+    ? { kind: "redeemed", preimage: decoded.preimage }
+    : { kind: "refunded" };
 }
 
 function unique<T>(values: T[]): T[] {

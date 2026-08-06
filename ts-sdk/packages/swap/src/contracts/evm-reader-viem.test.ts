@@ -2,6 +2,7 @@ import {
   encodeAbiParameters,
   encodeEventTopics,
   encodeFunctionResult,
+  keccak256,
   parseAbiItem,
 } from "viem";
 import { describe, expect, it, vi } from "vitest";
@@ -21,14 +22,44 @@ const CLAIM = `0x${"33".repeat(20)}` as const;
 const REFUND = `0x${"44".repeat(20)}` as const;
 const TOKEN = `0x${"55".repeat(20)}` as const;
 
+/** The rest of the swap-key tuple for {@link QUERY}, and the key it hashes to. */
+const TERMS = {
+  amount: 1000n,
+  token: TOKEN,
+  sender: REFUND,
+  timelockSec: 1_700_000_000,
+} as const;
+const SWAP_KEY = keccak256(
+  encodeAbiParameters(
+    [
+      { type: "bytes32" },
+      { type: "uint256" },
+      { type: "address" },
+      { type: "address" },
+      { type: "address" },
+      { type: "uint256" },
+    ],
+    [
+      PH,
+      TERMS.amount,
+      TERMS.token,
+      TERMS.sender,
+      CLAIM,
+      BigInt(TERMS.timelockSec),
+    ],
+  ),
+);
+/** A swap sharing PH but locked on different terms, so a different key. */
+const OTHER_KEY = `0x${"ee".repeat(32)}` as const;
+
 const CREATED = parseAbiItem(
-  "event SwapCreated(bytes32 indexed preimageHash, address indexed refundAddress, address indexed claimAddress, address token, uint256 amount, uint256 timelock)",
+  "event SwapCreated(bytes32 indexed preimageHash, address indexed refundAddress, address indexed claimAddress, address token, uint256 amount, uint256 timelock, bytes32 key)",
 );
 const REDEEMED = parseAbiItem(
-  "event SwapRedeemed(bytes32 indexed preimageHash, bytes32 preimage)",
+  "event SwapRedeemed(bytes32 indexed preimageHash, bytes32 indexed key, bytes32 preimage)",
 );
 const REFUNDED = parseAbiItem(
-  "event SwapRefunded(bytes32 indexed preimageHash)",
+  "event SwapRefunded(bytes32 indexed preimageHash, bytes32 indexed key)",
 );
 
 /** Raw `eth_getLogs`-shaped logs, properly ABI-encoded so decoding is real. */
@@ -43,29 +74,37 @@ function createdLog(
       args: { preimageHash: PH, refundAddress: REFUND, claimAddress },
     }) as RawLog["topics"],
     data: encodeAbiParameters(
-      [{ type: "address" }, { type: "uint256" }, { type: "uint256" }],
-      [TOKEN, amount, 0n],
+      [
+        { type: "address" },
+        { type: "uint256" },
+        { type: "uint256" },
+        { type: "bytes32" },
+      ],
+      [TOKEN, amount, 0n, SWAP_KEY],
     ),
   };
 }
 
-function redeemedLog(preimage: `0x${string}`): RawLog {
+function redeemedLog(
+  preimage: `0x${string}`,
+  key: `0x${string}` = SWAP_KEY,
+): RawLog {
   return {
     address: HTLC,
     topics: encodeEventTopics({
       abi: [REDEEMED],
-      args: { preimageHash: PH },
+      args: { preimageHash: PH, key },
     }) as RawLog["topics"],
     data: encodeAbiParameters([{ type: "bytes32" }], [preimage]),
   };
 }
 
-function refundedLog(): RawLog {
+function refundedLog(key: `0x${string}` = SWAP_KEY): RawLog {
   return {
     address: HTLC,
     topics: encodeEventTopics({
       abi: [REFUNDED],
-      args: { preimageHash: PH },
+      args: { preimageHash: PH, key },
     }) as RawLog["topics"],
     data: "0x",
   };
@@ -103,6 +142,8 @@ const activeQueryFor = (htlc: `0x${string}`, preimageHash: `0x${string}`) => ({
 });
 
 const QUERY = { htlc: HTLC, preimageHash: PH, claimAddress: CLAIM };
+/** The same swap, with enough terms to derive its key. */
+const QUERY_WITH_TERMS = { ...QUERY, terms: TERMS };
 const KEY = htlcQueryKey(QUERY);
 
 describe("evmReaderFromClient", () => {
@@ -112,6 +153,37 @@ describe("evmReaderFromClient", () => {
     expect(events).toHaveLength(1);
     expect(events?.[0]).toMatchObject({ kind: "created", amount: 1000n });
     expect((events?.[0] as { token: string }).token.toLowerCase()).toBe(TOKEN);
+  });
+
+  it("attributes a settlement by swap key when the terms are known", async () => {
+    const reader = evmReaderFromClient(
+      fakeClient([redeemedLog(`0x${"ab".repeat(32)}`)]),
+    );
+    const events = (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(
+      KEY,
+    );
+    expect(events).toEqual([
+      { kind: "redeemed", preimage: `0x${"ab".repeat(32)}` },
+    ]);
+  });
+
+  it("drops a settlement belonging to another swap under the same hash", async () => {
+    const reader = evmReaderFromClient(
+      fakeClient([
+        redeemedLog(`0x${"ab".repeat(32)}`, OTHER_KEY),
+        refundedLog(OTHER_KEY),
+      ]),
+    );
+    expect(
+      (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY),
+    ).toEqual([]);
+  });
+
+  it("keeps settlements when the query has no terms to derive a key from", async () => {
+    const reader = evmReaderFromClient(fakeClient([refundedLog(OTHER_KEY)]));
+    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toEqual([
+      { kind: "refunded" },
+    ]);
   });
 
   it("drops a SwapCreated paying a different claim address", async () => {
