@@ -775,7 +775,7 @@ export interface paths {
          *        ```text
          *        EIP712Domain(string name, string version, uint256 chainId, address verifyingContract)
          *        name            = "HTLCErc20"
-         *        version         = "3"
+         *        version         = "4"
          *        chainId         = <target EVM chain ID>
          *        verifyingContract = <HTLCErc20 contract address (swap.evm_htlc_address)>
          *        ```
@@ -820,7 +820,7 @@ export interface paths {
          *
          *        const domain = {
          *          name: "HTLCErc20",
-         *          version: "3",
+         *          version: "4",
          *          chainId: swap.evm_chain_id,               // e.g. 42161 for Arbitrum
          *          verifyingContract: swap.evm_htlc_address,  // HTLCErc20 contract
          *        };
@@ -1079,6 +1079,11 @@ export interface components {
              */
             amount_out?: number | null;
             /**
+             * Format: int64
+             * @description Arkade HTLC script version. New swaps must use version 1.
+             */
+            arkade_htlc_script_version: number;
+            /**
              * @description ATA-existence flag for non-EVM CCTP destinations (Solana).
              *     See `BitcoinToEvmSwapRequest::bridge_recipient_setup`.
              */
@@ -1111,11 +1116,6 @@ export interface components {
             gasless?: boolean;
             /** @description Hash lock provided by the client (32-byte hex string with 0x prefix). */
             hash_lock: string;
-            /**
-             * Format: int64
-             * @description Arkade HTLC script version. New swaps must use version 1.
-             */
-            arkade_htlc_script_version: number;
             /** @description Optional referral code for tracking. */
             referral_code?: string | null;
             /** @description Refund public key used to generate the Arkade VHTLC. */
