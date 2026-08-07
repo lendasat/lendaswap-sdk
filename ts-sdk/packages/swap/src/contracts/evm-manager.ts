@@ -29,10 +29,10 @@ export type EvmHtlcQuery = {
   /** A `SwapCreated` counts only when it pays this address (term check). */
   claimAddress: `0x${string}`;
   /**
-   * The rest of the swap-key tuple, when the swap response exposed it. With it,
-   * a settlement is attributed by swap key rather than by `preimageHash` — which
-   * identifies no single swap, since any number may share one hash. Absent (a
-   * stored swap missing fields), settlements are read as before.
+   * The rest of the swap-key tuple, when the swap response exposed it. It makes
+   * {@link htlcQueryKey} unique to this HTLC, so two swaps sharing a preimage
+   * hash hold separate entries rather than one overwriting the other. It does
+   * not change how settlements are attributed — those go by hash either way.
    */
   terms?: EvmHtlcTerms;
 };
@@ -43,8 +43,8 @@ export type EvmHtlcQuery = {
  * `preimageHash` identifies no single HTLC — any number can share one — so the
  * rest of the swap-key tuple is what separates two HTLCs on the same contract.
  * A caller that knows the tuple gets a key unique to its HTLC; one that does not
- * falls back to contract + hash, which is ambiguous by construction and is why
- * settlements are not attributed without terms.
+ * falls back to contract + hash, which is ambiguous by construction — two such
+ * callers on one hash share an entry.
  */
 export function htlcQueryKey(q: {
   htlc: `0x${string}`;

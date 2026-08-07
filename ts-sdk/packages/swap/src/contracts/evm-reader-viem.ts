@@ -262,6 +262,13 @@ function decodeIsActive(data: `0x${string}` | undefined): boolean {
   return decodeFunctionResult({ abi: [IS_ACTIVE], data }) === true;
 }
 
+/**
+ * The decoded fields this reader acts on.
+ *
+ * All three events also carry `key`. It is deliberately not surfaced: nothing
+ * here can check it against a query yet, and a field decoded but never read
+ * reads as though attribution were key-based. See {@link toHtlcEvent}.
+ */
 type DecodedHtlcLog =
   | {
       eventName: "SwapCreated";
@@ -269,18 +276,15 @@ type DecodedHtlcLog =
       claimAddress: `0x${string}`;
       token: `0x${string}`;
       amount: bigint;
-      key: `0x${string}`;
     }
   | {
       eventName: "SwapRedeemed";
       preimageHash: `0x${string}`;
       preimage: `0x${string}`;
-      key: `0x${string}`;
     }
   | {
       eventName: "SwapRefunded";
       preimageHash: `0x${string}`;
-      key: `0x${string}`;
     };
 
 /** Decode one raw log against the three-event ABI; undefined for foreign logs. */
@@ -301,15 +305,24 @@ function tryDecode(log: RawLog): DecodedHtlcLog | undefined {
  * Map a decoded log to the manager's event, applying the per-query guards the
  * batched filter can't express per-hash.
  *
- * The filter matches on `preimageHash`, which identifies no single swap — any
- * number may share one hash, each with its own terms and lifecycle. A settlement
- * is therefore attributed by `key`, the commitment to the full parameter set; one
- * bearing a different key belongs to a different swap. A query without the tuple
- * cannot derive that key, so its settlements are not attributed at all.
+ * Settlements are attributed by `preimageHash` alone, which identifies no single
+ * HTLC — any number may share one hash, each with its own terms and lifecycle.
+ * Two queries on the same hash and contract therefore both see the same terminal
+ * event. Attribution here is ambiguous by construction; `evmObservation`'s
+ * `isActive` check, not this mapping, is what keeps an open HTLC from reading as
+ * settled, because the tuple it calls with does hold for the leg being tracked.
  *
- * `SwapCreated` keeps the `claimAddress` check rather than a key match: it is the
- * event that first reports the funded amount, which may differ from the expected
- * one, so its key is not predictable. `evmObservation` term-checks it afterwards.
+ * The events carry `key`, the commitment to the full parameter set, which would
+ * separate them — but a query cannot arrive at the funded HTLC's key on its own:
+ * a coordinator locks its post-swap balance rather than the quoted amount, and is
+ * recorded as `sender` in place of the funder named on the swap. Attributing
+ * settlements exactly needs the key recorded at funding time to reach the client
+ * rather than being re-derived here.
+ *
+ * `SwapCreated` is guarded on `claimAddress` for the same reason a key match will
+ * not do: it is the event that first reports the funded amount, which may differ
+ * from the expected one, so its key is not predictable either. `evmObservation`
+ * term-checks it afterwards.
  */
 function toHtlcEvent(
   decoded: DecodedHtlcLog,
