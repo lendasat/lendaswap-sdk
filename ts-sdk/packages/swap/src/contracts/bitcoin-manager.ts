@@ -17,7 +17,15 @@ import type { ContractManager, HtlcRef, Ledger } from "./types.js";
 /** The esplora surface the observer needs (a `BitcoinReaderEsplora` satisfies it). */
 export type BitcoinChainReader = {
   /** Funding + spend facts for an HTLC witness-script address. */
-  getHtlcFacts(address: string): Promise<BitcoinHtlcFacts>;
+  /**
+   * Funding + spend facts for an HTLC witness-script address. `minConfirmations`
+   * overrides the reader's default for this address alone — the two legs of a
+   * swap do not share one rule.
+   */
+  getHtlcFacts(
+    address: string,
+    minConfirmations?: number,
+  ): Promise<BitcoinHtlcFacts>;
 };
 
 export type BitcoinCreateConfig = {
@@ -154,7 +162,10 @@ export class BitcoinContractManager implements ContractManager {
   async #reconcileRef(
     ref: Extract<HtlcRef, { ledger: "bitcoin" }>,
   ): Promise<void> {
-    const facts = await this.#reader.getHtlcFacts(ref.address);
+    const facts = await this.#reader.getHtlcFacts(
+      ref.address,
+      ref.minConfirmations,
+    );
     const { observation, preimage } = bitcoinObservation(
       facts,
       hex.decode(ref.preimageHash),

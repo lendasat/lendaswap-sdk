@@ -44,7 +44,8 @@ describe("BitcoinContractManager", () => {
   it("maps funding facts to observations", async () => {
     const m = build();
     await m.register(ref);
-    expect(reader.getHtlcFacts).toHaveBeenCalledWith(ref.address);
+    // This ref sets no rule, so the reader's own default applies.
+    expect(reader.getHtlcFacts).toHaveBeenCalledWith(ref.address, undefined);
     expect(m.getState(ref)).toBe("absent");
 
     reader.facts = { funding: "confirmed", fundedSats: 1000 };

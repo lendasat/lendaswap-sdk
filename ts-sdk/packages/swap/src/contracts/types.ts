@@ -47,6 +47,18 @@ export type HtlcRef =
       preimageHash: string;
       /** Expected funding amount in sats; a funding below this is `invalid`. */
       expectedSats: number;
+      /**
+       * Confirmations this leg's funding needs before it observes as
+       * `confirmed`, overriding the reader's default.
+       *
+       * Set per leg because the two directions are not symmetric. A funding the
+       * SERVER made can be taken at 0-conf: the server does not double-spend its
+       * own HTLC, and waiting a block would stall every claim. A funding the
+       * CLIENT made is read back under the rule the server applies to it — the
+       * server does not act until the tx has a blocktime, so calling it funded
+       * sooner reports progress the other side has not agreed to.
+       */
+      minConfirmations?: number;
     }
   | {
       ledger: "evm";

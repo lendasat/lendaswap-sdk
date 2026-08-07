@@ -128,16 +128,28 @@ function evmLeg(args: {
  * the on-chain script commits `ripemd160` of it, but the classifier verifies a
  * revealed preimage as `sha256(preimage) === hashLock`.
  */
+/**
+ * Confirmations a CLIENT-funded Bitcoin HTLC needs before it reads as funded.
+ *
+ * The server does not act on a client funding until it has a blocktime, so
+ * observing it sooner would report the swap as funded while the other side is
+ * still waiting for a block. A server-funded leg keeps the reader's 0-conf
+ * default, which is what lets a claim go out without waiting ~10 minutes.
+ */
+const CLIENT_FUNDING_MIN_CONFIRMATIONS = 1;
+
 function bitcoinLeg(
   address: string,
   hashLock: string,
   expectedSats: number,
+  minConfirmations?: number,
 ): HtlcRef {
   return {
     ledger: "bitcoin",
     address,
     preimageHash: strip0x(hashLock),
     expectedSats,
+    minConfirmations,
   };
 }
 
@@ -192,6 +204,7 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           r.btc_htlc_address,
           r.evm_hash_lock,
           Number(r.source_amount),
+          CLIENT_FUNDING_MIN_CONFIRMATIONS,
         ),
         serverHtlc: evmLeg({
           chainId: r.evm_chain_id,
@@ -242,6 +255,7 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
           r.btc_htlc_address,
           r.hash_lock,
           Number(r.source_amount),
+          CLIENT_FUNDING_MIN_CONFIRMATIONS,
         ),
         serverHtlc: buildArkadeVhtlcRef({
           senderPk: r.server_vhtlc_pk, // the server funds the VHTLC

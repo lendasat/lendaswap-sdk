@@ -112,7 +112,8 @@ export function esploraReader(
   const minConf = policy?.minConfirmations ?? 0;
   let start = 0;
   return {
-    async getHtlcFacts(address) {
+    async getHtlcFacts(address, minConfirmations) {
+      const required = minConfirmations ?? minConf;
       const from = start++ % bases.length; // rotate the primary to spread load
       let lastError: unknown;
       for (let i = 0; i < bases.length; i++) {
@@ -126,13 +127,13 @@ export function esploraReader(
           // Depth policies beyond 1 need the tip to compute confirmations;
           // 0 and 1 read straight off the tx's confirmed flag.
           let tipHeight: number | undefined;
-          if (minConf > 1) {
+          if (required > 1) {
             const tip = await fetchImpl(`${base}/blocks/tip/height`);
             if (!tip.ok) throw new Error(`esplora ${tip.status} at ${base}`);
             tipHeight = Number(await tip.text());
           }
           return htlcFactsFromEsploraTxs(txs, address, {
-            minConfirmations: minConf,
+            minConfirmations: required,
             tipHeight,
           });
         } catch (error) {

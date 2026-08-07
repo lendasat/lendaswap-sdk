@@ -174,6 +174,7 @@ describe("swapToTracked", () => {
       address: "bcrt1qhtlc",
       preimageHash: hashLock, // sha256 hash, no 0x — the classifier verifies against it
       expectedSats: 2400, // target_amount (server funds the BTC leg)
+      minConfirmations: undefined, // server-funded: claimable at 0-conf
     });
     expect(tracked?.clientRefundLocktime).toBe(900_000_000); // EVM leg
     expect(tracked?.serverRefundLocktime).toBe(1_000_000_000); // BTC leg
@@ -187,6 +188,26 @@ describe("swapToTracked", () => {
     expect(tracked?.serverHtlc?.ledger).toBe("evm");
     expect(tracked?.clientRefundLocktime).toBe(1_000_000_000); // BTC leg
     expect(tracked?.serverRefundLocktime).toBe(900_000_000); // EVM leg
+  });
+
+  it("waits a block on a client-funded BTC leg, but not a server-funded one", () => {
+    // The server does not act on the client's funding until it has a blocktime,
+    // so reading it back at 0-conf would show the swap funded while the server
+    // is still waiting. Its own funding has no such constraint.
+    const clientFunds = swapToTracked(
+      stored({ ...bitcoinEvmFields, direction: "bitcoin_to_evm" }),
+    );
+    const serverFunds = swapToTracked(
+      stored({ ...bitcoinEvmFields, direction: "evm_to_bitcoin" }),
+    );
+
+    const clientLeg = clientFunds?.clientHtlc;
+    const serverLeg = serverFunds?.serverHtlc;
+    if (clientLeg?.ledger !== "bitcoin" || serverLeg?.ledger !== "bitcoin")
+      throw new Error("expected a Bitcoin leg on each side");
+
+    expect(clientLeg.minConfirmations).toBe(1);
+    expect(serverLeg.minConfirmations).toBeUndefined();
   });
 
   // ─── Lightning: one on-chain leg, the other side off-chain (undefined) ──────
@@ -322,6 +343,7 @@ describe("swapToTracked", () => {
       address: "bcrt1qbtcark",
       preimageHash: hash160, // 20-byte HASH160, kept as-is
       expectedSats: 2500, // source_amount
+      minConfirmations: 1, // the client funded it; the server waits for a block
     });
     expect(tracked?.serverHtlc).toEqual({
       ledger: "arkade",
