@@ -1,5 +1,11 @@
 # @satora/swap
 
+## 0.3.1
+
+### Patch Changes
+
+- 75f4743: Target backend lendaswap@0.3.1 in the x-satora-server-version header.
+
 ## 0.3.0
 
 ### Minor Changes
