@@ -141,10 +141,26 @@ const activeQueryFor = (htlc: `0x${string}`, preimageHash: `0x${string}`) => ({
   timelockSec: 1_700_000_000,
 });
 
+/** The key an `isActiveBatch` result carries: the whole tuple is always known. */
+const activeKeyFor = (htlc: `0x${string}`, preimageHash: `0x${string}`) =>
+  htlcQueryKey({
+    htlc,
+    preimageHash,
+    claimAddress: CLAIM,
+    terms: {
+      amount: 1000n,
+      token: TOKEN,
+      sender: REFUND,
+      timelockSec: 1_700_000_000,
+    },
+  });
+
 const QUERY = { htlc: HTLC, preimageHash: PH, claimAddress: CLAIM };
 /** The same swap, with enough terms to derive its key. */
 const QUERY_WITH_TERMS = { ...QUERY, terms: TERMS };
 const KEY = htlcQueryKey(QUERY);
+/** The result key when the query carries terms — a different key by design. */
+const KEY_WITH_TERMS = htlcQueryKey(QUERY_WITH_TERMS);
 
 describe("evmReaderFromClient", () => {
   it("returns a created event when the swap was funded", async () => {
@@ -160,7 +176,7 @@ describe("evmReaderFromClient", () => {
       fakeClient([redeemedLog(`0x${"ab".repeat(32)}`)]),
     );
     const events = (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(
-      KEY,
+      KEY_WITH_TERMS,
     );
     expect(events).toEqual([
       { kind: "redeemed", preimage: `0x${"ab".repeat(32)}` },
@@ -175,15 +191,57 @@ describe("evmReaderFromClient", () => {
       ]),
     );
     expect(
-      (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY),
+      (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY_WITH_TERMS),
     ).toEqual([]);
   });
 
-  it("keeps settlements when the query has no terms to derive a key from", async () => {
-    const reader = evmReaderFromClient(fakeClient([refundedLog(OTHER_KEY)]));
-    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toEqual([
+  it("does not attribute a settlement when the query has no terms", async () => {
+    // Without the tuple there is nothing to tell this swap's settlement from any
+    // other HTLC sharing its hash, so none is reported rather than guessing.
+    const reader = evmReaderFromClient(fakeClient([refundedLog()]));
+    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toEqual([]);
+  });
+
+  it("keeps two queries sharing a hash apart by their own terms", async () => {
+    const otherTerms = { ...TERMS, amount: 999n } as const;
+    const otherKey = keccak256(
+      encodeAbiParameters(
+        [
+          { type: "bytes32" },
+          { type: "uint256" },
+          { type: "address" },
+          { type: "address" },
+          { type: "address" },
+          { type: "uint256" },
+        ],
+        [
+          PH,
+          otherTerms.amount,
+          TERMS.token,
+          TERMS.sender,
+          CLAIM,
+          BigInt(TERMS.timelockSec),
+        ],
+      ),
+    );
+    const otherQuery = { ...QUERY, terms: otherTerms };
+
+    const reader = evmReaderFromClient(
+      fakeClient([refundedLog(), refundedLog(otherKey)]),
+    );
+    const result = await reader.getHtlcEventsBatch([
+      QUERY_WITH_TERMS,
+      otherQuery,
+    ]);
+
+    // Same contract, same hash, different terms: each sees only its own.
+    expect(result.get(htlcQueryKey(QUERY_WITH_TERMS))).toEqual([
       { kind: "refunded" },
     ]);
+    expect(result.get(htlcQueryKey(otherQuery))).toEqual([
+      { kind: "refunded" },
+    ]);
+    expect(htlcQueryKey(QUERY_WITH_TERMS)).not.toBe(htlcQueryKey(otherQuery));
   });
 
   it("drops a SwapCreated paying a different claim address", async () => {
@@ -197,7 +255,9 @@ describe("evmReaderFromClient", () => {
     const reader = evmReaderFromClient(
       fakeClient([createdLog(1000n), redeemedLog(preimage)]),
     );
-    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toMatchObject([
+    expect(
+      (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY_WITH_TERMS),
+    ).toMatchObject([
       { kind: "created", amount: 1000n },
       { kind: "redeemed", preimage },
     ]);
@@ -207,10 +267,9 @@ describe("evmReaderFromClient", () => {
     const reader = evmReaderFromClient(
       fakeClient([createdLog(1000n), refundedLog()]),
     );
-    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toMatchObject([
-      { kind: "created", amount: 1000n },
-      { kind: "refunded" },
-    ]);
+    expect(
+      (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY_WITH_TERMS),
+    ).toMatchObject([{ kind: "created", amount: 1000n }, { kind: "refunded" }]);
   });
 
   it("maps a queried HTLC with no events to an empty array", async () => {
@@ -284,9 +343,7 @@ describe("isActiveBatch", () => {
 
     expect(client.call).toHaveBeenCalledTimes(1);
     expect(client.call.mock.calls[0][0].to).toBe(HTLC);
-    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
-      true,
-    );
+    expect(result.get(activeKeyFor(HTLC, PH))).toBe(true);
   });
 
   it("many queries collapse into one Multicall3 eth_call", async () => {
@@ -311,13 +368,9 @@ describe("isActiveBatch", () => {
 
     expect(client.call).toHaveBeenCalledTimes(1);
     expect(client.call.mock.calls[0][0].to).toBe(MULTICALL3_ADDRESS);
-    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
-      true,
-    );
+    expect(result.get(activeKeyFor(HTLC, PH))).toBe(true);
     // A failed inner call reads as inactive (the caller's log path classifies).
-    expect(result.get(htlcQueryKey({ htlc: htlc2, preimageHash: ph2 }))).toBe(
-      false,
-    );
+    expect(result.get(activeKeyFor(htlc2, ph2))).toBe(false);
   });
 
   it("falls back to per-HTLC calls when Multicall3 is unavailable", async () => {
@@ -336,12 +389,8 @@ describe("isActiveBatch", () => {
     ]);
 
     expect(client.call).toHaveBeenCalledTimes(3);
-    expect(result.get(htlcQueryKey({ htlc: HTLC, preimageHash: PH }))).toBe(
-      true,
-    );
-    expect(result.get(htlcQueryKey({ htlc: htlc2, preimageHash: ph2 }))).toBe(
-      false,
-    );
+    expect(result.get(activeKeyFor(HTLC, PH))).toBe(true);
+    expect(result.get(activeKeyFor(htlc2, ph2))).toBe(false);
   });
 });
 

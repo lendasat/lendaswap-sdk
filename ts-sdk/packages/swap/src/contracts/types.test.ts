@@ -32,7 +32,22 @@ describe("htlcKey", () => {
         claimAddress: "0xc1",
         expectedAmount: 0n,
       },
-      "evm:137:0xdef",
+      "evm:137:0xabc:0xdef",
+    ],
+    // With it, two HTLCs sharing a hash on one contract stay distinct.
+    [
+      {
+        ledger: "evm",
+        chainId: 137,
+        htlc: "0xabc",
+        preimageHash: "0xdef",
+        claimAddress: "0xc1",
+        expectedAmount: 5n,
+        expectedToken: "0xt0ken",
+        sender: "0x5ender",
+        timelockSec: 1_700_000_000,
+      },
+      "evm:137:0xabc:0xdef:5:0xt0ken:0x5ender:0xc1:1700000000",
     ],
     [{ ledger: "lightning", paymentHash: "ph" }, "lightning:ph"],
   ];

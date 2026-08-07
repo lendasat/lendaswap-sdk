@@ -7,6 +7,7 @@ import {
   EvmContractManager,
   type EvmHtlcQuery,
   htlcQueryKey,
+  refQueryKey,
 } from "./evm-manager.js";
 import type { HtlcRef } from "./types.js";
 
@@ -20,10 +21,25 @@ const ref = {
   expectedToken: "0xwbtc",
 } satisfies HtlcRef;
 
+/** Mirrors how the real reader keys an `isActiveBatch` result. */
+function activeKey(q: EvmActiveQuery): string {
+  return htlcQueryKey({
+    htlc: q.htlc,
+    preimageHash: q.preimageHash,
+    claimAddress: q.claimAddress,
+    terms: {
+      amount: q.amount,
+      token: q.token,
+      sender: q.sender,
+      timelockSec: q.timelockSec,
+    },
+  });
+}
+
 class FakeReader implements EvmChainReader {
   /** Events served for every queried HTLC (the log path). */
   events: EvmHtlcEvent[] = [];
-  /** htlcQueryKey → open? Missing key reads as inactive. */
+  /** activeKey → open? Missing key reads as inactive. */
   active = new Map<string, boolean>();
   blockTimeMs = 1_000;
   blockNumber = 100n;
@@ -35,8 +51,8 @@ class FakeReader implements EvmChainReader {
   isActiveBatch = vi.fn(async (queries: EvmActiveQuery[]) => {
     return new Map(
       queries.map((q) => [
-        htlcQueryKey(q),
-        this.active.get(htlcQueryKey(q)) ?? false,
+        activeKey(q),
+        this.active.get(activeKey(q)) ?? false,
       ]),
     );
   });
@@ -209,7 +225,7 @@ describe("EvmContractManager", () => {
 
     it("confirms an active HTLC without any log scan", async () => {
       const m = build();
-      reader.active.set(htlcQueryKey(tupleRef), true);
+      reader.active.set(refQueryKey(tupleRef), true);
       await m.register(tupleRef);
       await m.refresh();
       expect(m.getState(tupleRef)).toBe("confirmed");

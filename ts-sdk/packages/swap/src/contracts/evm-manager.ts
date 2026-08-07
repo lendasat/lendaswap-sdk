@@ -34,20 +34,59 @@ export type EvmHtlcQuery = {
    * identifies no single swap, since any number may share one hash. Absent (a
    * stored swap missing fields), settlements are read as before.
    */
-  terms?: {
-    amount: bigint;
-    token: `0x${string}`;
-    sender: `0x${string}`;
-    timelockSec: number;
-  };
+  terms?: EvmHtlcTerms;
 };
 
-/** The result key for one {@link EvmHtlcQuery} in a batch. */
+/**
+ * The result key for one query in a batch.
+ *
+ * `preimageHash` identifies no single HTLC — any number can share one — so the
+ * rest of the swap-key tuple is what separates two HTLCs on the same contract.
+ * A caller that knows the tuple gets a key unique to its HTLC; one that does not
+ * falls back to contract + hash, which is ambiguous by construction and is why
+ * settlements are not attributed without terms.
+ */
 export function htlcQueryKey(q: {
   htlc: `0x${string}`;
   preimageHash: `0x${string}`;
+  claimAddress?: `0x${string}`;
+  terms?: EvmHtlcTerms;
 }): string {
-  return `${q.htlc.toLowerCase()}:${q.preimageHash.toLowerCase()}`;
+  const base = `${q.htlc.toLowerCase()}:${q.preimageHash.toLowerCase()}`;
+  if (!q.terms || !q.claimAddress) return base;
+  const { amount, token, sender, timelockSec } = q.terms;
+  return [
+    base,
+    amount,
+    token.toLowerCase(),
+    sender.toLowerCase(),
+    q.claimAddress.toLowerCase(),
+    timelockSec,
+  ].join(":");
+}
+
+/** The swap-key tuple fields beyond contract, hash and claim address. */
+export type EvmHtlcTerms = {
+  amount: bigint;
+  token: `0x${string}`;
+  sender: `0x${string}`;
+  timelockSec: number;
+};
+
+/** The batch key for a tracked ref, carrying its terms when the swap exposed them. */
+export function refQueryKey(ref: EvmRef): string {
+  const full = activeQuery(ref);
+  return htlcQueryKey({
+    htlc: ref.htlc,
+    preimageHash: ref.preimageHash,
+    claimAddress: ref.claimAddress,
+    terms: full && {
+      amount: full.amount,
+      token: full.token,
+      sender: full.sender,
+      timelockSec: full.timelockSec,
+    },
+  });
 }
 
 /**
@@ -271,7 +310,7 @@ export class EvmContractManager implements ContractManager {
           fast.map((r) => activeQuery(r) as EvmActiveQuery),
         );
         for (const ref of fast) {
-          if (active.get(htlcQueryKey(ref)) === true)
+          if (active.get(refQueryKey(ref)) === true)
             this.#set(htlcKey(ref), "confirmed");
           else needLogs.push(ref); // inactive: classify from logs
         }
@@ -332,7 +371,7 @@ export class EvmContractManager implements ContractManager {
     );
     for (const ref of refs) {
       const { observation, preimage } = evmObservation(
-        events.get(htlcQueryKey(ref)) ?? [],
+        events.get(refQueryKey(ref)) ?? [],
         { amount: ref.expectedAmount, token: ref.expectedToken },
       );
       const key = htlcKey(ref);

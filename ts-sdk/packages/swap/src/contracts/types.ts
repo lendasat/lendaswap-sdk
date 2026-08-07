@@ -54,9 +54,10 @@ export type HtlcRef =
       /** The HTLCErc20 contract holding this leg — where its events are emitted. */
       htlc: `0x${string}`;
       /**
-       * SHA256 preimage hash (`0x`-prefixed) — the indexed topic that identifies
-       * this swap's HTLC in the contract's `SwapCreated`/`SwapRedeemed`/
-       * `SwapRefunded` events. Serves as the contract's unique id here.
+       * SHA256 preimage hash (`0x`-prefixed) — the indexed topic the contract's
+       * `SwapCreated`/`SwapRedeemed`/`SwapRefunded` events are filtered by. It
+       * narrows a log scan but identifies no single HTLC: any number can share
+       * one hash, so a swap is told apart by the rest of the tuple below.
        */
       preimageHash: `0x${string}`;
       /**
@@ -104,8 +105,24 @@ export function htlcKey(ref: HtlcRef): string {
       return `arkade:${ref.script}`;
     case "bitcoin":
       return `bitcoin:${ref.address}`;
-    case "evm":
-      return `evm:${ref.chainId}:${ref.preimageHash}`;
+    case "evm": {
+      // Not the hash alone: any number of HTLCs can carry one preimage hash, so
+      // the contract and the rest of the swap-key tuple are what separate them.
+      // A leg whose response omitted a tuple field falls back to contract + hash
+      // and stays ambiguous — which is why its settlements are not attributed.
+      const base = `evm:${ref.chainId}:${ref.htlc.toLowerCase()}:${ref.preimageHash.toLowerCase()}`;
+      if (!ref.expectedToken || !ref.sender || ref.timelockSec === undefined) {
+        return base;
+      }
+      return [
+        base,
+        ref.expectedAmount,
+        ref.expectedToken.toLowerCase(),
+        ref.sender.toLowerCase(),
+        ref.claimAddress.toLowerCase(),
+        ref.timelockSec,
+      ].join(":");
+    }
     case "lightning":
       return `lightning:${ref.paymentHash}`;
   }

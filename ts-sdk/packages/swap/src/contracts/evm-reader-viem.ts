@@ -29,6 +29,7 @@ import {
 } from "viem";
 import type { EvmHtlcEvent } from "./evm.js";
 import {
+  type EvmActiveQuery,
   type EvmChainReader,
   type EvmHtlcQuery,
   htlcQueryKey,
@@ -118,6 +119,21 @@ const AGGREGATE3 = parseAbiItem(
   "function aggregate3((address target, bool allowFailure, bytes callData)[] calls) payable returns ((bool success, bytes returnData)[] returnData)",
 );
 
+/** An `EvmActiveQuery` carries the whole tuple, so its key always includes terms. */
+function activeKey(q: EvmActiveQuery): string {
+  return htlcQueryKey({
+    htlc: q.htlc,
+    preimageHash: q.preimageHash,
+    claimAddress: q.claimAddress,
+    terms: {
+      amount: q.amount,
+      token: q.token,
+      sender: q.sender,
+      timelockSec: q.timelockSec,
+    },
+  });
+}
+
 /** The undecoded log shape `eth_getLogs` returns. */
 export type RawLog = {
   address: `0x${string}`;
@@ -169,18 +185,29 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
         ],
       });
 
-      const byKey = new Map(queries.map((q) => [htlcQueryKey(q), q]));
+      // A log can only be grouped by what it carries on its own — contract and
+      // hash — and several HTLCs can share that. So group, then let every query
+      // filter the whole group through its own terms. Matching each log to a
+      // single query up front would let two queries sharing a hash collapse into
+      // one, dropping the other's settlements or attributing them wrongly.
+      const grouped = new Map<string, DecodedHtlcLog[]>();
       for (const log of logs) {
         const decoded = tryDecode(log);
         if (!decoded) continue;
-        const key = htlcQueryKey({
-          htlc: log.address,
-          preimageHash: decoded.preimageHash,
-        });
-        const query = byKey.get(key);
-        if (!query) continue;
-        const event = toHtlcEvent(decoded, query);
-        if (event) results.get(key)?.push(event);
+        const group = `${log.address.toLowerCase()}:${decoded.preimageHash.toLowerCase()}`;
+        const existing = grouped.get(group);
+        if (existing) existing.push(decoded);
+        else grouped.set(group, [decoded]);
+      }
+
+      for (const query of queries) {
+        const group = `${query.htlc.toLowerCase()}:${query.preimageHash.toLowerCase()}`;
+        const events = results.get(htlcQueryKey(query));
+        if (!events) continue;
+        for (const decoded of grouped.get(group) ?? []) {
+          const event = toHtlcEvent(decoded, query);
+          if (event) events.push(event);
+        }
       }
       return results;
     },
@@ -206,7 +233,7 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
           to: queries[i].htlc,
           data: calldatas[i],
         });
-        results.set(htlcQueryKey(queries[i]), decodeIsActive(data));
+        results.set(activeKey(queries[i]), decodeIsActive(data));
       };
 
       if (queries.length === 1) {
@@ -238,7 +265,7 @@ export function evmReaderFromClient(client: EvmLogClient): EvmChainReader {
           // A failed inner call reads as "not active" — the caller's log
           // fallback then classifies it, so nothing is silently trusted.
           results.set(
-            htlcQueryKey(q),
+            activeKey(q),
             r?.success === true && decodeIsActive(r.returnData),
           );
         });
@@ -305,10 +332,9 @@ function tryDecode(log: RawLog): DecodedHtlcLog | undefined {
  *
  * The filter matches on `preimageHash`, which identifies no single swap — any
  * number may share one hash, each with its own terms and lifecycle. A settlement
- * is therefore attributed by `key`, the commitment to the full parameter set,
- * whenever the query carried enough to derive it; a settlement for a different
- * key belongs to a different swap and is dropped. Without terms, the query cannot
- * derive a key and settlements are taken as before.
+ * is therefore attributed by `key`, the commitment to the full parameter set; one
+ * bearing a different key belongs to a different swap. A query without the tuple
+ * cannot derive that key, so its settlements are not attributed at all.
  *
  * `SwapCreated` keeps the `claimAddress` check rather than a key match: it is the
  * event that first reports the funded amount, which may differ from the expected
@@ -324,9 +350,15 @@ function toHtlcEvent(
     return { kind: "created", amount: decoded.amount, token: decoded.token };
   }
 
+  // Without the tuple there is no way to tell this swap's settlement from that of
+  // any other HTLC sharing its hash, and `isActive` needs the same tuple, so there
+  // is no fallback either. Report nothing rather than assert someone else's
+  // settlement as this swap's: a leg that reads as still-funded when it settled is
+  // stale, one that reads as settled when it did not is wrong, and only the second
+  // can drive a claim decision.
   const expected = expectedSwapKey(query);
-  if (expected && decoded.key.toLowerCase() !== expected.toLowerCase())
-    return undefined;
+  if (!expected) return undefined;
+  if (decoded.key.toLowerCase() !== expected.toLowerCase()) return undefined;
 
   return decoded.eventName === "SwapRedeemed"
     ? { kind: "redeemed", preimage: decoded.preimage }
