@@ -167,6 +167,38 @@ describe("SwapTracker", () => {
     warn.mockRestore();
   });
 
+  it("still applies a hint when one leg cannot be reconciled", async () => {
+    // A hint is the fast path. Losing it because one leg was unreadable drops
+    // the swap onto the at-risk poller, which re-reads minutes later.
+    const arkade = new FakeManager("arkade", 1_000);
+    const evm = new FakeManager("evm", 1_000);
+    evm.reconcile = async () => {
+      throw new Error("range 44636 exceeds limit of 10000");
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tracker = new SwapTracker(
+      new Map<Ledger, ContractManager>([
+        ["arkade", arkade],
+        ["evm", evm],
+      ]),
+    );
+    await tracker.startTracking([swap]);
+
+    const sub = vi.fn();
+    tracker.subscribeToActions(sub);
+    sub.mockClear();
+    arkade.emit(clientHtlc, "confirmed");
+    evm.emit(serverHtlc, "confirmed");
+
+    await expect(tracker.applyHint("s1")).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "SwapTracker: hint reconcile failed for evm:",
+      expect.any(Error),
+    );
+    expect(sub).toHaveBeenCalled(); // recomputed from what did land
+    warn.mockRestore();
+  });
+
   it("primes a refresh-only clock on startTracking, so emits aren't blocked", async () => {
     // Arkade's clock is undefined until refresh(); without priming it in
     // startTracking, the recompute would bail on an undefined clock forever.

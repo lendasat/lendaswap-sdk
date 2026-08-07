@@ -266,9 +266,22 @@ export class SwapTracker {
   async applyHint(swapId: string, opts?: { force?: boolean }): Promise<void> {
     const swap = this.#swaps.get(swapId);
     if (!swap) return;
-    await Promise.all(
-      legsOf(swap).map((leg) => this.#managerFor(leg).reconcile(leg)),
+    // Settled, not all: a hint is the fast path, and rejecting here would throw
+    // it away for BOTH legs because one was unreadable — dropping the swap onto
+    // the at-risk poller, which re-reads on a cadence measured in minutes. A leg
+    // that fails keeps its previous observation and is recomputed from whatever
+    // did land; the poller remains the backstop that heals it.
+    const legs = legsOf(swap);
+    const results = await Promise.allSettled(
+      legs.map((leg) => this.#managerFor(leg).reconcile(leg)),
     );
+    results.forEach((result, index) => {
+      if (result.status === "rejected")
+        console.warn(
+          `SwapTracker: hint reconcile failed for ${legs[index].ledger}:`,
+          result.reason,
+        );
+    });
     // `force` re-notifies even when the derived action is unchanged — the hook a
     // failed auto-execution uses to re-verify against chain and get retried, since
     // an unchanged action would otherwise be deduped and never re-trigger.
