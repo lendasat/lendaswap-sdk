@@ -18,11 +18,9 @@ import {
   createPublicClient,
   decodeEventLog,
   decodeFunctionResult,
-  encodeAbiParameters,
   encodeFunctionData,
   fallback,
   http,
-  keccak256,
   numberToHex,
   parseAbiItem,
   toEventSelector,
@@ -74,33 +72,6 @@ const SWAP_REFUNDED = parseAbiItem(
   "event SwapRefunded(bytes32 indexed preimageHash, bytes32 indexed key)",
 );
 
-/** The six-parameter tuple `HTLCErc20._key` hashes, as `abi.encode` lays it out. */
-const SWAP_KEY_PARAMS = [
-  { type: "bytes32" },
-  { type: "uint256" },
-  { type: "address" },
-  { type: "address" },
-  { type: "address" },
-  { type: "uint256" },
-] as const;
-
-/**
- * The swap key for a query whose terms are known, matching `HTLCErc20.computeKey`.
- * `undefined` when the query didn't carry the full tuple.
- */
-function expectedSwapKey(query: EvmHtlcQuery): `0x${string}` | undefined {
-  if (!query.terms) return undefined;
-  return keccak256(
-    encodeAbiParameters(SWAP_KEY_PARAMS, [
-      query.preimageHash,
-      query.terms.amount,
-      query.terms.token,
-      query.terms.sender,
-      query.claimAddress,
-      BigInt(query.terms.timelockSec),
-    ]),
-  );
-}
 const HTLC_EVENTS_ABI = [SWAP_CREATED, SWAP_REDEEMED, SWAP_REFUNDED] as const;
 /** topic0 of the three lifecycle events — the batched getLogs OR-filter. */
 const HTLC_EVENT_TOPICS = HTLC_EVENTS_ABI.map(toEventSelector);
@@ -349,16 +320,6 @@ function toHtlcEvent(
       return undefined;
     return { kind: "created", amount: decoded.amount, token: decoded.token };
   }
-
-  // Without the tuple there is no way to tell this swap's settlement from that of
-  // any other HTLC sharing its hash, and `isActive` needs the same tuple, so there
-  // is no fallback either. Report nothing rather than assert someone else's
-  // settlement as this swap's: a leg that reads as still-funded when it settled is
-  // stale, one that reads as settled when it did not is wrong, and only the second
-  // can drive a claim decision.
-  const expected = expectedSwapKey(query);
-  if (!expected) return undefined;
-  if (decoded.key.toLowerCase() !== expected.toLowerCase()) return undefined;
 
   return decoded.eventName === "SwapRedeemed"
     ? { kind: "redeemed", preimage: decoded.preimage }

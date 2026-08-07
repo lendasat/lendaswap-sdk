@@ -183,7 +183,14 @@ describe("evmReaderFromClient", () => {
     ]);
   });
 
-  it("drops a settlement belonging to another swap under the same hash", async () => {
+  it("takes a settlement on the hash the filter matched", async () => {
+    // A settlement emitted by any HTLC under this hash is reported, including one
+    // that is not this swap's. The swap's own tuple cannot derive the funded
+    // HTLC's key — a coordinator locks its post-swap balance rather than the
+    // quoted amount, and the contract records the coordinator as sender, not the
+    // funder named on the swap — so a key match here would discard this swap's
+    // real settlements. `isActive`, whose tuple does hold for a server-funded
+    // leg, is what stops an open HTLC being read as settled.
     const reader = evmReaderFromClient(
       fakeClient([
         redeemedLog(`0x${"ab".repeat(32)}`, OTHER_KEY),
@@ -192,56 +199,37 @@ describe("evmReaderFromClient", () => {
     );
     expect(
       (await reader.getHtlcEventsBatch([QUERY_WITH_TERMS])).get(KEY_WITH_TERMS),
-    ).toEqual([]);
+    ).toEqual([
+      { kind: "redeemed", preimage: `0x${"ab".repeat(32)}` },
+      { kind: "refunded" },
+    ]);
   });
 
-  it("does not attribute a settlement when the query has no terms", async () => {
-    // Without the tuple there is nothing to tell this swap's settlement from any
-    // other HTLC sharing its hash, so none is reported rather than guessing.
+  it("reports a settlement whether or not the query carries terms", async () => {
     const reader = evmReaderFromClient(fakeClient([refundedLog()]));
-    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toEqual([]);
+    expect((await reader.getHtlcEventsBatch([QUERY])).get(KEY)).toEqual([
+      { kind: "refunded" },
+    ]);
   });
 
-  it("keeps two queries sharing a hash apart by their own terms", async () => {
-    const otherTerms = { ...TERMS, amount: 999n } as const;
-    const otherKey = keccak256(
-      encodeAbiParameters(
-        [
-          { type: "bytes32" },
-          { type: "uint256" },
-          { type: "address" },
-          { type: "address" },
-          { type: "address" },
-          { type: "uint256" },
-        ],
-        [
-          PH,
-          otherTerms.amount,
-          TERMS.token,
-          TERMS.sender,
-          CLAIM,
-          BigInt(TERMS.timelockSec),
-        ],
-      ),
-    );
-    const otherQuery = { ...QUERY, terms: otherTerms };
+  it("gives two queries sharing a hash their own result entries", async () => {
+    // They see the same logs — a settlement is taken on the hash — but each holds
+    // its own entry, so neither overwrites the other in the batch result.
+    const otherQuery = { ...QUERY, terms: { ...TERMS, amount: 999n } };
 
-    const reader = evmReaderFromClient(
-      fakeClient([refundedLog(), refundedLog(otherKey)]),
-    );
+    const reader = evmReaderFromClient(fakeClient([refundedLog()]));
     const result = await reader.getHtlcEventsBatch([
       QUERY_WITH_TERMS,
       otherQuery,
     ]);
 
-    // Same contract, same hash, different terms: each sees only its own.
+    expect(htlcQueryKey(QUERY_WITH_TERMS)).not.toBe(htlcQueryKey(otherQuery));
     expect(result.get(htlcQueryKey(QUERY_WITH_TERMS))).toEqual([
       { kind: "refunded" },
     ]);
     expect(result.get(htlcQueryKey(otherQuery))).toEqual([
       { kind: "refunded" },
     ]);
-    expect(htlcQueryKey(QUERY_WITH_TERMS)).not.toBe(htlcQueryKey(otherQuery));
   });
 
   it("drops a SwapCreated paying a different claim address", async () => {
