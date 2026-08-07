@@ -131,6 +131,42 @@ describe("SwapTracker", () => {
     await expect(tracker.startTracking([swap])).resolves.toBeUndefined();
   });
 
+  it("starts tracking when one tracked ledger's endpoint is down", async () => {
+    // The failing ledger IS part of the swap, so it cannot be skipped the way an
+    // untracked one is. Rejecting here used to propagate out of startTracking,
+    // which left every swap on every ledger with no derived actions.
+    const arkade = new FakeManager("arkade", 1_000);
+    const evm = new FakeManager("evm", 1_000);
+    evm.refresh = async () => {
+      throw new Error("range 44268 exceeds limit of 10000");
+    };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tracker = new SwapTracker(
+      new Map<Ledger, ContractManager>([
+        ["arkade", arkade],
+        ["evm", evm],
+      ]),
+    );
+
+    await expect(tracker.startTracking([swap])).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "SwapTracker: refreshing evm failed:",
+      expect.any(Error),
+    );
+
+    // Both legs are still registered and the tracker still derives, so the
+    // failed refresh cost this round's observations and nothing more.
+    expect(arkade.registered.has(htlcKey(clientHtlc))).toBe(true);
+    expect(evm.registered.has(htlcKey(serverHtlc))).toBe(true);
+
+    const sub = vi.fn();
+    tracker.subscribeToActions(sub);
+    arkade.emit(clientHtlc, "confirmed");
+    evm.emit(serverHtlc, "confirmed");
+    expect(sub).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it("primes a refresh-only clock on startTracking, so emits aren't blocked", async () => {
     // Arkade's clock is undefined until refresh(); without priming it in
     // startTracking, the recompute would bail on an undefined clock forever.

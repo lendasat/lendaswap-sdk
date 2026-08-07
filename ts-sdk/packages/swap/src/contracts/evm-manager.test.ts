@@ -85,6 +85,38 @@ describe("EvmContractManager", () => {
     );
   });
 
+  it("keeps observing one chain when another chain's endpoint fails", async () => {
+    // Every EVM chain shares this one manager, so a swap on a healthy chain must
+    // not go unobserved because an unrelated swap's chain is unreachable.
+    const broken = new FakeReader();
+    const down = () => {
+      throw new Error("range 44268 exceeds limit of 10000");
+    };
+    broken.getHtlcEventsBatch = vi.fn(down);
+    broken.isActiveBatch = vi.fn(down);
+    broken.getLatestBlock = down;
+
+    reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const m = EvmContractManager.fromDeps({
+      readers: new Map<number, EvmChainReader>([
+        [1, broken],
+        [137, reader],
+      ]),
+    });
+    await m.register({ ...ref, chainId: 1 });
+    await m.register(ref);
+
+    await expect(m.refresh()).resolves.toBeUndefined();
+
+    expect(m.getState(ref)).toBe("confirmed");
+    expect(warn).toHaveBeenCalledWith(
+      "EVM reconcile failed for chain 1:",
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
   it("register makes no RPC calls; the first refresh seeds observation and clock", async () => {
     const m = build();
     reader.events = [{ kind: "created", amount: 1000n, token: "0xwbtc" }];

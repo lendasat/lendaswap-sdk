@@ -224,12 +224,31 @@ export class SwapTracker {
     const active = new Set<Ledger>();
     for (const swap of this.#swaps.values())
       for (const leg of legsOf(swap)) active.add(leg.ledger);
-    const managers = new Set(
-      [...active]
-        .map((ledger) => this.#managers.get(ledger))
-        .filter((m): m is ContractManager => m !== undefined),
+    // Several ledgers can share a manager, so dedupe on the manager while
+    // keeping a ledger name to report a failure against.
+    const byManager = new Map<ContractManager, Ledger>();
+    for (const ledger of active) {
+      const manager = this.#managers.get(ledger);
+      if (manager && !byManager.has(manager)) byManager.set(manager, ledger);
+    }
+
+    // Settled, not all: one ledger's endpoint failing must not deny every other
+    // swap its observations. A manager that throws simply contributes none this
+    // round — a missing observation already reads as "not seen yet" — and the
+    // next refresh retries it. Rejecting instead would propagate out of
+    // `startTracking`, whose prime awaits this, leaving every tracked swap on
+    // every ledger with no derived actions at all.
+    const ledgers = [...byManager.values()];
+    const results = await Promise.allSettled(
+      [...byManager.keys()].map((manager) => manager.refresh()),
     );
-    await Promise.all([...managers].map((manager) => manager.refresh()));
+    results.forEach((result, index) => {
+      if (result.status === "rejected")
+        console.warn(
+          `SwapTracker: refreshing ${ledgers[index]} failed:`,
+          result.reason,
+        );
+    });
   }
 
   /** The swap ids currently tracked — e.g. to subscribe them to a hint feed. */

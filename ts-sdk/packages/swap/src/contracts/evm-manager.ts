@@ -236,8 +236,24 @@ export class EvmContractManager implements ContractManager {
    * re-reads only swaps with client funds on the line.
    */
   async refresh(): Promise<void> {
-    const chainIds = new Set([...this.#refs.values()].map((r) => r.chainId));
-    await Promise.all([...chainIds].map((c) => this.#reconcileChain(c)));
+    const chainIds = [
+      ...new Set([...this.#refs.values()].map((r) => r.chainId)),
+    ];
+    // Settled, not all: every EVM chain shares this one manager, so a single
+    // endpoint failing would otherwise leave the HTLCs on every OTHER chain
+    // unobserved — a swap would stop deriving because an unrelated swap's chain
+    // is unreachable. A chain that throws keeps its previous observations and is
+    // retried on the next reconcile.
+    const results = await Promise.allSettled(
+      chainIds.map((c) => this.#reconcileChain(c)),
+    );
+    results.forEach((result, index) => {
+      if (result.status === "rejected")
+        console.warn(
+          `EVM reconcile failed for chain ${chainIds[index]}:`,
+          result.reason,
+        );
+    });
   }
 
   /** Targeted verify (hint / pre-action path) — never gated. */
