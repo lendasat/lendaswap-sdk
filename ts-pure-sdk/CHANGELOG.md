@@ -1,5 +1,11 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 0.6.2
+
+### Patch Changes
+
+- 9153ac2: Fix the x-satora-server-version header value: 0.6.1 shipped `lendaswap@0.3.1` (not valid semver), which the server rejects. Now sends `0.3.1`.
+
 ## 0.6.1
 
 ### Patch Changes
