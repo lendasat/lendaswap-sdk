@@ -1,5 +1,25 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 0.6.0
+
+### Minor Changes
+
+- 68a0db7: Sign `HTLCErc20` EIP-712 payloads against domain version `"4"`, matching the
+  contract's `VERSION` bump. This release must ship together with the v4
+  contract. `HTLCCoordinator` is a separate domain and stays on `"3"`.
+- 6b830dd: `CreateSwapOptions` gains `bridgeRecipient` (the destination USDC ATA) and
+  `bridgeRecipientWallet` (the owning wallet, only when the ATA still needs
+  creation). Both are persisted on the `StoredSwap`, so a bare `claim(swapId)`
+  now works for BTC→USDC-on-Solana (CCTP) swaps; explicit claim options still
+  take precedence. Also pins `dexie` to an exact version to avoid
+  duplicate-instance errors in monorepos.
+
+### Patch Changes
+
+- 6f866d2: Gate the on-chain Bitcoin refund on the chain's median time past instead of
+  the local clock, so refund availability matches what the chain actually
+  accepts.
+
 ## Unreleased
 
 ### Patch Changes

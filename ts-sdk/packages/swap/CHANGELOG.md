@@ -1,5 +1,40 @@
 # @satora/swap
 
+## 0.3.0
+
+### Minor Changes
+
+- 573eec6: Chain-derived swap tracking.
+
+  - `WaitAction` gains `waitingOn`
+    (`"client_payment" | "client_funding_confirmation" | "server_funding" | "claim_confirmation" | "refund_timelock"`)
+    and terminal `NoneAction` gains `outcome`
+    (`"completed" | "refunded" | "expired"`). Tracker emissions also carry
+    `observations` — the raw chain facts the actions were derived from.
+  - Tracking is now push-driven via the server's status WebSocket (observe mode
+    included), with each pushed transition verified on-chain; background polling
+    is gone. While client funds are locked on-chain, an independent watcher
+    re-verifies both legs every 60s, so refund availability never depends on the
+    server.
+  - Bitcoin funding is treated as confirmed at 0-conf by default, so
+    evm→bitcoin swaps claim immediately.
+    `ClientBuilder.withBitcoinMinConfirmations(n)` restores block-depth
+    policies.
+  - `startTracking()` is safe to call concurrently; settled swaps persist their
+    final status so later sessions skip them; a swap that stays unfunded past
+    its refund locktime derives a terminal `expired`.
+
+- 31484e1: Client-funded Bitcoin HTLCs (`bitcoin_to_evm`, `btc_to_arkade`) now observe as
+  `mempool` until confirmed, matching when the server acts on them — so
+  `waitingOn: "client_funding_confirmation"` is actually reported instead of the
+  swap jumping straight to "server funding". Server-funded legs
+  (`evm_to_bitcoin`) remain claimable at 0-conf. `HtlcRef` carries an optional
+  per-leg `minConfirmations` for Bitcoin legs; the reader-wide default still
+  applies where a ref sets none.
+- 1c027f8: Read the `key` field on `HTLCErc20` lifecycle events. The event signatures
+  change, so this release reads a `VERSION 4` contract and earlier releases do
+  not — ship it together with the contract it reads.
+
 ## Unreleased
 
 ### Patch Changes
