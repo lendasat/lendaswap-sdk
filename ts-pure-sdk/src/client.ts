@@ -3283,16 +3283,21 @@ export class Client {
       networkStr = onchainSwap.network;
     }
 
-    // Check refund locktime
-    const now = Math.floor(Date.now() / 1000);
-    if (now < btcRefundLocktime) {
-      const remainingSeconds = btcRefundLocktime - now;
+    // Check the refund locktime against the chain's median time past, which is
+    // what CLTV is evaluated against — not the local clock. A clock running fast
+    // would pass this check and then have the node reject the transaction as
+    // non-final; one running slow would withhold a refund the chain already
+    // accepts. Neither is the caller's to diagnose.
+    const { mtp } = await this.getMtp();
+    if (mtp < btcRefundLocktime) {
+      const remainingSeconds = btcRefundLocktime - mtp;
       const remainingMinutes = Math.ceil(remainingSeconds / 60);
       return {
         success: false,
         message:
           `Refund is not yet available. The locktime expires in ${remainingMinutes} minutes ` +
-          `(at ${new Date(btcRefundLocktime * 1000).toISOString()}).`,
+          `of chain time (at ${new Date(btcRefundLocktime * 1000).toISOString()}); ` +
+          `the chain's median time is currently ${new Date(mtp * 1000).toISOString()}.`,
       };
     }
 
