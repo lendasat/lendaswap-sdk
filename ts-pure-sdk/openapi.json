@@ -6,7 +6,7 @@
     "license": {
       "name": ""
     },
-    "version": "0.2.52"
+    "version": "0.3.0"
   },
   "servers": [
     {
@@ -2935,7 +2935,7 @@
       },
       "BitcoinToEvmSwapResponse": {
         "type": "object",
-        "description": "Response for Arkade-to-EVM swaps.",
+        "description": "Response for Bitcoin-to-EVM swaps.",
         "required": [
           "id",
           "status",

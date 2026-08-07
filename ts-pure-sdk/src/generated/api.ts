@@ -1409,7 +1409,7 @@ export interface components {
             /** @description User ID derived from wallet for recovery purposes. */
             user_id: string;
         };
-        /** @description Response for Arkade-to-EVM swaps. */
+        /** @description Response for Bitcoin-to-EVM swaps. */
         BitcoinToEvmSwapResponse: {
             /** @description CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap. */
             bridge_target_chain?: string | null;
