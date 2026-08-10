@@ -9,6 +9,7 @@
  * individual delegators get replaced with native implementations over time.
  */
 import {
+  DEFAULT_ELECTRUM_WS_URLS,
   Client as LegacyClient,
   type ClientBuilder as LegacyClientBuilder,
   type SwapStatus,
@@ -911,12 +912,16 @@ export class Client {
     // Bitcoin observes on-chain HTLCs via esplora. Default to the public pair
     // (mempool.space + blockstream.info) with rotation/failover; an explicit URL
     // replaces them (a dev/regtest node must not fail over to mainnet).
+    // Electrum defaults per network (Satora's Fulcrum on mainnet, nothing
+    // elsewhere); an explicit URL always wins. Esplora stays the fallback,
+    // so the default endpoint being down degrades to plain Esplora reads.
+    const network = bitcoinNetwork ?? "mainnet";
     managers.set(
       "bitcoin",
       await BitcoinContractManager.create({
         esploraUrl: esploraUrl ? [esploraUrl] : DEFAULT_ESPLORA_URLS,
-        electrumWsUrl,
-        network: bitcoinNetwork,
+        electrumWsUrl: electrumWsUrl ?? DEFAULT_ELECTRUM_WS_URLS[network],
+        network,
         chainTime,
         minConfirmations: bitcoinMinConfirmations,
       }),

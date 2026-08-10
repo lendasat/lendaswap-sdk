@@ -178,7 +178,7 @@ export type {
   UsdcBridgeParams,
 } from "./client.js";
 // Main client
-export { Client, ClientBuilder } from "./client.js";
+export { Client, ClientBuilder, DEFAULT_ELECTRUM_WS_URLS } from "./client.js";
 
 export {
   addressToScriptHash,

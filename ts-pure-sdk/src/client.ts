@@ -612,6 +612,17 @@ const DEFAULT_ESPLORA_URLS: Record<string, string[]> = {
   regtest: ["http://localhost:3000"],
 };
 
+/**
+ * Default Electrum WebSocket endpoints by network — Satora's own Fulcrum for
+ * mainnet, nothing elsewhere. Used when no `electrumWsUrl` is configured, so
+ * Bitcoin lookups get push-driven funding detection out of the box; Esplora
+ * remains the automatic fallback on any Electrum failure, so an outage of
+ * this endpoint degrades to plain Esplora behavior rather than breaking.
+ */
+export const DEFAULT_ELECTRUM_WS_URLS: Record<string, string> = {
+  mainnet: "wss://electrs.satora.io",
+};
+
 /** Configuration options for the Lendaswap client. */
 export interface ClientConfig {
   /** The base URL of the Lendaswap API. */
@@ -632,10 +643,12 @@ export interface ClientConfig {
   esploraUrl?: string | string[];
   /**
    * Optional Electrum server WebSocket URL (e.g. "wss://electrs.satora.io").
-   * When set, Bitcoin lookups, broadcasts, and funding waits go to this
-   * server first — with `blockchain.scripthash.subscribe` push notifications
-   * replacing polling for funding detection. Esplora remains the fallback
-   * whenever the Electrum server is unreachable or errors.
+   * Bitcoin lookups, broadcasts, and funding waits go to this server first —
+   * with `blockchain.scripthash.subscribe` push notifications replacing
+   * polling for funding detection. Esplora remains the fallback whenever the
+   * Electrum server is unreachable or errors. Unset, mainnet defaults to
+   * Satora's Fulcrum (see `DEFAULT_ELECTRUM_WS_URLS`); other networks stay
+   * Esplora-only.
    */
   electrumWsUrl?: string;
   /** Optional Arkade server URL (e.g. "https://arkade.computer"). Falls back to network-based defaults. */
@@ -754,9 +767,11 @@ export class ClientBuilder {
 
   /**
    * Sets an Electrum server WebSocket URL (Fulcrum `ws`/`wss` port) for
-   * Bitcoin chain access. When set it is preferred over Esplora for
-   * lookups and broadcasts, and funding waits become push-driven via
+   * Bitcoin chain access. It is preferred over Esplora for lookups and
+   * broadcasts, and funding waits become push-driven via
    * `blockchain.scripthash.subscribe`. Esplora stays as the fallback.
+   * If not set, mainnet defaults to Satora's Fulcrum
+   * (see {@link DEFAULT_ELECTRUM_WS_URLS}); other networks stay Esplora-only.
    *
    * @param electrumWsUrl - e.g. `wss://electrs.satora.io`
    * @returns The builder instance for chaining.
@@ -2601,12 +2616,14 @@ export class Client {
    * without hammering the server.
    */
   /**
-   * Lazy Electrum-over-WebSocket connection, or null when no
-   * `electrumWsUrl` is configured. The underlying client connects on
-   * first use and closes itself when idle.
+   * Lazy Electrum-over-WebSocket connection. An explicitly configured
+   * `electrumWsUrl` applies on any network; otherwise the per-network
+   * default is used (mainnet only — see {@link DEFAULT_ELECTRUM_WS_URLS}),
+   * and null means "no Electrum for this network, use Esplora". The
+   * underlying client connects on first use and closes itself when idle.
    */
-  #getElectrumWs(): ElectrumWsClient | null {
-    const url = this.#config.electrumWsUrl;
+  #getElectrumWs(network: BitcoinNetwork): ElectrumWsClient | null {
+    const url = this.#config.electrumWsUrl ?? DEFAULT_ELECTRUM_WS_URLS[network];
     if (!url) return null;
     this.#electrumWs ??= new ElectrumWsClient(url, {
       onLog: (level, event, message, data) =>
@@ -2631,7 +2648,7 @@ export class Client {
     fundTxid: string | undefined,
     fundVout: number | undefined,
   ): Promise<{ txid: string; vout: number; amount: bigint } | null> {
-    const electrum = this.#getElectrumWs();
+    const electrum = this.#getElectrumWs(network);
     if (electrum) {
       try {
         if (fundTxid && fundVout !== undefined) {
@@ -2733,7 +2750,7 @@ export class Client {
   ): Promise<{ txid: string; vout: number; amount: bigint } | null> {
     const deadline = Date.now() + Math.max(0, timeoutMs);
 
-    const electrum = this.#getElectrumWs();
+    const electrum = this.#getElectrumWs(network);
     if (electrum) {
       try {
         const output = await electrumWaitForOutputByAddress(
@@ -2791,10 +2808,11 @@ export class Client {
    */
   async #broadcastBtcTx(
     esploraUrls: EsploraUrls,
+    network: BitcoinNetwork,
     txHex: string,
     retries = 5,
   ): Promise<string> {
-    const electrum = this.#getElectrumWs();
+    const electrum = this.#getElectrumWs(network);
     if (electrum) {
       try {
         return await electrumBroadcastTransaction(electrum, txHex);
@@ -3335,6 +3353,7 @@ export class Client {
       try {
         await this.#broadcastBtcTx(
           esploraUrls,
+          network,
           result.txHex,
           options?.broadcastRetries ?? 5,
         );
@@ -3603,7 +3622,12 @@ export class Client {
       }
 
       try {
-        await this.#broadcastBtcTx(broadcastEsploraUrls, result.txHex, 0);
+        await this.#broadcastBtcTx(
+          broadcastEsploraUrls,
+          network,
+          result.txHex,
+          0,
+        );
         return {
           success: true,
           message: "Refund transaction broadcast successfully!",
