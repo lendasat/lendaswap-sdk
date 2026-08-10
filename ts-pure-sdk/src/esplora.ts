@@ -102,11 +102,15 @@ async function withFallback<T>(
  * Finds a UTXO at the given address.
  *
  * Queries the Esplora `/address/:address/utxo` endpoint to find
- * unspent outputs. Returns the first UTXO found.
+ * unspent outputs. Returns the largest UTXO: the HTLC address is public, so
+ * anyone can send extra (dust) outputs to it, and picking by explorer order
+ * would let such an output shadow the real deposit — a sub-fee UTXO makes
+ * every claim/refund built against it fail. With several genuine deposits,
+ * callers recover them largest-first across repeated runs.
  *
  * @param esploraUrls - Esplora API base URL(s), tried in order
  * @param address - The address to look up UTXOs for
- * @returns The txid, vout, and amount of the first UTXO, or null if none found
+ * @returns The txid, vout, and amount of the largest UTXO, or null if none found
  */
 export async function findOutputByAddress(
   esploraUrls: EsploraUrls,
@@ -129,7 +133,9 @@ export async function findOutputByAddress(
       return null;
     }
 
-    const utxo = utxos[0];
+    const utxo = utxos.reduce((best, candidate) =>
+      candidate.value > best.value ? candidate : best,
+    );
     return { txid: utxo.txid, vout: utxo.vout, amount: BigInt(utxo.value) };
   });
 }

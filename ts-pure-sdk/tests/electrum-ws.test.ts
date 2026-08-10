@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import type { Socket } from "node:net";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addressToScriptHash,
   ElectrumWsClient,
@@ -88,9 +88,9 @@ class MockWsServer {
     socket.write(encodeTextFrame(`${text}\n`));
   }
 
-  async listen(): Promise<string> {
+  async listen(port = 0): Promise<string> {
     await new Promise<void>((resolve) =>
-      this.#server.listen(0, "127.0.0.1", resolve),
+      this.#server.listen(port, "127.0.0.1", resolve),
     );
     const address = this.#server.address();
     if (address === null || typeof address === "string")
@@ -218,6 +218,65 @@ describe("ElectrumWsClient", () => {
       (r) => r.method === "blockchain.scripthash.listunspent",
     );
     expect(lookup?.params).toEqual([GENESIS_SCRIPTHASH]);
+  });
+
+  it("selects the largest UTXO, not the first — dust must not shadow the deposit", async () => {
+    await setup();
+    server.onRequest = (method) => {
+      if (method === "blockchain.scripthash.listunspent") {
+        return [
+          { tx_hash: "0a".repeat(32), tx_pos: 3, height: 0, value: 330 },
+          { tx_hash: "0b".repeat(32), tx_pos: 0, height: 0, value: 1_515_686 },
+          { tx_hash: "0c".repeat(32), tx_pos: 1, height: 0, value: 546 },
+        ];
+      }
+      return null;
+    };
+    const output = await electrumFindOutputByAddress(
+      client,
+      GENESIS_P2PKH,
+      "mainnet",
+    );
+    expect(output).toEqual({
+      txid: "0b".repeat(32),
+      vout: 0,
+      amount: 1_515_686n,
+    });
+  });
+
+  it("keeps a subscription through a server outage and resubscribes", async () => {
+    server = new MockWsServer();
+    const url = await server.listen();
+    const port = Number(url.split(":").pop());
+    await server.close(); // server down at subscribe time
+
+    client = new ElectrumWsClient(url);
+    const onChange = vi.fn();
+    await expect(
+      client.subscribeScriptHash(GENESIS_SCRIPTHASH, onChange),
+    ).rejects.toThrow(); // transport failure — but the handler must survive
+
+    // Server comes back on the same port; the reconnect loop (1s first
+    // retry) must re-issue the subscription without any caller involvement.
+    server = new MockWsServer();
+    await server.listen(port);
+    await vi.waitFor(
+      () => {
+        expect(
+          server.requests.some(
+            (r) => r.method === "blockchain.scripthash.subscribe",
+          ),
+        ).toBe(true);
+      },
+      { timeout: 10_000 },
+    );
+
+    // A push after recovery reaches the retained handler.
+    server.notify("blockchain.scripthash.subscribe", [
+      GENESIS_SCRIPTHASH,
+      "post-recovery",
+    ]);
+    await vi.waitFor(() => expect(onChange).toHaveBeenCalled());
   });
 
   it("returns null for an address with no UTXOs", async () => {

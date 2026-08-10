@@ -208,7 +208,19 @@ export function electrumReader(
     },
 
     subscribe(address, onChange) {
-      const scripthash = scriptHashOf(scriptFor(address));
+      // An address the configured network can't decode (e.g. a signet address
+      // under a mainnet-configured reader) must not throw out of register()
+      // and abort tracking — degrade to the poll cadence instead.
+      let scripthash: string;
+      try {
+        scripthash = scriptHashOf(scriptFor(address));
+      } catch (error) {
+        console.warn(
+          "electrumReader: subscribe skipped (address decode failed):",
+          error instanceof Error ? error.message : error,
+        );
+        return () => {};
+      }
       const handler = () => onChange();
       // Best-effort: if the subscription fails the tracker's poll cadence
       // remains the backstop, so the error is logged, not thrown.

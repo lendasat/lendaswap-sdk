@@ -185,9 +185,20 @@ export class ElectrumWsClient {
         [scripthash],
       );
     } catch (error) {
-      handlers.delete(onChange);
-      if (handlers.size === 0) this.#scriptHashHandlers.delete(scripthash);
-      this.#maybeScheduleIdleClose();
+      // A server-rejected subscription (or a closed client) never recovers,
+      // so drop the handler. A transport failure keeps it registered: the
+      // reconnect loop re-issues every registered subscription once the
+      // server is reachable again, so the push self-heals.
+      const permanent =
+        this.#closed ||
+        (error instanceof Error && error.message.startsWith("Electrum error:"));
+      if (permanent) {
+        handlers.delete(onChange);
+        if (handlers.size === 0) this.#scriptHashHandlers.delete(scripthash);
+        this.#maybeScheduleIdleClose();
+      } else {
+        this.#scheduleReconnect();
+      }
       throw error;
     }
   }
@@ -354,7 +365,16 @@ export class ElectrumWsClient {
     this.#pingTimer = setInterval(() => {
       if (this.#socket?.readyState !== WebSocket.OPEN) return;
       this.request("server.ping", []).catch(() => {
-        // A failed ping surfaces as a close event; reconnect handles it.
+        // A half-open socket (NAT/proxy blackhole after a network change) can
+        // stay OPEN yet never answer — no close event ever fires. Tear it
+        // down ourselves so the reconnect path runs instead of every later
+        // request timing out against a dead socket.
+        if (this.#socket && this.#socket.readyState === WebSocket.OPEN) {
+          this.#teardownSocket(new Error("Electrum keepalive timed out"));
+          if (!this.#closed && this.#scriptHashHandlers.size > 0) {
+            this.#scheduleReconnect();
+          }
+        }
       });
     }, PING_INTERVAL_MS);
   }
@@ -425,9 +445,12 @@ export class ElectrumWsClient {
 }
 
 /**
- * Finds the first unspent output at `address` via
+ * Finds the largest unspent output at `address` via
  * `blockchain.scripthash.listunspent` (includes mempool entries).
- * Mirrors the shape of `esplora.findOutputByAddress`.
+ * Mirrors the shape of `esplora.findOutputByAddress` — largest rather than
+ * first, because the HTLC address is public and a stray dust output must
+ * not shadow the real deposit (a sub-fee UTXO would make every claim or
+ * refund built against it fail).
  */
 export async function electrumFindOutputByAddress(
   client: ElectrumWsClient,
@@ -440,7 +463,9 @@ export async function electrumFindOutputByAddress(
     [scripthash],
   );
   if (!utxos || utxos.length === 0) return null;
-  const utxo = utxos[0];
+  const utxo = utxos.reduce((best, candidate) =>
+    candidate.value > best.value ? candidate : best,
+  );
   return {
     txid: utxo.tx_hash,
     vout: utxo.tx_pos,

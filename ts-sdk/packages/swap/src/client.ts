@@ -73,6 +73,12 @@ type TrackingConfig = {
    */
   electrumWsUrl?: string;
   /**
+   * Network the Bitcoin HTLC addresses live on — needed by the Electrum
+   * reader to compute scripthashes. Defaults to mainnet; a signet/regtest
+   * deployment must set it or Electrum address decoding fails.
+   */
+  bitcoinNetwork?: "mainnet" | "testnet" | "signet" | "regtest";
+  /**
    * Confirmations a Bitcoin funding tx needs before it observes as
    * `confirmed` (gating e.g. the evm→bitcoin claim). Default `0`: accept
    * 0-conf, trusting the funder not to double-spend. `1` = wait for a block.
@@ -884,6 +890,7 @@ export class Client {
       evmRpcUrls,
       esploraUrl,
       electrumWsUrl,
+      bitcoinNetwork,
       bitcoinMinConfirmations,
     } = this.#tracking;
     // Arkade + Bitcoin share the Bitcoin MTP clock.
@@ -909,6 +916,7 @@ export class Client {
       await BitcoinContractManager.create({
         esploraUrl: esploraUrl ? [esploraUrl] : DEFAULT_ESPLORA_URLS,
         electrumWsUrl,
+        network: bitcoinNetwork,
         chainTime,
         minConfirmations: bitcoinMinConfirmations,
       }),
@@ -931,6 +939,7 @@ export class ClientBuilder {
   #arkadeServerUrl: string | undefined;
   #esploraUrl: string | undefined;
   #electrumWsUrl: string | undefined;
+  #bitcoinNetwork: "mainnet" | "testnet" | "signet" | "regtest" | undefined;
   #bitcoinMinConfirmations: number | undefined;
   #evmRpcUrls: Record<number, string> | undefined;
   #managers: Map<Ledger, ContractManager> | undefined;
@@ -1026,6 +1035,19 @@ export class ClientBuilder {
   }
 
   /**
+   * Declare the Bitcoin network of this deployment's HTLC addresses. Only
+   * needed together with {@link withElectrumWsUrl} on a non-mainnet
+   * deployment — the Electrum reader decodes addresses to scripthashes and
+   * defaults to mainnet parameters.
+   */
+  withBitcoinNetwork(
+    network: "mainnet" | "testnet" | "signet" | "regtest",
+  ): this {
+    this.#bitcoinNetwork = network;
+    return this;
+  }
+
+  /**
    * Confirmations a Bitcoin funding tx needs before it observes as `confirmed`
    * (gating e.g. the evm→bitcoin claim). Default `0`: claim as soon as the
    * funding hits the mempool, which TRUSTS the funder not to double-spend it
@@ -1095,6 +1117,7 @@ export class ClientBuilder {
       arkadeServerUrl: this.#arkadeServerUrl,
       esploraUrl: this.#esploraUrl,
       electrumWsUrl: this.#electrumWsUrl,
+      bitcoinNetwork: this.#bitcoinNetwork,
       bitcoinMinConfirmations: this.#bitcoinMinConfirmations,
       evmRpcUrls: this.#evmRpcUrls,
       autoClaim: this.#autoClaim,

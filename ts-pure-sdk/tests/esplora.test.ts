@@ -36,6 +36,43 @@ describe("findOutputByAddress", () => {
     expect(fetchMock.mock.calls[0][0]).toContain("primary.example");
   });
 
+  it("selects the largest UTXO, not the first — dust must not shadow the deposit", async () => {
+    // The HTLC address is public: anyone can send dust to it. Trusting the
+    // explorer's ordering would build every claim/refund against whatever
+    // came first (and a sub-fee value makes construction fail forever).
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      jsonResponse([
+        {
+          txid: "0a".repeat(32),
+          vout: 2,
+          status: { confirmed: false },
+          value: 330,
+        },
+        {
+          txid: "0b".repeat(32),
+          vout: 0,
+          status: { confirmed: true },
+          value: 1_515_686,
+        },
+        {
+          txid: "0c".repeat(32),
+          vout: 1,
+          status: { confirmed: true },
+          value: 546,
+        },
+      ]),
+    );
+
+    const result = await findOutputByAddress(URLS, "bc1qaddress");
+
+    expect(result).toEqual({
+      txid: "0b".repeat(32),
+      vout: 0,
+      amount: 1_515_686n,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to the next URL when the first fails", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

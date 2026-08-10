@@ -231,6 +231,20 @@ describe("electrumReader", () => {
     );
   });
 
+  it("returns a noop unsubscribe when the address does not decode", async () => {
+    const rpc = new FakeElectrum();
+    const reader = electrumReader(rpc); // mainnet reader
+    // A signet address under mainnet parameters must not throw out of
+    // subscribe (it would abort the manager's register()).
+    const unsubscribe = reader.subscribe?.(
+      "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx",
+      vi.fn(),
+    );
+    expect(unsubscribe).toBeTypeOf("function");
+    expect(rpc.subscribed.size).toBe(0);
+    unsubscribe?.();
+  });
+
   it("subscribes and forwards history-change pushes", async () => {
     const rpc = new FakeElectrum();
     const reader = electrumReader(rpc);
