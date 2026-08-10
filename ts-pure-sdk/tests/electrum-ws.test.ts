@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
-import type { Socket } from "node:net";
+import type { Duplex } from "node:stream";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   addressToScriptHash,
@@ -18,7 +18,7 @@ import {
  */
 class MockWsServer {
   readonly #server: Server;
-  readonly #sockets = new Set<Socket>();
+  readonly #sockets = new Set<Duplex>();
   /** JSON-RPC request handler: return a result, or throw to send an error. */
   onRequest: (method: string, params: unknown[]) => unknown = () => null;
   requests: Array<{ method: string; params: unknown[] }> = [];
@@ -56,7 +56,7 @@ class MockWsServer {
     });
   }
 
-  #handleText(socket: Socket, payload: Buffer): void {
+  #handleText(socket: Duplex, payload: Buffer): void {
     const msg = JSON.parse(payload.toString("utf8")) as {
       id: number;
       method: string;
@@ -84,7 +84,7 @@ class MockWsServer {
     for (const socket of this.#sockets) this.sendRaw(socket, payload);
   }
 
-  sendRaw(socket: Socket, text: string): void {
+  sendRaw(socket: Duplex, text: string): void {
     socket.write(encodeTextFrame(`${text}\n`));
   }
 
