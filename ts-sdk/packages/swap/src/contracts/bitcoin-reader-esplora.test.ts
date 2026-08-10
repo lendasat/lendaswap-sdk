@@ -81,6 +81,18 @@ describe("htlcFactsFromEsploraTxs", () => {
     });
   });
 
+  it("picks the tx paying the most, not the first listed", () => {
+    // Esplora lists address txs newest-first, and the address is public —
+    // a stray dust payment listed before the real funding must not observe
+    // the swap as underfunded.
+    expect(
+      htlcFactsFromEsploraTxs([fundingTx(false, 330), fundingTx(true)], ADDR),
+    ).toEqual({
+      funding: "confirmed",
+      fundedSats: 5000,
+    });
+  });
+
   it("returns the spend witness once the HTLC output is spent", () => {
     const witness = ["3045ab", "aabbcc"];
     expect(

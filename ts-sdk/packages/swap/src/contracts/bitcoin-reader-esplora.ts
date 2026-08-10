@@ -59,13 +59,24 @@ export function htlcFactsFromEsploraTxs(
         spendWitness: spend.witness ?? [],
       };
   }
-  const funding = txs.find((tx) =>
-    tx.vout.some((vout) => vout.scriptpubkey_address === address),
-  );
-  if (funding) {
-    const fundedSats = funding.vout
+  // Among all txs paying the address, the one paying the MOST is the funding
+  // candidate — matching the pure SDK's UTXO lookup. The address is public,
+  // so a stray dust payment must not be mistaken for the funding and observe
+  // the swap as underfunded/invalid.
+  const paidSats = (tx: EsploraTx): number =>
+    tx.vout
       .filter((vout) => vout.scriptpubkey_address === address)
       .reduce((sum, vout) => sum + (vout.value ?? 0), 0);
+  let funding: EsploraTx | undefined;
+  let fundedSats = 0;
+  for (const tx of txs) {
+    const paid = paidSats(tx);
+    if (paid > fundedSats) {
+      funding = tx;
+      fundedSats = paid;
+    }
+  }
+  if (funding) {
     const minConf = opts?.minConfirmations ?? 0;
     let deepEnough: boolean;
     if (funding.status?.confirmed) {

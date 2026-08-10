@@ -141,7 +141,22 @@ export function electrumReader(
       return indices;
     };
 
-    const funding = txs.find(({ tx }) => outputIndicesPaying(tx).length > 0);
+    // Among all txs paying the address, the one paying the MOST is the
+    // funding candidate — same rule as the pure SDK's UTXO lookup. The
+    // address is public, so a stray dust payment (whether it landed before
+    // or after the real funding) must not be mistaken for the funding and
+    // observe the swap as underfunded/invalid.
+    let funding: (typeof txs)[number] | undefined;
+    let fundedSats = 0;
+    for (const candidate of txs) {
+      let paid = 0;
+      for (const i of outputIndicesPaying(candidate.tx))
+        paid += Number(candidate.tx.getOutput(i).amount ?? 0n);
+      if (paid > fundedSats) {
+        funding = candidate;
+        fundedSats = paid;
+      }
+    }
     if (!funding) return { funding: "absent", fundedSats: 0 };
     const fundedVouts = outputIndicesPaying(funding.tx);
 
@@ -166,10 +181,6 @@ export function electrumReader(
         }
       }
     }
-
-    let fundedSats = 0;
-    for (const i of fundedVouts)
-      fundedSats += Number(funding.tx.getOutput(i).amount ?? 0n);
 
     // Same depth policy as the esplora reader: 0/1 read straight off the
     // confirmed flag; deeper policies need the tip to compute depth.

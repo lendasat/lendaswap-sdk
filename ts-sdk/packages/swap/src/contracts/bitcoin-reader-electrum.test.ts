@@ -178,6 +178,33 @@ describe("electrumReader", () => {
     });
   });
 
+  it("picks the tx paying the most, not the first in history", async () => {
+    const rpc = new FakeElectrum();
+    // Dust lands in the history BEFORE the real funding — it must not be
+    // mistaken for the funding and observe the swap as underfunded.
+    rpc.addTx(makeFundingTx(330n), 899_990);
+    rpc.addTx(makeFundingTx(5_000n), 0);
+    const reader = electrumReader(rpc);
+    expect(await reader.getHtlcFacts(HTLC_ADDRESS)).toEqual({
+      funding: "confirmed",
+      fundedSats: 5_000,
+    });
+  });
+
+  it("detects the spend of the real funding even with dust present", async () => {
+    const rpc = new FakeElectrum();
+    rpc.addTx(makeFundingTx(330n), 899_980); // dust, stays unspent
+    const fundingTxid = rpc.addTx(makeFundingTx(5_000n), 899_990);
+    const witness = ["aa".repeat(64), "07".repeat(32), "01"];
+    rpc.addTx(makeSpendTx(fundingTxid, 0, witness), 0);
+    const reader = electrumReader(rpc);
+    expect(await reader.getHtlcFacts(HTLC_ADDRESS)).toEqual({
+      funding: "confirmed",
+      fundedSats: 0,
+      spendWitness: witness,
+    });
+  });
+
   it("returns the spend witness once the HTLC output is spent", async () => {
     const rpc = new FakeElectrum();
     const funding = makeFundingTx(5_000n);
