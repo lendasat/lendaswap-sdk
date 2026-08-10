@@ -35,6 +35,11 @@ export {
   type BitcoinCreateConfig,
 } from "./contracts/bitcoin-manager.js";
 export {
+  type ElectrumReaderNetwork,
+  type ElectrumRpc,
+  electrumReader,
+} from "./contracts/bitcoin-reader-electrum.js";
+export {
   type BitcoinConfirmationPolicy,
   DEFAULT_ESPLORA_URLS,
   esploraReader,

@@ -68,7 +68,13 @@ import {
 } from "./create/index.js";
 import { delegateClaim, delegateRefund } from "./delegate.js";
 import {
-  broadcastTransaction,
+  ElectrumWsClient,
+  electrumBroadcastTransaction,
+  electrumFetchTransactionOutputs,
+  electrumFindOutputByAddress,
+  electrumWaitForOutputByAddress,
+} from "./electrum-ws.js";
+import {
   broadcastTransactionWithRetry,
   type EsploraUrls,
   fetchTransactionOutputs,
@@ -624,6 +630,14 @@ export interface ClientConfig {
    * When a list is given, each URL is tried in order (fallback on failure).
    */
   esploraUrl?: string | string[];
+  /**
+   * Optional Electrum server WebSocket URL (e.g. "wss://electrs.satora.io").
+   * When set, Bitcoin lookups, broadcasts, and funding waits go to this
+   * server first — with `blockchain.scripthash.subscribe` push notifications
+   * replacing polling for funding detection. Esplora remains the fallback
+   * whenever the Electrum server is unreachable or errors.
+   */
+  electrumWsUrl?: string;
   /** Optional Arkade server URL (e.g. "https://arkade.computer"). Falls back to network-based defaults. */
   arkadeServerUrl?: string;
   /**
@@ -671,6 +685,7 @@ export class ClientBuilder {
   #referralCode?: string;
   #defaultHeaders?: Record<string, string>;
   #esploraUrl?: string | string[];
+  #electrumWsUrl?: string;
   #arkadeServerUrl?: string;
   #signerStorage?: WalletStorage;
   #swapStorage?: SwapStorage;
@@ -734,6 +749,20 @@ export class ClientBuilder {
    */
   withEsploraUrl(esploraUrl: string | string[]): this {
     this.#esploraUrl = esploraUrl;
+    return this;
+  }
+
+  /**
+   * Sets an Electrum server WebSocket URL (Fulcrum `ws`/`wss` port) for
+   * Bitcoin chain access. When set it is preferred over Esplora for
+   * lookups and broadcasts, and funding waits become push-driven via
+   * `blockchain.scripthash.subscribe`. Esplora stays as the fallback.
+   *
+   * @param electrumWsUrl - e.g. `wss://electrs.satora.io`
+   * @returns The builder instance for chaining.
+   */
+  withElectrumWsUrl(electrumWsUrl: string): this {
+    this.#electrumWsUrl = electrumWsUrl;
     return this;
   }
 
@@ -910,6 +939,7 @@ export class ClientBuilder {
         esploraUrl: Array.isArray(this.#esploraUrl)
           ? this.#esploraUrl.map((url) => url.replace(/\/+$/, ""))
           : this.#esploraUrl?.replace(/\/+$/, ""),
+        electrumWsUrl: this.#electrumWsUrl?.replace(/\/+$/, ""),
         arkadeServerUrl: this.#arkadeServerUrl?.replace(/\/+$/, ""),
         aa: this.#aa,
         logger: this.#logger,
@@ -965,6 +995,7 @@ export class Client {
   readonly #swapStorage?: SwapStorage;
   #statusWatcher: SwapStatusWatcher | null = null;
   #cctpInbound: CctpInboundClient | null = null;
+  #electrumWs: ElectrumWsClient | null = null;
   readonly #logger: SdkLogger;
 
   /**
@@ -2570,14 +2601,82 @@ export class Client {
    * without hammering the server.
    */
   /**
+   * Lazy Electrum-over-WebSocket connection, or null when no
+   * `electrumWsUrl` is configured. The underlying client connects on
+   * first use and closes itself when idle.
+   */
+  #getElectrumWs(): ElectrumWsClient | null {
+    const url = this.#config.electrumWsUrl;
+    if (!url) return null;
+    this.#electrumWs ??= new ElectrumWsClient(url, {
+      onLog: (level, event, message, data) =>
+        this.#logger[level]({ event, message, data }),
+    });
+    return this.#electrumWs;
+  }
+
+  /**
    * Locate the on-chain HTLC funding output once.
    *
-   * Prefers the funding txid/vout from the API response (works before the
-   * tx is confirmed), falling back to an address UTXO lookup. Returns null
+   * Tries the configured Electrum server first, then Esplora — both prefer
+   * the funding txid/vout from the API response (works before the tx is
+   * confirmed) before falling back to an address UTXO lookup. Returns null
    * (rather than throwing) when the output is not visible yet, so callers
    * can poll.
    */
   async #findOnchainHtlcOutput(
+    esploraUrls: EsploraUrls,
+    network: BitcoinNetwork,
+    address: string,
+    fundTxid: string | undefined,
+    fundVout: number | undefined,
+  ): Promise<{ txid: string; vout: number; amount: bigint } | null> {
+    const electrum = this.#getElectrumWs();
+    if (electrum) {
+      try {
+        if (fundTxid && fundVout !== undefined) {
+          const txData = await electrumFetchTransactionOutputs(
+            electrum,
+            fundTxid,
+          );
+          if (txData?.vout?.[fundVout]) {
+            return {
+              txid: fundTxid,
+              vout: fundVout,
+              amount: BigInt(txData.vout[fundVout].value),
+            };
+          }
+        }
+        const output = await electrumFindOutputByAddress(
+          electrum,
+          address,
+          network,
+        );
+        if (output) return output;
+        // Not found on our Electrum server: still consult Esplora below.
+        // The tx may have propagated to a public explorer's node first.
+      } catch (error) {
+        this.#logger.warn({
+          event: "client.electrum.lookupFailed",
+          message:
+            "Electrum HTLC output lookup failed, falling back to Esplora",
+          data: {
+            address,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+    return this.#findOnchainHtlcOutputEsplora(
+      esploraUrls,
+      address,
+      fundTxid,
+      fundVout,
+    );
+  }
+
+  /** Esplora-only variant of {@link Client.#findOnchainHtlcOutput}. */
+  async #findOnchainHtlcOutputEsplora(
     esploraUrls: EsploraUrls,
     address: string,
     fundTxid: string | undefined,
@@ -2615,25 +2714,60 @@ export class Client {
   }
 
   /**
-   * Poll for the on-chain HTLC funding output until it appears or the
+   * Wait for the on-chain HTLC funding output until it appears or the
    * timeout elapses.
    *
-   * The server can broadcast the funding tx just before the client tries to
-   * claim, so the explorer/indexer races behind. Uses an exponential-ish
-   * backoff capped at 2s (first probe immediate) to absorb that lag without
-   * hammering the explorer.
+   * With an Electrum server configured the wait is push-driven
+   * (`blockchain.scripthash.subscribe`), so it resolves the moment the
+   * server sees the funding tx. Without one — or if the subscription
+   * fails — it falls back to polling Esplora with an exponential-ish
+   * backoff capped at 2s (first probe immediate).
    */
   async #waitForOnchainHtlcOutput(
     esploraUrls: EsploraUrls,
+    network: BitcoinNetwork,
     address: string,
     fundTxid: string | undefined,
     fundVout: number | undefined,
     timeoutMs: number,
   ): Promise<{ txid: string; vout: number; amount: bigint } | null> {
     const deadline = Date.now() + Math.max(0, timeoutMs);
+
+    const electrum = this.#getElectrumWs();
+    if (electrum) {
+      try {
+        const output = await electrumWaitForOutputByAddress(
+          electrum,
+          address,
+          network,
+          timeoutMs,
+        );
+        if (output) return output;
+        // Timed out without our server seeing it. One last Esplora check
+        // covers a tx that reached a public explorer's node but not ours.
+        return await this.#findOnchainHtlcOutputEsplora(
+          esploraUrls,
+          address,
+          fundTxid,
+          fundVout,
+        );
+      } catch (error) {
+        this.#logger.warn({
+          event: "client.electrum.waitFailed",
+          message:
+            "Electrum funding subscription failed, falling back to Esplora polling",
+          data: {
+            address,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        // Fall through to the Esplora poll loop for the remaining budget.
+      }
+    }
+
     let delayMs = 500;
     while (true) {
-      const output = await this.#findOnchainHtlcOutput(
+      const output = await this.#findOnchainHtlcOutputEsplora(
         esploraUrls,
         address,
         fundTxid,
@@ -2647,6 +2781,34 @@ export class Client {
       await new Promise((resolve) => setTimeout(resolve, sleepMs));
       delayMs = Math.min(delayMs * 2, 2_000);
     }
+  }
+
+  /**
+   * Broadcast a Bitcoin transaction, preferring the configured Electrum
+   * server and falling back to Esplora (with its transient-error retry
+   * loop). Re-broadcasting the same tx to both backends is harmless — the
+   * network dedupes by txid.
+   */
+  async #broadcastBtcTx(
+    esploraUrls: EsploraUrls,
+    txHex: string,
+    retries = 5,
+  ): Promise<string> {
+    const electrum = this.#getElectrumWs();
+    if (electrum) {
+      try {
+        return await electrumBroadcastTransaction(electrum, txHex);
+      } catch (error) {
+        this.#logger.warn({
+          event: "client.electrum.broadcastFailed",
+          message: "Electrum broadcast failed, falling back to Esplora",
+          data: {
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+    }
+    return broadcastTransactionWithRetry(esploraUrls, txHex, retries);
   }
 
   async #waitForVtxoStatus(
@@ -3124,6 +3286,7 @@ export class Client {
     const waitForFundingMs = options?.waitForFundingMs ?? 30_000;
     const htlcOutput = await this.#waitForOnchainHtlcOutput(
       esploraUrls,
+      network,
       btcHtlcAddress,
       btcFundTxid,
       btcFundVout,
@@ -3170,7 +3333,7 @@ export class Client {
       // Broadcast, retrying transient failures (e.g. the broadcast node has
       // not seen the funding tx yet).
       try {
-        await broadcastTransactionWithRetry(
+        await this.#broadcastBtcTx(
           esploraUrls,
           result.txHex,
           options?.broadcastRetries ?? 5,
@@ -3370,25 +3533,13 @@ export class Client {
     const btcFundTxid = (swap as { btc_fund_txid?: string }).btc_fund_txid;
     const btcFundVout = (swap as { btc_fund_vout?: number }).btc_fund_vout;
 
-    let htlcOutput: { txid: string; vout: number; amount: bigint } | null =
-      null;
-
-    if (btcFundTxid && btcFundVout !== undefined) {
-      // We have the funding info from the API, get the amount from the transaction
-      const txData = await fetchTransactionOutputs(esploraUrls, btcFundTxid);
-      if (txData?.vout?.[btcFundVout]) {
-        htlcOutput = {
-          txid: btcFundTxid,
-          vout: btcFundVout,
-          amount: BigInt(txData.vout[btcFundVout].value),
-        };
-      }
-    }
-
-    // Fallback: query Esplora for UTXOs at the address (requires confirmation)
-    if (!htlcOutput) {
-      htlcOutput = await findOutputByAddress(esploraUrls, btcHtlcAddress);
-    }
+    const htlcOutput = await this.#findOnchainHtlcOutput(
+      esploraUrls,
+      network,
+      btcHtlcAddress,
+      btcFundTxid,
+      btcFundVout,
+    );
 
     if (!htlcOutput) {
       return {
@@ -3452,7 +3603,7 @@ export class Client {
       }
 
       try {
-        await broadcastTransaction(broadcastEsploraUrls, result.txHex);
+        await this.#broadcastBtcTx(broadcastEsploraUrls, result.txHex, 0);
         return {
           success: true,
           message: "Refund transaction broadcast successfully!",

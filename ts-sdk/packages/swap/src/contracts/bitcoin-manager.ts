@@ -14,9 +14,8 @@ import type { HtlcObservation } from "../actions/types.js";
 import { type BitcoinHtlcFacts, bitcoinObservation } from "./bitcoin.js";
 import type { ContractManager, HtlcRef, Ledger } from "./types.js";
 
-/** The esplora surface the observer needs (a `BitcoinReaderEsplora` satisfies it). */
+/** The chain surface the observer needs (the esplora and electrum readers satisfy it). */
 export type BitcoinChainReader = {
-  /** Funding + spend facts for an HTLC witness-script address. */
   /**
    * Funding + spend facts for an HTLC witness-script address. `minConfirmations`
    * overrides the reader's default for this address alone — the two legs of a
@@ -26,11 +25,27 @@ export type BitcoinChainReader = {
     address: string,
     minConfirmations?: number,
   ): Promise<BitcoinHtlcFacts>;
+  /**
+   * Optional push capability: invoke `onChange` whenever the address's tx
+   * history changes (e.g. an Electrum scripthash subscription). Returns an
+   * unsubscribe function. When present, the manager reconciles on push
+   * instead of relying solely on the tracker's poll cadence.
+   */
+  subscribe?(address: string, onChange: () => void): () => void;
 };
 
 export type BitcoinCreateConfig = {
   /** One or more esplora REST base URLs; several are tried in rotation with failover. */
   esploraUrl: string | string[];
+  /**
+   * Optional Electrum WebSocket URL (Fulcrum `ws`/`wss` port). When set, the
+   * manager reads via Electrum (fresher than public explorers) and gets push
+   * reconciles via scripthash subscriptions; the esplora reader remains the
+   * fallback on Electrum errors.
+   */
+  electrumWsUrl?: string;
+  /** Network the HTLC addresses live on (for Electrum scripthashes); default mainnet. */
+  network?: "mainnet" | "testnet" | "signet" | "regtest";
   /** The current Bitcoin MTP (ms); typically `async () => (await client.getMtp()).mtp * 1000`. */
   chainTime?: () => Promise<number>;
   /**
@@ -59,6 +74,8 @@ export class BitcoinContractManager implements ContractManager {
   readonly #obs = new Map<string, HtlcObservation>();
   /** address → the preimage a claim revealed. */
   readonly #preimages = new Map<string, Uint8Array>();
+  /** address → push-subscription teardown (only when the reader supports push). */
+  readonly #subscriptions = new Map<string, () => void>();
   readonly #listeners = new Set<
     (ref: HtlcRef, state: HtlcObservation) => void
   >();
@@ -79,10 +96,24 @@ export class BitcoinContractManager implements ContractManager {
     config: BitcoinCreateConfig,
   ): Promise<BitcoinContractManager> {
     const { esploraReader } = await import("./bitcoin-reader-esplora.js");
-    return BitcoinContractManager.fromDeps({
-      reader: esploraReader(config.esploraUrl, undefined, {
+    let reader: BitcoinChainReader = esploraReader(
+      config.esploraUrl,
+      undefined,
+      { minConfirmations: config.minConfirmations },
+    );
+    if (config.electrumWsUrl) {
+      const [{ electrumReader }, { ElectrumWsClient }] = await Promise.all([
+        import("./bitcoin-reader-electrum.js"),
+        import("@lendasat/lendaswap-sdk-pure"),
+      ]);
+      reader = electrumReader(new ElectrumWsClient(config.electrumWsUrl), {
+        network: config.network,
         minConfirmations: config.minConfirmations,
-      }),
+        fallback: reader,
+      });
+    }
+    return BitcoinContractManager.fromDeps({
+      reader,
       chainTime: config.chainTime,
     });
   }
@@ -99,11 +130,28 @@ export class BitcoinContractManager implements ContractManager {
         `BitcoinContractManager can't track a '${ref.ledger}' HTLC`,
       );
     this.#refs.set(ref.address, ref);
+    // Push: reconcile the instant the address's history changes (a reader
+    // without the capability leaves the tracker's poll cadence in charge).
+    if (this.#reader.subscribe && !this.#subscriptions.has(ref.address)) {
+      this.#subscriptions.set(
+        ref.address,
+        this.#reader.subscribe(ref.address, () => {
+          this.#reconcileRef(ref).catch((error) => {
+            console.warn(
+              "BitcoinContractManager: push reconcile failed:",
+              error instanceof Error ? error.message : error,
+            );
+          });
+        }),
+      );
+    }
     await this.#reconcileRef(ref);
   }
 
   async unregister(ref: HtlcRef): Promise<void> {
     if (ref.ledger !== "bitcoin") return;
+    this.#subscriptions.get(ref.address)?.();
+    this.#subscriptions.delete(ref.address);
     this.#refs.delete(ref.address);
     this.#obs.delete(ref.address);
     this.#preimages.delete(ref.address);
@@ -149,6 +197,8 @@ export class BitcoinContractManager implements ContractManager {
   }
 
   dispose(): void {
+    for (const unsubscribe of this.#subscriptions.values()) unsubscribe();
+    this.#subscriptions.clear();
     this.#listeners.clear();
   }
 

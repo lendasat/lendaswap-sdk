@@ -66,6 +66,7 @@
     "@lendasat/lendaswap-sdk-pure": "workspace:^",
     "@noble/hashes": "^2.2.0",
     "@scure/base": "^2.0.0",
+    "@scure/btc-signer": "^2.0.1",
     "viem": "2.52.2"
   },
   "devDependencies": {

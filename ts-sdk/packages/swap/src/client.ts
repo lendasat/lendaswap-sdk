@@ -67,6 +67,12 @@ type TrackingConfig = {
   /** Esplora REST URL override for the Bitcoin manager; defaults to mainnet mempool.space. */
   esploraUrl?: string;
   /**
+   * Electrum WebSocket URL (Fulcrum). When set, the Bitcoin manager reads via
+   * Electrum with scripthash-subscription push reconciles; esplora stays the
+   * fallback on Electrum errors.
+   */
+  electrumWsUrl?: string;
+  /**
    * Confirmations a Bitcoin funding tx needs before it observes as
    * `confirmed` (gating e.g. the evm→bitcoin claim). Default `0`: accept
    * 0-conf, trusting the funder not to double-spend. `1` = wait for a block.
@@ -873,8 +879,13 @@ export class Client {
       return this.#managers;
     }
     const managers = new Map<Ledger, ContractManager>();
-    const { arkadeServerUrl, evmRpcUrls, esploraUrl, bitcoinMinConfirmations } =
-      this.#tracking;
+    const {
+      arkadeServerUrl,
+      evmRpcUrls,
+      esploraUrl,
+      electrumWsUrl,
+      bitcoinMinConfirmations,
+    } = this.#tracking;
     // Arkade + Bitcoin share the Bitcoin MTP clock.
     const chainTime = async () => (await this.getMtp()).mtp * 1000;
 
@@ -897,6 +908,7 @@ export class Client {
       "bitcoin",
       await BitcoinContractManager.create({
         esploraUrl: esploraUrl ? [esploraUrl] : DEFAULT_ESPLORA_URLS,
+        electrumWsUrl,
         chainTime,
         minConfirmations: bitcoinMinConfirmations,
       }),
@@ -918,6 +930,7 @@ export class ClientBuilder {
   #serverUrl: string | undefined;
   #arkadeServerUrl: string | undefined;
   #esploraUrl: string | undefined;
+  #electrumWsUrl: string | undefined;
   #bitcoinMinConfirmations: number | undefined;
   #evmRpcUrls: Record<number, string> | undefined;
   #managers: Map<Ledger, ContractManager> | undefined;
@@ -1000,6 +1013,19 @@ export class ClientBuilder {
   }
 
   /**
+   * Set an Electrum server WebSocket URL (a Fulcrum `ws`/`wss` port) for
+   * Bitcoin claim/refund chain access. When set, the underlying client
+   * prefers it over Esplora for lookups and broadcasts, and waits for HTLC
+   * fundings via `blockchain.scripthash.subscribe` push instead of polling.
+   * Esplora remains the fallback whenever the Electrum server errors.
+   */
+  withElectrumWsUrl(url: string): this {
+    this.#inner.withElectrumWsUrl(url);
+    this.#electrumWsUrl = url;
+    return this;
+  }
+
+  /**
    * Confirmations a Bitcoin funding tx needs before it observes as `confirmed`
    * (gating e.g. the evm→bitcoin claim). Default `0`: claim as soon as the
    * funding hits the mempool, which TRUSTS the funder not to double-spend it
@@ -1068,6 +1094,7 @@ export class ClientBuilder {
       managers: this.#managers,
       arkadeServerUrl: this.#arkadeServerUrl,
       esploraUrl: this.#esploraUrl,
+      electrumWsUrl: this.#electrumWsUrl,
       bitcoinMinConfirmations: this.#bitcoinMinConfirmations,
       evmRpcUrls: this.#evmRpcUrls,
       autoClaim: this.#autoClaim,

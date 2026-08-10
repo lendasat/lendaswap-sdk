@@ -179,6 +179,17 @@ export type {
 } from "./client.js";
 // Main client
 export { Client, ClientBuilder } from "./client.js";
+
+export {
+  addressToScriptHash,
+  type ElectrumNetwork,
+  type ElectrumUnspent,
+  ElectrumWsClient,
+  electrumBroadcastTransaction,
+  electrumFetchTransactionOutputs,
+  electrumFindOutputByAddress,
+  electrumWaitForOutputByAddress,
+} from "./electrum-ws.js";
 // Escrow signing utilities
 export {
   getArkTxid,

@@ -84,6 +84,38 @@ describe("BitcoinContractManager", () => {
     expect(m.getPreimage(ref)).toBeUndefined();
   });
 
+  it("reconciles on a reader push and tears the subscription down", async () => {
+    let pushChange: (() => void) | undefined;
+    const unsubscribe = vi.fn();
+    const pushReader: BitcoinChainReader = {
+      getHtlcFacts: async () => reader.facts,
+      subscribe: vi.fn((_address, onChange) => {
+        pushChange = onChange;
+        return unsubscribe;
+      }),
+    };
+    const m = BitcoinContractManager.fromDeps({ reader: pushReader });
+    const seen: HtlcObservation[] = [];
+    m.onEvent((_r, s) => seen.push(s));
+
+    await m.register(ref);
+    expect(pushReader.subscribe).toHaveBeenCalledWith(
+      ref.address,
+      expect.any(Function),
+    );
+    expect(m.getState(ref)).toBe("absent");
+
+    // A push lands after the address's history changes: reconcile without
+    // any tracker poll.
+    reader.facts = { funding: "confirmed", fundedSats: 1000 };
+    pushChange?.();
+    await vi.waitFor(() => expect(m.getState(ref)).toBe("confirmed"));
+    expect(seen).toContain("confirmed");
+
+    await m.unregister(ref);
+    expect(unsubscribe).toHaveBeenCalled();
+  });
+
   it("notifies listeners on change and never downgrades a spend", async () => {
     const m = build();
     const seen: HtlcObservation[] = [];
