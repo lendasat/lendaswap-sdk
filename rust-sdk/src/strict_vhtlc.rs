@@ -95,7 +95,8 @@ impl StrictVhtlcOptions {
             .push_opcode(OP_EQUALVERIFY)
             .push_opcode(OP_HASH160)
             .push_slice(preimage_hash.as_byte_array())
-            .push_opcode(OP_EQUALVERIFY)
+            .push_opcode(OP_EQUAL)
+            .push_opcode(OP_VERIFY)
     }
 
     pub fn claim_script(&self) -> ScriptBuf {
@@ -312,5 +313,76 @@ impl StrictVhtlcScript {
             self.options.unilateral_refund_script(),
             self.options.unilateral_refund_without_receiver_script(),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bitcoin::hashes::Hash;
+
+    #[test]
+    fn strict_vhtlc_matches_cross_language_vector() {
+        let vector: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/strict-vhtlc-vectors.json"))
+                .unwrap();
+        let vector = &vector["strictArkadeVhtlcV1"];
+        let scripts = &vector["scripts"];
+
+        let sender = XOnlyPublicKey::from_str(vector["sender"].as_str().unwrap()).unwrap();
+        let receiver = XOnlyPublicKey::from_str(vector["receiver"].as_str().unwrap()).unwrap();
+        let server = XOnlyPublicKey::from_str(vector["server"].as_str().unwrap()).unwrap();
+        let preimage_hash = ripemd160::Hash::from_slice(
+            &hex::decode(vector["preimageHash"].as_str().unwrap()).unwrap(),
+        )
+        .unwrap();
+        let vhtlc = StrictVhtlcScript::new(
+            StrictVhtlcOptions {
+                sender,
+                receiver,
+                server,
+                preimage_hash,
+                refund_locktime: vector["refundLocktime"].as_u64().unwrap() as u32,
+                unilateral_claim_delay: Sequence::from_height(
+                    vector["unilateralClaimDelay"].as_u64().unwrap() as u16,
+                ),
+                unilateral_refund_delay: Sequence::from_height(
+                    vector["unilateralRefundDelay"].as_u64().unwrap() as u16,
+                ),
+                unilateral_refund_without_receiver_delay: Sequence::from_height(
+                    vector["unilateralRefundWithoutReceiverDelay"]
+                        .as_u64()
+                        .unwrap() as u16,
+                ),
+            },
+            Network::Regtest,
+        )
+        .unwrap();
+        let tapscripts: Vec<String> = vhtlc
+            .tapscripts()
+            .iter()
+            .map(|script| hex::encode(script.as_bytes()))
+            .collect();
+
+        assert_eq!(tapscripts[0], scripts["claim"].as_str().unwrap());
+        assert_eq!(tapscripts[1], scripts["refund"].as_str().unwrap());
+        assert_eq!(
+            tapscripts[2],
+            scripts["refundWithoutReceiver"].as_str().unwrap()
+        );
+        assert_eq!(tapscripts[3], scripts["unilateralClaim"].as_str().unwrap());
+        assert_eq!(tapscripts[4], scripts["unilateralRefund"].as_str().unwrap());
+        assert_eq!(
+            tapscripts[5],
+            scripts["unilateralRefundWithoutReceiver"].as_str().unwrap()
+        );
+        assert_eq!(
+            hex::encode(vhtlc.script_pubkey().as_bytes()),
+            vector["scriptPubKey"].as_str().unwrap()
+        );
+        assert_eq!(
+            vhtlc.address().to_string(),
+            vector["address"].as_str().unwrap()
+        );
     }
 }

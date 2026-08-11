@@ -25,7 +25,7 @@ import {
   SingleKey,
   setArkPsbtField,
   Transaction,
-  VHTLC,
+  type VHTLC,
   VtxoTaprootTree,
 } from "@arkade-os/sdk";
 import { ripemd160 } from "@noble/hashes/legacy.js";

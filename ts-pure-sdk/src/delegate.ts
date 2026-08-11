@@ -22,7 +22,7 @@ import {
   setArkPsbtField,
   type TapLeafScript,
   Transaction,
-  VHTLC,
+  type VHTLC,
   VtxoTaprootTree,
 } from "@arkade-os/sdk";
 import { Address, OutScript, SigHash } from "@scure/btc-signer";

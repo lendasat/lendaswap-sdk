@@ -18,7 +18,7 @@ import {
   RestIndexerProvider,
   SingleKey,
   Transaction,
-  VHTLC,
+  type VHTLC,
 } from "@arkade-os/sdk";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { base64, hex } from "@scure/base";
