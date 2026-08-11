@@ -1,5 +1,5 @@
-import { VHTLC } from "@arkade-os/sdk";
 import type { GetSwapResponse, StoredSwap } from "@lendasat/lendaswap-sdk-pure";
+import { StrictVhtlcScript } from "@lendasat/lendaswap-sdk-pure";
 import { ripemd160 } from "@noble/hashes/legacy.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { hex } from "@scure/base";
@@ -11,7 +11,7 @@ const hashLock = hex.encode(sha256(preimage));
 // btc_to_arkade carries the HASH160 = ripemd160(sha256(preimage)) directly (20 bytes).
 const hash160 = hex.encode(ripemd160(sha256(preimage)));
 
-// Valid BIP340 x-only pubkeys (test vectors) — VHTLC.Script derives a taproot
+// Valid BIP340 x-only pubkeys (test vectors) — StrictVhtlcScript derives a taproot
 // output, which requires on-curve keys.
 const senderPk =
   "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9";
@@ -29,7 +29,7 @@ const DELAYS = {
 
 /** The pkScript buildArkadeVhtlcRef should derive, computed independently here. */
 const expectedArkadeScript = hex.encode(
-  new VHTLC.Script({
+  new StrictVhtlcScript({
     sender: hex.decode(senderPk),
     receiver: hex.decode(receiverPk),
     server: hex.decode(serverPk),
@@ -47,7 +47,7 @@ const expectedArkadeScript = hex.encode(
  * preimageHash as-is (not hashed again).
  */
 const expectedBtcArkadeScript = hex.encode(
-  new VHTLC.Script({
+  new StrictVhtlcScript({
     sender: hex.decode(senderPk),
     receiver: hex.decode(receiverPk),
     server: hex.decode(serverPk),

@@ -42,7 +42,6 @@ import {
 } from "./arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "./logging.js";
 import {
-  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   StrictVhtlcScript,
 } from "./strict-vhtlc.js";
@@ -64,15 +63,11 @@ function parseXOnlyPubKey(pubKeyHex: string): Uint8Array {
 function buildVersionedVhtlc(
   options: VHTLC.Options,
   version?: number,
-): VHTLC.Script | StrictVhtlcScript {
-  switch (version ?? ARKADE_HTLC_SCRIPT_VERSION_LEGACY) {
-    case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
-      return new VHTLC.Script(options);
-    case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
-      return new StrictVhtlcScript(options);
-    default:
-      throw new Error(`Unsupported Arkade HTLC script version: ${version}`);
+): StrictVhtlcScript {
+  if (version !== undefined && version !== ARKADE_HTLC_SCRIPT_VERSION_STRICT) {
+    throw new Error(`Unsupported Arkade HTLC script version: ${version}`);
   }
+  return new StrictVhtlcScript(options);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,7 +92,7 @@ export interface DelegateClaimParams {
   /** Lendaswap API base URL (e.g. http://localhost:3333) */
   lendaswapApiUrl: string;
   arkadeServerUrl?: string;
-  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  /** Arkade HTLC script version. Only strict version 1 is supported. */
   arkadeHtlcScriptVersion?: number;
   /** Optional swap ID — enables the backend to mark swap as ClientRedeemed. */
   swapId?: string;
@@ -122,7 +117,7 @@ export interface DelegateRefundParams {
   network: string;
   lendaswapApiUrl: string;
   arkadeServerUrl?: string;
-  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  /** Arkade HTLC script version. Only strict version 1 is supported. */
   arkadeHtlcScriptVersion?: number;
   /** Optional logger sink. Silent by default. */
   logger?: Logger;

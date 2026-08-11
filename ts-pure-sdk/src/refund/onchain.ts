@@ -46,7 +46,7 @@ export interface OnchainClaimParams {
   feeRateSatPerVb: number;
   /** Bitcoin network */
   network: BitcoinNetwork;
-  /** Bitcoin HTLC script version. Defaults to legacy version 0. */
+  /** Bitcoin HTLC script version. Only strict version 1 is supported. */
   btcHtlcScriptVersion?: number;
 }
 
@@ -88,7 +88,7 @@ export interface OnchainRefundParams {
   feeRateSatPerVb: number;
   /** Bitcoin network */
   network: BitcoinNetwork;
-  /** Bitcoin HTLC script version. Defaults to legacy version 0. */
+  /** Bitcoin HTLC script version. Only strict version 1 is supported. */
   btcHtlcScriptVersion?: number;
 }
 
@@ -149,26 +149,30 @@ function getNetwork(
 /**
  * Build the hashlock tapscript for server claim.
  *
- * Script: `<server_pk> OP_CHECKSIGVERIFY OP_HASH160 <hash_lock> OP_EQUAL`
+ * Script: `<server_pk> OP_CHECKSIGVERIFY OP_SIZE 32 OP_EQUALVERIFY OP_HASH160 <hash_lock> OP_EQUAL`
  *
- * The server must provide a valid Schnorr signature AND the preimage.
+ * The server must provide a valid Schnorr signature AND a 32-byte preimage.
  */
 function buildHashlockScript(
   hashLock: Uint8Array,
   serverPubKey: Uint8Array,
-  btcHtlcScriptVersion = 0,
+  btcHtlcScriptVersion = 1,
 ): Uint8Array {
-  const script = [serverPubKey, "CHECKSIGVERIFY"] as Parameters<
-    typeof btc.Script.encode
-  >[0];
-  if (btcHtlcScriptVersion === 1) {
-    script.push("SIZE", 32, "EQUALVERIFY");
-  } else if (btcHtlcScriptVersion !== 0) {
+  if (btcHtlcScriptVersion !== 1) {
     throw new Error(
       `Unsupported BTC HTLC script version: ${btcHtlcScriptVersion}`,
     );
   }
-  script.push("HASH160", hashLock, "EQUAL");
+  const script = [
+    serverPubKey,
+    "CHECKSIGVERIFY",
+    "SIZE",
+    32,
+    "EQUALVERIFY",
+    "HASH160",
+    hashLock,
+    "EQUAL",
+  ] as Parameters<typeof btc.Script.encode>[0];
   return btc.Script.encode(script);
 }
 
@@ -212,7 +216,7 @@ function buildHtlcTaprootInfo(
   serverPubKey: Uint8Array,
   userPubKey: Uint8Array,
   refundLocktime: number,
-  btcHtlcScriptVersion = 0,
+  btcHtlcScriptVersion = 1,
 ): {
   hashlockScript: Uint8Array;
   timelockScript: Uint8Array;
@@ -602,7 +606,7 @@ export function buildOnchainRefundTransaction(
  * @param userPubKey - User's x-only public key (32-byte hex)
  * @param refundLocktime - Refund locktime (unix timestamp)
  * @param network - Bitcoin network
- * @param btcHtlcScriptVersion - Bitcoin HTLC script version. Defaults to legacy version 0.
+ * @param btcHtlcScriptVersion - Bitcoin HTLC script version. Only strict version 1 is supported.
  * @returns true if the address matches, false otherwise
  */
 export function verifyHtlcAddress(
@@ -612,7 +616,7 @@ export function verifyHtlcAddress(
   userPubKey: string,
   refundLocktime: number,
   network: BitcoinNetwork,
-  btcHtlcScriptVersion = 0,
+  btcHtlcScriptVersion = 1,
 ): boolean {
   const hashLockBytes = hex.decode(hashLock);
   const serverPkBytes = hex.decode(serverPubKey);

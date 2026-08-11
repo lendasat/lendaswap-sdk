@@ -25,7 +25,6 @@
 use crate::client::Client;
 use crate::error::Error;
 use crate::error::Result;
-use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_LEGACY;
 pub use crate::strict_vhtlc::ARKADE_HTLC_SCRIPT_VERSION_STRICT;
 use crate::strict_vhtlc::StrictVhtlcOptions;
 use crate::strict_vhtlc::StrictVhtlcScript;
@@ -51,8 +50,6 @@ use ark_rs::core::send::build_offchain_transactions;
 use ark_rs::core::send::sign_ark_transaction;
 use ark_rs::core::send::sign_checkpoint_transaction;
 use ark_rs::core::server::parse_sequence_number;
-use ark_rs::core::vhtlc::VhtlcOptions;
-use ark_rs::core::vhtlc::VhtlcScript;
 use bitcoin::Address;
 use bitcoin::Amount;
 use bitcoin::Network;
@@ -610,7 +607,8 @@ impl Client {
         let script_ver = (claim_script.clone(), LeafVersion::TapScript);
         let control_block = spend_info.control_block(&script_ver).ok_or_else(|| {
             Error::InvalidSwap(
-                "control block not found for claim script — VhtlcScript out of sync".to_string(),
+                "control block not found for claim script — StrictVhtlcScript out of sync"
+                    .to_string(),
             )
         })?;
 
@@ -845,45 +843,27 @@ impl VhtlcClaimContext {
     }
 }
 
-enum VersionedVhtlcScript {
-    Legacy(VhtlcScript),
-    Strict(StrictVhtlcScript),
-}
+struct VersionedVhtlcScript(StrictVhtlcScript);
 
 impl VersionedVhtlcScript {
     fn address(&self) -> ArkAddress {
-        match self {
-            Self::Legacy(v) => v.address(),
-            Self::Strict(v) => v.address(),
-        }
+        self.0.address()
     }
 
     fn taproot_spend_info(&self) -> &TaprootSpendInfo {
-        match self {
-            Self::Legacy(v) => v.taproot_spend_info(),
-            Self::Strict(v) => v.taproot_spend_info(),
-        }
+        self.0.taproot_spend_info()
     }
 
     fn claim_script(&self) -> bitcoin::ScriptBuf {
-        match self {
-            Self::Legacy(v) => v.claim_script(),
-            Self::Strict(v) => v.claim_script(),
-        }
+        self.0.claim_script()
     }
 
     fn script_pubkey(&self) -> bitcoin::ScriptBuf {
-        match self {
-            Self::Legacy(v) => v.script_pubkey(),
-            Self::Strict(v) => v.script_pubkey(),
-        }
+        self.0.script_pubkey()
     }
 
     fn tapscripts(self) -> Vec<bitcoin::ScriptBuf> {
-        match self {
-            Self::Legacy(v) => v.tapscripts(),
-            Self::Strict(v) => v.tapscripts(),
-        }
+        self.0.tapscripts()
     }
 }
 
@@ -930,38 +910,25 @@ fn build_vhtlc_script(
         parse_sequence_number(ctx.unilateral_refund_without_receiver_delay as i64)
             .map_err(|e| Error::Decode(format!("unilateral_refund_without_receiver_delay: {e}")))?;
 
-    match ctx.arkade_htlc_script_version {
-        ARKADE_HTLC_SCRIPT_VERSION_LEGACY => VhtlcScript::new(
-            VhtlcOptions {
-                sender,
-                receiver,
-                server,
-                preimage_hash,
-                refund_locktime,
-                unilateral_claim_delay,
-                unilateral_refund_delay,
-                unilateral_refund_without_receiver_delay,
-            },
-            network,
-        )
-        .map(VersionedVhtlcScript::Legacy)
-        .map_err(|e| Error::Decode(format!("VhtlcScript::new: {e}"))),
-        ARKADE_HTLC_SCRIPT_VERSION_STRICT => StrictVhtlcScript::new(
-            StrictVhtlcOptions {
-                sender,
-                receiver,
-                server,
-                preimage_hash,
-                refund_locktime,
-                unilateral_claim_delay,
-                unilateral_refund_delay,
-                unilateral_refund_without_receiver_delay,
-            },
-            network,
-        )
-        .map(VersionedVhtlcScript::Strict),
-        other => Err(Error::InvalidSwap(format!(
-            "unsupported Arkade HTLC script version: {other}"
-        ))),
+    if ctx.arkade_htlc_script_version != ARKADE_HTLC_SCRIPT_VERSION_STRICT {
+        return Err(Error::InvalidSwap(format!(
+            "unsupported Arkade HTLC script version: {}",
+            ctx.arkade_htlc_script_version
+        )));
     }
+
+    StrictVhtlcScript::new(
+        StrictVhtlcOptions {
+            sender,
+            receiver,
+            server,
+            preimage_hash,
+            refund_locktime,
+            unilateral_claim_delay,
+            unilateral_refund_delay,
+            unilateral_refund_without_receiver_delay,
+        },
+        network,
+    )
+    .map(VersionedVhtlcScript)
 }

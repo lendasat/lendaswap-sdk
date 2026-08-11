@@ -39,7 +39,6 @@ import {
   resolveArkadeServerUrlByName,
 } from "../arkade-network.js";
 import {
-  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   StrictVhtlcScript,
 } from "../strict-vhtlc.js";
@@ -145,21 +144,15 @@ function buildRefundScriptVhtlc(params: BaseCollabRefundArkadeToEvmParams) {
     ),
   };
 
-  const vhtlc = (() => {
-    switch (
-      params.arkadeHtlcScriptVersion ??
-      ARKADE_HTLC_SCRIPT_VERSION_LEGACY
-    ) {
-      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
-        return new VHTLC.Script(options);
-      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
-        return new StrictVhtlcScript(options);
-      default:
-        throw new Error(
-          `Unsupported Arkade HTLC script version: ${params.arkadeHtlcScriptVersion}`,
-        );
-    }
-  })();
+  if (
+    params.arkadeHtlcScriptVersion !== undefined &&
+    params.arkadeHtlcScriptVersion !== ARKADE_HTLC_SCRIPT_VERSION_STRICT
+  ) {
+    throw new Error(
+      `Unsupported Arkade HTLC script version: ${params.arkadeHtlcScriptVersion}`,
+    );
+  }
+  const vhtlc = new StrictVhtlcScript(options);
 
   const hrp = getNetworkHrp(networkName);
   const computedAddress = vhtlc.address(hrp, serverPkBytes).encode();

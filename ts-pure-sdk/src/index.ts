@@ -281,7 +281,6 @@ export {
   SWAP_STORAGE_VERSION,
 } from "./storage/index.js";
 export {
-  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   BTC_HTLC_SCRIPT_VERSION_STRICT,
   type StrictVhtlcOptions,

@@ -11,7 +11,6 @@ import {
 import { hex } from "@scure/base";
 import { Script as BtcScript } from "@scure/btc-signer";
 
-export const ARKADE_HTLC_SCRIPT_VERSION_LEGACY = 0;
 export const ARKADE_HTLC_SCRIPT_VERSION_STRICT = 1;
 export const BTC_HTLC_SCRIPT_VERSION_STRICT = 1;
 

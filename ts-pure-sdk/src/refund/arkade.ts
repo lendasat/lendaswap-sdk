@@ -30,7 +30,6 @@ import {
 } from "../arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "../logging.js";
 import {
-  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   StrictVhtlcScript,
 } from "../strict-vhtlc.js";
@@ -61,7 +60,7 @@ export interface ArkadeRefundParams {
   destinationAddress: string;
   /** Bitcoin network (mainnet, signet, etc.) */
   network: string;
-  /** Arkade HTLC script version. Defaults to legacy for older swaps. */
+  /** Arkade HTLC script version. Only strict version 1 is supported. */
   arkadeHtlcScriptVersion?: number;
   /** Arkade server URL (optional, uses default based on network) */
   arkadeServerUrl?: string;
@@ -203,18 +202,15 @@ export async function buildArkadeRefund(
       unilateralRefundWithoutReceiverDelay,
     ),
   };
-  const vhtlc = (() => {
-    switch (arkadeHtlcScriptVersion ?? ARKADE_HTLC_SCRIPT_VERSION_LEGACY) {
-      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
-        return new VHTLC.Script(vhtlcOptions);
-      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
-        return new StrictVhtlcScript(vhtlcOptions);
-      default:
-        throw new Error(
-          `Unsupported Arkade HTLC script version: ${arkadeHtlcScriptVersion}`,
-        );
-    }
-  })();
+  if (
+    arkadeHtlcScriptVersion !== undefined &&
+    arkadeHtlcScriptVersion !== ARKADE_HTLC_SCRIPT_VERSION_STRICT
+  ) {
+    throw new Error(
+      `Unsupported Arkade HTLC script version: ${arkadeHtlcScriptVersion}`,
+    );
+  }
+  const vhtlc = new StrictVhtlcScript(vhtlcOptions);
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);

@@ -69,7 +69,7 @@ export interface ArkadeClaimParams {
   destinationAddress: string;
   /** Bitcoin network (mainnet, signet, etc.) */
   network: string;
-  /** Arkade HTLC script version. Defaults to legacy version 0. */
+  /** Arkade HTLC script version. Only strict version 1 is supported. */
   arkadeHtlcScriptVersion?: number;
   /** Arkade server URL (optional, uses default based on network) */
   arkadeServerUrl?: string;
@@ -238,10 +238,15 @@ export async function buildArkadeClaim(
       unilateralRefundWithoutReceiverDelay,
     ),
   };
-  const vhtlc =
-    arkadeHtlcScriptVersion === ARKADE_HTLC_SCRIPT_VERSION_STRICT
-      ? new StrictVhtlcScript(vhtlcOptions)
-      : new VHTLC.Script(vhtlcOptions);
+  if (
+    arkadeHtlcScriptVersion !== undefined &&
+    arkadeHtlcScriptVersion !== ARKADE_HTLC_SCRIPT_VERSION_STRICT
+  ) {
+    throw new Error(
+      `Unsupported Arkade HTLC script version: ${arkadeHtlcScriptVersion}`,
+    );
+  }
+  const vhtlc = new StrictVhtlcScript(vhtlcOptions);
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);
@@ -469,10 +474,15 @@ export async function continueArkadeClaim(
       unilateralRefundWithoutReceiverDelay,
     ),
   };
-  const vhtlc =
-    arkadeHtlcScriptVersion === ARKADE_HTLC_SCRIPT_VERSION_STRICT
-      ? new StrictVhtlcScript(vhtlcOptions)
-      : new VHTLC.Script(vhtlcOptions);
+  if (
+    arkadeHtlcScriptVersion !== undefined &&
+    arkadeHtlcScriptVersion !== ARKADE_HTLC_SCRIPT_VERSION_STRICT
+  ) {
+    throw new Error(
+      `Unsupported Arkade HTLC script version: ${arkadeHtlcScriptVersion}`,
+    );
+  }
+  const vhtlc = new StrictVhtlcScript(vhtlcOptions);
 
   // Get network HRP and verify computed VHTLC address
   const hrp = getNetworkHrp(networkName);

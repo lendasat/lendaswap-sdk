@@ -7,9 +7,8 @@
  * SDK VHTLC construction, so the mapper and manager stay free of VHTLC internals.
  */
 
-import { VHTLC, VHTLCContractHandler } from "@arkade-os/sdk";
+import { VHTLCContractHandler } from "@arkade-os/sdk";
 import {
-  ARKADE_HTLC_SCRIPT_VERSION_LEGACY,
   ARKADE_HTLC_SCRIPT_VERSION_STRICT,
   StrictVhtlcScript,
 } from "@lendasat/lendaswap-sdk-pure";
@@ -40,7 +39,7 @@ export type ArkadeVhtlcInput = {
   unilateralRefundWithoutReceiverDelay: number;
   /** Expected funding amount in sats (a short funding is `invalid`, not confirmed). */
   expectedSats: number;
-  /** Arkade HTLC script version. Missing means legacy v0 for old stored swaps. */
+  /** Arkade HTLC script version. Missing means strict v1. */
   arkadeHtlcScriptVersion?: number;
 };
 
@@ -82,21 +81,15 @@ export function buildArkadeVhtlcRef(input: ArkadeVhtlcInput): ArkadeRef {
       input.unilateralRefundWithoutReceiverDelay,
     ),
   };
-  const vhtlc = (() => {
-    switch (
-      input.arkadeHtlcScriptVersion ??
-      ARKADE_HTLC_SCRIPT_VERSION_LEGACY
-    ) {
-      case ARKADE_HTLC_SCRIPT_VERSION_LEGACY:
-        return new VHTLC.Script(params);
-      case ARKADE_HTLC_SCRIPT_VERSION_STRICT:
-        return new StrictVhtlcScript(params);
-      default:
-        throw new Error(
-          `Unsupported Arkade HTLC script version: ${input.arkadeHtlcScriptVersion}`,
-        );
-    }
-  })();
+  if (
+    input.arkadeHtlcScriptVersion !== undefined &&
+    input.arkadeHtlcScriptVersion !== ARKADE_HTLC_SCRIPT_VERSION_STRICT
+  ) {
+    throw new Error(
+      `Unsupported Arkade HTLC script version: ${input.arkadeHtlcScriptVersion}`,
+    );
+  }
+  const vhtlc = new StrictVhtlcScript(params);
   return {
     ledger: "arkade",
     script: hex.encode(vhtlc.pkScript),

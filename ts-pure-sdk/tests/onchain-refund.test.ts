@@ -59,7 +59,7 @@ describe("On-chain refund", () => {
     it("should return true for matching HTLC parameters", () => {
       // Verify the HTLC address matches
       const isValid = verifyHtlcAddress(
-        "tb1p6enqnu9nqj52wzy6tl8qqtjfsxae2un66gwwp0hjydayydez7xsqz8ycd8",
+        "tb1pmflkz8yplmk3v8htfmda2dqcnxgkj6fldrzslq90qc3y3h235spq6juwps",
         "9befb12985069ca625bce37f13af8acbb66e46bb",
         "6c932b95705b07c4236a1abfabe283399774449914f6c4d7faeb30fd7f3c6b0e",
         "d149150a0c344bae35cfe0cd237e50bd41ec56fe7c2a2f5f8509911ec8c5a0e2",
@@ -86,8 +86,6 @@ describe("On-chain refund", () => {
         network: "regtest",
       });
 
-      console.log(`verifyHtlcAddress: ${result.htlcAddress}`);
-
       // Verify the HTLC address matches
       const isValid = verifyHtlcAddress(
         result.htlcAddress,
@@ -99,7 +97,7 @@ describe("On-chain refund", () => {
       );
 
       expect(result.htlcAddress).toBe(
-        "bcrt1p9y8e33fmv06c9wr4rpcfkccpsankaqcu2kjkzlekjfv6lsmfhaqqplksqr",
+        "bcrt1pals5upc3vwh8f55tvtrvvhx4pqfxzqx83esy0caftd3rh7ap8ruqv4l9af",
       );
 
       expect(isValid).toBe(true);

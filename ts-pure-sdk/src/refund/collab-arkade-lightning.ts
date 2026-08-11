@@ -33,6 +33,7 @@ import {
   resolveArkadeServerUrlByName,
 } from "../arkade-network.js";
 import { createSdkLogger, type Logger, type LogLevel } from "../logging.js";
+import { StrictVhtlcScript } from "../strict-vhtlc.js";
 
 function secondsToTimelock(
   seconds: number,
@@ -157,7 +158,7 @@ export async function collabRefundArkadeToLightningOffchain(
 
   const networkName = getNetworkName(params.network);
 
-  const vhtlc = new VHTLC.Script({
+  const vhtlc = new StrictVhtlcScript({
     sender: userPkBytes,
     receiver: receiverPkBytes,
     server: serverPkBytes,
