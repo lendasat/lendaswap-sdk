@@ -4781,8 +4781,14 @@ export class Client {
         targetAddress: options.targetAddress,
         tokenAddress,
         evmChainId: Number(targetChain),
-        amountIn: options.sourceAmount,
-        amountOut: options.targetAmount,
+        amountIn:
+          options.sourceAmount == null
+            ? undefined
+            : Number(options.sourceAmount),
+        amountOut:
+          options.targetAmount == null
+            ? undefined
+            : Number(options.targetAmount),
         referralCode: options.referralCode,
         extraFees: options.extraFees,
         bridgeParams,
@@ -4812,7 +4818,7 @@ export class Client {
           ...(isAddress
             ? { lightningAddress: options.targetAddress }
             : { lnurl: options.targetAddress }),
-          amountSats: options.targetAmount,
+          amountSats: Number(options.targetAmount),
           referralCode: options.referralCode,
           extraFees: options.extraFees,
         });
@@ -4833,7 +4839,7 @@ export class Client {
         );
       }
       return this.createLightningToArkadeSwap({
-        satsReceive: options.targetAmount,
+        satsReceive: Number(options.targetAmount),
         targetAddress: options.targetAddress,
         referralCode: options.referralCode,
         extraFees: options.extraFees,
@@ -4846,8 +4852,14 @@ export class Client {
         targetAddress: options.targetAddress,
         tokenAddress,
         evmChainId: Number(targetChain),
-        sourceAmount: options.sourceAmount,
-        targetAmount: options.targetAmount,
+        sourceAmount:
+          options.sourceAmount == null
+            ? undefined
+            : Number(options.sourceAmount),
+        targetAmount:
+          options.targetAmount == null
+            ? undefined
+            : BigInt(options.targetAmount),
         referralCode: options.referralCode,
         extraFees: options.extraFees,
         bridgeParams,
@@ -4862,7 +4874,7 @@ export class Client {
         );
       }
       return this.createBitcoinToArkadeSwap({
-        satsReceive: options.targetAmount,
+        satsReceive: Number(options.targetAmount),
         targetAddress: options.targetAddress,
         referralCode: options.referralCode,
         extraFees: options.extraFees,
@@ -4884,7 +4896,10 @@ export class Client {
         sourceAmount: options.sourceAmount
           ? BigInt(options.sourceAmount)
           : undefined,
-        targetAmount: options.targetAmount,
+        targetAmount:
+          options.targetAmount == null
+            ? undefined
+            : Number(options.targetAmount),
         referralCode: options.referralCode,
         extraFees: options.extraFees,
         gasless: options.gasless,
@@ -4907,7 +4922,10 @@ export class Client {
         sourceAmount: options.sourceAmount
           ? BigInt(options.sourceAmount)
           : undefined,
-        targetAmount: options.targetAmount,
+        targetAmount:
+          options.targetAmount == null
+            ? undefined
+            : Number(options.targetAmount),
         referralCode: options.referralCode,
         extraFees: options.extraFees,
         gasless: options.gasless,
@@ -4944,7 +4962,7 @@ export class Client {
           ...(isAddress
             ? { lightningAddress: options.targetAddress }
             : { lnurl: options.targetAddress }),
-          amountSats: options.targetAmount,
+          amountSats: Number(options.targetAmount),
           evmChainId: Number(sourceChain),
           tokenAddress: sourceTokenId,
           userAddress: options.userAddress ?? "",
@@ -4964,7 +4982,7 @@ export class Client {
           targetAddress: options.targetAddress,
           referralCode: options.referralCode,
           extraFees: options.extraFees,
-          satsReceive: options.targetAmount,
+          satsReceive: Number(options.targetAmount),
         });
       }
 

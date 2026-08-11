@@ -82,7 +82,7 @@ pub(crate) struct CreateEvmToArkadeSwapRequestWire {
     pub(crate) user_address: String,
     pub(crate) user_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) amount_in: Option<u64>,
+    pub(crate) amount_in: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) amount_out: Option<u64>,
     pub(crate) gasless: bool,
@@ -102,7 +102,7 @@ pub(crate) struct CreateEvmToArkadeSwapRequestWire {
 impl From<CreateEvmToArkadeSwapRequest> for CreateEvmToArkadeSwapRequestWire {
     fn from(r: CreateEvmToArkadeSwapRequest) -> Self {
         let (amount_in, amount_out) = match r.amount {
-            QuoteAmount::Source(v) => (Some(v), None),
+            QuoteAmount::Source(v) => (Some(v.to_string()), None),
             QuoteAmount::Target(v) => (None, Some(v)),
         };
         Self {

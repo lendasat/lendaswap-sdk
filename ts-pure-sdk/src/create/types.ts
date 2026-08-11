@@ -101,7 +101,7 @@ export interface BitcoinToEvmSwapOptions {
   /** Amount in satoshis to send (mutually exclusive with targetAmount) */
   sourceAmount?: number;
   /** Amount of target token to receive in smallest unit (mutually exclusive with sourceAmount) */
-  targetAmount?: number;
+  targetAmount?: bigint;
   /** Optional referral code for fee exemption */
   referralCode?: string;
   /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
@@ -389,8 +389,8 @@ export interface CreateSwapOptions {
   sourceAsset?: TokenInfo;
   /** @deprecated Use `target` instead. Full TokenInfo object. */
   targetAsset?: TokenInfo;
-  sourceAmount?: number;
-  targetAmount?: number;
+  sourceAmount?: number | bigint;
+  targetAmount?: number | bigint;
   /** Target address: EVM address, Arkade address, or Lightning invoice */
   targetAddress: string;
   /** EVM address of the user (required for EVM→* swaps) */

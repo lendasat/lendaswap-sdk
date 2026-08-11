@@ -327,7 +327,7 @@ async fn create_evm_to_arkade_swap_posts_high_level_request() {
         body["token_address"],
         "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"
     );
-    assert_eq!(body["amount_in"], 100_000_000);
+    assert_eq!(body["amount_in"], "100000000");
     assert!(body.get("amount_out").is_none() || body["amount_out"].is_null());
     assert_eq!(body["gasless"], true);
     assert_eq!(body["arkade_htlc_script_version"], 1);

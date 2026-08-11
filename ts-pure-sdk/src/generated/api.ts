@@ -1072,12 +1072,11 @@ export interface components {
              */
             amount_in?: number | null;
             /**
-             * Format: int64
              * @description How much target token the user wants to receive (mutually exclusive with `amount_in`).
              *     Value is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1
              *     USDC).
              */
-            amount_out?: number | null;
+            amount_out?: string | null;
             /**
              * Format: int64
              * @description Arkade HTLC script version. New swaps must use version 1.
@@ -1345,12 +1344,11 @@ export interface components {
              */
             amount_in?: number | null;
             /**
-             * Format: int64
              * @description How much target token the user wants to receive (mutually exclusive with `amount_in`).
              *     Value is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1
              *     USDC).
              */
-            amount_out?: number | null;
+            amount_out?: string | null;
             /**
              * @description ATA-existence flag for non-EVM CCTP destinations (Solana).
              *     `true` = recipient has no USDC ATA yet (Circle's forwarder
@@ -2265,11 +2263,8 @@ export interface components {
          *     User sends any ERC-20 token on EVM, receives BTC on Arkade.
          */
         EvmToArkadeGenericSwapRequest: {
-            /**
-             * Format: int64
-             * @description Source token amount in smallest units (mutually exclusive with `amount_out`).
-             */
-            amount_in?: number | null;
+            /** @description Source token amount in smallest units (mutually exclusive with `amount_out`). */
+            amount_in?: string | null;
             /**
              * Format: int64
              * @description Desired BTC output in sats (mutually exclusive with `amount_in`).
@@ -2380,11 +2375,8 @@ export interface components {
          *     via its ERC-20 contract `token_address`.
          */
         EvmToBitcoinSwapRequest: {
-            /**
-             * Format: int64
-             * @description Source token amount in smallest units (mutually exclusive with `amount_out`).
-             */
-            amount_in?: number | null;
+            /** @description Source token amount in smallest units (mutually exclusive with `amount_out`). */
+            amount_in?: string | null;
             /**
              * Format: int64
              * @description Desired BTC output in sats (mutually exclusive with `amount_in`).
@@ -3387,8 +3379,7 @@ export interface components {
             permit2_address: string;
             preimage_hash: string;
             relay_fee?: string | null;
-            /** Format: int64 */
-            source_amount: number;
+            source_amount: string;
             source_token_address: string;
             /** Format: int64 */
             timelock: number;

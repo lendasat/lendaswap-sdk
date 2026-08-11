@@ -63,7 +63,7 @@ export async function createBitcoinToEvmSwap(
       token_address: options.tokenAddress,
       evm_chain_id: options.evmChainId,
       amount_in: options.sourceAmount,
-      amount_out: options.targetAmount,
+      amount_out: options.targetAmount?.toString(),
       referral_code: options.referralCode,
       extra_fees: options.extraFees,
       gasless: options.gasless ?? true,

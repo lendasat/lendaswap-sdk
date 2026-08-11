@@ -2368,10 +2368,8 @@
             "minimum": 0
           },
           "amount_out": {
-            "type": ["integer", "null"],
-            "format": "int64",
-            "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC).",
-            "minimum": 0
+            "type": ["string", "null"],
+            "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC)."
           },
           "arkade_htlc_script_version": {
             "type": "integer",
@@ -2865,10 +2863,8 @@
             "minimum": 0
           },
           "amount_out": {
-            "type": ["integer", "null"],
-            "format": "int64",
-            "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC).",
-            "minimum": 0
+            "type": ["string", "null"],
+            "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC)."
           },
           "bridge_recipient_setup": {
             "type": "boolean",
@@ -4206,10 +4202,8 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["integer", "null"],
-            "format": "int64",
-            "description": "Source token amount in smallest units (mutually exclusive with `amount_out`).",
-            "minimum": 0
+            "type": ["string", "null"],
+            "description": "Source token amount in smallest units (mutually exclusive with `amount_out`)."
           },
           "amount_out": {
             "type": ["integer", "null"],
@@ -4440,10 +4434,8 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["integer", "null"],
-            "format": "int64",
-            "description": "Source token amount in smallest units (mutually exclusive with `amount_out`).",
-            "minimum": 0
+            "type": ["string", "null"],
+            "description": "Source token amount in smallest units (mutually exclusive with `amount_out`)."
           },
           "amount_out": {
             "type": ["integer", "null"],
@@ -6267,9 +6259,7 @@
             "type": ["string", "null"]
           },
           "source_amount": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
+            "type": "string"
           },
           "source_token_address": {
             "type": "string"

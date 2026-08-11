@@ -67,7 +67,7 @@ export async function createEvmToArkadeSwapGeneric(
         evm_chain_id: options.evmChainId,
         user_address: userAddress,
         amount_in: options.sourceAmount
-          ? Number(options.sourceAmount)
+          ? options.sourceAmount.toString()
           : undefined,
         amount_out: options.targetAmount
           ? Number(options.targetAmount)

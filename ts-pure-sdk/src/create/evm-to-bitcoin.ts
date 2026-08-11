@@ -67,7 +67,7 @@ export async function createEvmToBitcoinSwap(
         user_address: userAddress,
         target_address: options.targetAddress,
         amount_in: options.sourceAmount
-          ? Number(options.sourceAmount)
+          ? options.sourceAmount.toString()
           : undefined,
         amount_out: options.targetAmount
           ? Number(options.targetAmount)
