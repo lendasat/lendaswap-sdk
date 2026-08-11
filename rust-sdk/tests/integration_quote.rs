@@ -87,7 +87,7 @@ fn make_request(source_chain: Chain, target_chain: Chain, target_token: TokenId)
         TokenId::Btc,
         target_chain,
         target_token,
-        QuoteAmount::Source(DEFAULT_SOURCE_SATS),
+        QuoteAmount::Source(DEFAULT_SOURCE_SATS.into()),
     )
 }
 
@@ -103,7 +103,7 @@ fn make_reverse_request(
         source_token,
         target_chain,
         TokenId::Btc,
-        QuoteAmount::Source(DEFAULT_SOURCE_STABLE_RAW),
+        QuoteAmount::Source(DEFAULT_SOURCE_STABLE_RAW.into()),
     )
 }
 
@@ -133,7 +133,6 @@ fn assert_quote_invariants(req: &QuoteRequest, resp: &QuoteResponse) {
 
     match req.amount {
         QuoteAmount::Source(n) => {
-            let n = u128::from(n);
             assert_eq!(
                 source_amount, n,
                 "Source mode: source_amount should equal requested"
@@ -148,7 +147,6 @@ fn assert_quote_invariants(req: &QuoteRequest, resp: &QuoteResponse) {
             );
         }
         QuoteAmount::Target(n) => {
-            let n = u128::from(n);
             assert_eq!(
                 target_amount, n,
                 "Target mode: target_amount should equal requested"

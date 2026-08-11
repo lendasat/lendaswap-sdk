@@ -280,8 +280,8 @@ pub enum QuoteAmount {
 impl From<QuoteAmount> for SdkQuoteAmount {
     fn from(a: QuoteAmount) -> Self {
         match a {
-            QuoteAmount::Source { units } => SdkQuoteAmount::Source(units),
-            QuoteAmount::Target { units } => SdkQuoteAmount::Target(units),
+            QuoteAmount::Source { units } => SdkQuoteAmount::Source(units.into()),
+            QuoteAmount::Target { units } => SdkQuoteAmount::Target(units.into()),
         }
     }
 }

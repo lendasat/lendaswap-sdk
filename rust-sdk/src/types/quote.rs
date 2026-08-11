@@ -16,11 +16,19 @@ use serde::Serialize;
 /// this enum makes that invariant unrepresentable as invalid.
 ///
 /// Amounts are in the smallest unit of the corresponding token (satoshis for
-/// BTC, raw on-chain units for EVM tokens).
+/// BTC, raw on-chain units for EVM tokens). Values are `u128` and serialize as
+/// decimal strings so 18-decimal EVM token amounts can exceed `u64::MAX`.
+///
+/// `u128` is intentionally used instead of an EVM-specific `U256` in the public
+/// Rust SDK API: it keeps the quote API chain-agnostic while still covering any
+/// realistic ERC-20 swap amount. At 18 decimals, `u128::MAX` represents roughly
+/// 340 billion whole tokens, far beyond practical quote/liquidity limits. The
+/// backend still accepts wider decimal strings and uses `U256` internally where
+/// EVM/DEX plumbing requires it.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum QuoteAmount {
-    Source(u64),
-    Target(u64),
+    Source(u128),
+    Target(u128),
 }
 
 /// Parameters for `GET /quote`.

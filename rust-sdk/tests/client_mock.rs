@@ -185,6 +185,46 @@ async fn get_quote_with_target_amount_omits_source_amount() {
 }
 
 #[tokio::test]
+async fn get_quote_sends_amount_over_u64_as_string() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/quote"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "exchange_rate": "1",
+            "network_fee": 1000,
+            "gasless_network_fee": 0,
+            "protocol_fee": 250,
+            "protocol_fee_rate": 0.0025,
+            "min_amount": 10000,
+            "max_amount": 100000000,
+            "source_amount": "100000",
+            "target_amount": "18446744073709551616",
+            "net_source_amount": "101250",
+            "net_target_amount": "18446744073709551616",
+        })))
+        .mount(&server)
+        .await;
+
+    let client = Client::new(&server.uri()).expect("client builds");
+    let req = QuoteRequest::new(
+        Chain::bitcoin(),
+        TokenId::Btc,
+        Chain::arbitrum(),
+        TokenId::Other("0x6c84a8f1c29108f47a79964b5fe888d4f4d0de40".to_string()),
+        QuoteAmount::Target(u128::from(u64::MAX) + 1),
+    );
+    client.get_quote(req).await.expect("get_quote succeeds");
+
+    let received = server.received_requests().await.expect("requests recorded");
+    let req = received.last().expect("at least one request");
+    let params = query_pairs(req);
+    assert_eq!(
+        params_get(&params, "target_amount"),
+        Some("18446744073709551616")
+    );
+}
+
+#[tokio::test]
 async fn get_quote_sends_optional_bridge_and_referral() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

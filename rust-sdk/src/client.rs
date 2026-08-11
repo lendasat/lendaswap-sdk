@@ -274,7 +274,9 @@ impl Client {
                     )));
                 }
                 let sats_receive = match amount {
-                    QuoteAmount::Target(v) => v,
+                    QuoteAmount::Target(v) => u64::try_from(v).map_err(|_| {
+                        Error::InvalidSwap("Lightning→Arkade target amount exceeds u64".into())
+                    })?,
                     QuoteAmount::Source(_) => {
                         return Err(Error::InvalidSwap(
                             "Lightning→Arkade requires QuoteAmount::Target — the server only accepts a target (sats_receive) amount".into(),

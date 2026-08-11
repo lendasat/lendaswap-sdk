@@ -34,9 +34,9 @@ pub(crate) struct QuoteRequestWire {
     pub(crate) target_chain: Chain,
     pub(crate) target_token: TokenId,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) source_amount: Option<u64>,
+    pub(crate) source_amount: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) target_amount: Option<u64>,
+    pub(crate) target_amount: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) bridge_target_chain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -49,8 +49,8 @@ pub(crate) struct QuoteRequestWire {
 impl From<QuoteRequest> for QuoteRequestWire {
     fn from(r: QuoteRequest) -> Self {
         let (source_amount, target_amount) = match r.amount {
-            QuoteAmount::Source(v) => (Some(v), None),
-            QuoteAmount::Target(v) => (None, Some(v)),
+            QuoteAmount::Source(v) => (Some(v.to_string()), None),
+            QuoteAmount::Target(v) => (None, Some(v.to_string())),
         };
         Self {
             source_chain: r.source_chain,
@@ -103,7 +103,10 @@ impl From<CreateEvmToArkadeSwapRequest> for CreateEvmToArkadeSwapRequestWire {
     fn from(r: CreateEvmToArkadeSwapRequest) -> Self {
         let (amount_in, amount_out) = match r.amount {
             QuoteAmount::Source(v) => (Some(v.to_string()), None),
-            QuoteAmount::Target(v) => (None, Some(v)),
+            QuoteAmount::Target(v) => (
+                None,
+                Some(u64::try_from(v).expect("amount_out exceeds u64 BTC sat limit")),
+            ),
         };
         Self {
             target_address: r.target_address,
