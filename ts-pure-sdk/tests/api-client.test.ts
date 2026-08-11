@@ -43,7 +43,7 @@ describe("API Client - Type Safety", () => {
             source_token: "btc",
             target_chain: "137",
             target_token: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
-            source_amount: 100000,
+            source_amount: "100000",
           },
         },
       });

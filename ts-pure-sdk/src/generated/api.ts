@@ -3755,9 +3755,9 @@ export interface operations {
                 /** @description Target token: contract address for EVM tokens, or "btc" for BTC */
                 target_token: string;
                 /** @description Amount in smallest unit of source token (mutually exclusive with target_amount) */
-                source_amount?: number | null;
+                source_amount?: string | null;
                 /** @description Amount in smallest unit of target token (mutually exclusive with source_amount) */
-                target_amount?: number | null;
+                target_amount?: string | null;
                 /**
                  * @description Optional: CCTP bridge destination chain (e.g., "Base", "Optimism").
                  *     When set, the CCTP forwarding fee is deducted from the target amount.
