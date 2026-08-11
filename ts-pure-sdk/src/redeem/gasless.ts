@@ -105,6 +105,8 @@ export async function claimViaGasless(
     sweepToken,
     minAmountOut,
     callsHash,
+    // Cast: the field ships with newer servers; absent means a v4 deployment.
+    htlcVersion: (swap as { evm_htlc_version?: number }).evm_htlc_version,
   });
 
   // Sign with the swap's internally derived EVM key

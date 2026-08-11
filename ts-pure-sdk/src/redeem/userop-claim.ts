@@ -130,6 +130,8 @@ export async function claimViaUserOp(
     sweepToken,
     minAmountOut,
     callsHash,
+    // Cast: the field ships with newer servers; absent means a v4 deployment.
+    htlcVersion: (swap as { evm_htlc_version?: number }).evm_htlc_version,
   });
   const sig = signEvmDigest(secretKey, digest);
 

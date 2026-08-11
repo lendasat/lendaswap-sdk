@@ -50,6 +50,12 @@ export interface RedeemDigestParams {
   minAmountOut: bigint;
   /** Hash of the calls array (prevents call substitution attacks) */
   callsHash: string;
+  /**
+   * HTLCErc20 contract VERSION of the deployment this swap lives on — the
+   * EIP-712 domain version string. Comes from the swap response's
+   * `evm_htlc_version`; defaults to 4 (deployments predating the field).
+   */
+  htlcVersion?: number | string;
 }
 
 /** Parameters for encoding redeemAndExecute call data */
@@ -198,7 +204,12 @@ export function buildRedeemDigest(params: RedeemDigestParams): string {
         value: keccak256(stringToUtf8Bytes(EIP712_DOMAIN_TYPEHASH)),
       },
       { type: "bytes32", value: keccak256(stringToUtf8Bytes(HTLC_NAME)) },
-      { type: "bytes32", value: keccak256(stringToUtf8Bytes(HTLC_VERSION)) },
+      {
+        type: "bytes32",
+        value: keccak256(
+          stringToUtf8Bytes(String(params.htlcVersion ?? HTLC_VERSION)),
+        ),
+      },
       { type: "uint256", value: BigInt(params.chainId) },
       { type: "address", value: params.htlcAddress },
     ]),
