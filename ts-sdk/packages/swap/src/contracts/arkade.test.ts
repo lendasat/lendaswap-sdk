@@ -28,11 +28,15 @@ describe("arkadeObservation", () => {
   });
 });
 
-/** Build a base64 PSBT with one input, optionally carrying a ConditionWitness. */
-function spendPsbt(preimage?: Uint8Array): string {
+/** Build a base64 PSBT with optional ConditionWitness fields by input. */
+function spendPsbt(...preimagesByInput: Array<Uint8Array | undefined>): string {
   const tx = new Transaction({ allowUnknownInputs: true });
-  tx.addInput({ txid: new Uint8Array(32).fill(1), index: 0 });
-  if (preimage) setArkPsbtField(tx, 0, ConditionWitness, [preimage]);
+  const inputCount = Math.max(1, preimagesByInput.length);
+  for (let inputIndex = 0; inputIndex < inputCount; inputIndex++) {
+    tx.addInput({ txid: new Uint8Array(32).fill(inputIndex + 1), index: 0 });
+    const preimage = preimagesByInput[inputIndex];
+    if (preimage) setArkPsbtField(tx, inputIndex, ConditionWitness, [preimage]);
+  }
   return base64.encode(tx.toPSBT());
 }
 
@@ -58,6 +62,34 @@ describe("classifyArkadeSpend", () => {
     // verify the hash rather than merely detecting the field's presence.
     const other = new Uint8Array(32).fill(9);
     expect(classifyArkadeSpend(spendPsbt(other), paymentHash)).toEqual({
+      spend: "refund",
+    });
+  });
+
+  it("finds a matching preimage on a non-zero input", () => {
+    expect(
+      classifyArkadeSpend(spendPsbt(undefined, preimage), paymentHash),
+    ).toEqual({
+      spend: "claim",
+      preimage,
+    });
+  });
+
+  it("keeps scanning past non-matching input witnesses", () => {
+    const other = new Uint8Array(32).fill(9);
+    expect(
+      classifyArkadeSpend(spendPsbt(other, preimage), paymentHash),
+    ).toEqual({
+      spend: "claim",
+      preimage,
+    });
+  });
+
+  it("treats multi-input spends without this swap's preimage as refunds", () => {
+    const other = new Uint8Array(32).fill(9);
+    expect(
+      classifyArkadeSpend(spendPsbt(undefined, other), paymentHash),
+    ).toEqual({
       spend: "refund",
     });
   });

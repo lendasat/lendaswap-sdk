@@ -72,12 +72,15 @@ export function classifyArkadeSpend(
   paymentHash: Uint8Array,
 ): ArkadeSpend {
   const tx = Transaction.fromPSBT(base64.decode(encodedSpendTx));
-  // The VHTLC is always the spending tx's first input; the condition witness is
-  // a stack of elements, one of which (on a claim) is the 32-byte preimage.
-  for (const witness of getArkPsbtFields(tx, 0, ConditionWitness)) {
-    for (const element of witness) {
-      if (element.length === 32 && preimageMatches(element, paymentHash)) {
-        return { spend: "claim", preimage: element };
+  // Multi-input Arkade spends may reveal the VHTLC condition witness on any
+  // input. The condition witness is a stack of elements, one of which (on a
+  // claim) is the 32-byte preimage.
+  for (let inputIndex = 0; inputIndex < tx.inputsLength; inputIndex++) {
+    for (const witness of getArkPsbtFields(tx, inputIndex, ConditionWitness)) {
+      for (const element of witness) {
+        if (element.length === 32 && preimageMatches(element, paymentHash)) {
+          return { spend: "claim", preimage: element };
+        }
       }
     }
   }
