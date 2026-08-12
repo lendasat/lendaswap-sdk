@@ -332,13 +332,10 @@ export interface CreateSwapOptions {
 
 /** Options for creating a Lightning-to-Arkade swap.
  *
- * Provide **one of** `sourceAmountSats` or `targetAmountSats`.
+ * Provide **exactly one of** `sourceAmountSats` or `targetAmountSats` —
+ * the type enforces it at compile time.
  */
-export interface LightningToArkadeSwapOptions {
-  /** Invoice amount in satoshis; fees are deducted from it. Mutually exclusive with `targetAmountSats`. */
-  sourceAmountSats?: number;
-  /** Exact amount in satoshis to receive on Arkade; fees are added on top. Mutually exclusive with `sourceAmountSats`. */
-  targetAmountSats?: number;
+export type LightningToArkadeSwapOptions = {
   /** Target Arkade address to receive VTXOs */
   targetAddress: string;
   /** Optional referral code for fee exemption */
@@ -351,7 +348,18 @@ export interface LightningToArkadeSwapOptions {
    * as-is (invoice with no description).
    */
   invoiceDescription?: string;
-}
+} & (
+  | {
+      /** Invoice amount in satoshis; fees are deducted from it. Mutually exclusive with `targetAmountSats`. */
+      sourceAmountSats: number;
+      targetAmountSats?: undefined;
+    }
+  | {
+      /** Exact amount in satoshis to receive on Arkade; fees are added on top. Mutually exclusive with `sourceAmountSats`. */
+      targetAmountSats: number;
+      sourceAmountSats?: undefined;
+    }
+);
 
 /** Result of creating a Lightning-to-Arkade swap */
 export interface LightningToArkadeSwapResult {

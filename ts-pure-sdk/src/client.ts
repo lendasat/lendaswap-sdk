@@ -4487,14 +4487,11 @@ export class Client {
         );
       }
       return this.createLightningToArkadeSwap({
-        sourceAmountSats:
-          options.sourceAmount == null
-            ? undefined
-            : Number(options.sourceAmount),
-        targetAmountSats:
-          options.targetAmount == null
-            ? undefined
-            : Number(options.targetAmount),
+        // The runtime check above guarantees exactly one amount is set;
+        // branch so each arm satisfies the XOR options type.
+        ...(options.sourceAmount != null
+          ? { sourceAmountSats: Number(options.sourceAmount) }
+          : { targetAmountSats: Number(options.targetAmount) }),
         targetAddress: options.targetAddress,
         referralCode: options.referralCode,
         extraFees: options.extraFees,
