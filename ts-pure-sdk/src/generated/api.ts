@@ -2711,6 +2711,7 @@ export interface components {
             arkade: components["schemas"]["ServiceStatus"];
             bitcoin: components["schemas"]["ServiceStatus"];
             ethereum: components["schemas"]["ServiceStatus"];
+            lightning?: null | components["schemas"]["ServiceStatus"];
             polygon: components["schemas"]["ServiceStatus"];
         };
         SettleDelegateRequest: {

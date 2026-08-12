@@ -5515,6 +5515,17 @@
           "ethereum": {
             "$ref": "#/components/schemas/ServiceStatus"
           },
+          "lightning": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ServiceStatus",
+                "description": "Absent when no Lightning provider is configured on this deployment."
+              }
+            ]
+          },
           "polygon": {
             "$ref": "#/components/schemas/ServiceStatus"
           }
