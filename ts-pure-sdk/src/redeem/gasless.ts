@@ -5,18 +5,13 @@
  * uses the HTLCCoordinator contract for gasless execution.
  */
 
-import type {
-  ArkadeToEvmSwapResponse,
-  LightningToEvmSwapResponse,
-} from "../api/client.js";
+import type { ArkadeToEvmSwapResponse } from "../api/client.js";
 import { buildRedeemDigest, signEvmDigest } from "../evm/index.js";
 import { CLIENT_AGENT, SATORA_SERVER_VERSION } from "../version.js";
 import type { ClaimGaslessResult } from "./types.js";
 
 /** Swap types that support gasless claiming */
-export type GaslessSwapResponse =
-  | ArkadeToEvmSwapResponse
-  | LightningToEvmSwapResponse;
+export type GaslessSwapResponse = ArkadeToEvmSwapResponse;
 
 /** Parameters for a gasless claim */
 export interface GaslessClaimParams {

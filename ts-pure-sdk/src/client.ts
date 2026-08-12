@@ -1,16 +1,13 @@
 import {
   type ApiClient,
   type ArkadeToEvmSwapResponse,
-  type ArkadeToLightningSwapResponse,
   type BtcToArkadeSwapResponse,
   type BulkStatusResponse,
   createApiClient,
   type EvmToArkadeSwapResponse,
   type EvmToBitcoinSwapResponse,
-  type EvmToLightningSwapResponse,
   type GetSwapResponse,
   type LightningToArkadeSwapResponse,
-  type LightningToEvmSwapResponse,
   type paths,
   type RedeemAndSwapResponse,
   type StatusResponse,
@@ -37,8 +34,6 @@ import {
 import {
   type ArkadeToEvmSwapOptions,
   type ArkadeToEvmSwapResult,
-  type ArkadeToLightningSwapOptions,
-  type ArkadeToLightningSwapResult,
   type BitcoinToArkadeSwapOptions,
   type BitcoinToArkadeSwapResult,
   type BitcoinToEvmSwapOptions,
@@ -47,24 +42,17 @@ import {
   type CreateSwapOptions,
   type CreateSwapResult,
   createArkadeToEvmSwapGeneric,
-  createArkadeToLightningSwap,
   createBitcoinToArkadeSwap,
   createBitcoinToEvmSwap,
   createEvmToArkadeSwapGeneric,
   createEvmToBitcoinSwap,
-  createEvmToLightningSwapGeneric,
   createLightningToArkadeSwap,
-  createLightningToEvmSwapGeneric,
   type EvmToArkadeSwapGenericOptions,
   type EvmToArkadeSwapGenericResult,
   type EvmToBitcoinSwapOptions,
   type EvmToBitcoinSwapResult,
-  type EvmToLightningSwapGenericOptions,
-  type EvmToLightningSwapGenericResult,
   type LightningToArkadeSwapOptions,
   type LightningToArkadeSwapResult,
-  type LightningToEvmSwapGenericOptions,
-  type LightningToEvmSwapGenericResult,
 } from "./create/index.js";
 import { delegateClaim, delegateRefund } from "./delegate.js";
 import {
@@ -129,7 +117,6 @@ import {
   buildOnchainRefundTransaction,
   collabRefundArkadeToEvmDelegate,
   collabRefundArkadeToEvmOffchain,
-  collabRefundArkadeToLightningOffchain,
   verifyHtlcAddress,
 } from "./refund/index.js";
 import {
@@ -207,7 +194,6 @@ export type {
   EvmToArkadeSwapResult,
   EvmToBitcoinSwapOptions,
   EvmToBitcoinSwapResult,
-  EvmToLightningSwapOptions,
   UsdcBridgeParams,
 } from "./create/index.js";
 
@@ -2029,7 +2015,6 @@ export class Client {
     if (
       swap.direction !== "btc_to_arkade" &&
       swap.direction !== "arkade_to_evm" &&
-      swap.direction !== "arkade_to_lightning" &&
       swap.direction !== "evm_to_arkade" &&
       swap.direction !== "lightning_to_arkade"
     ) {
@@ -2044,9 +2029,6 @@ export class Client {
       vhtlcAddress = (swap as BtcToArkadeSwapResponse).arkade_vhtlc_address;
     } else if (swap.direction === "lightning_to_arkade") {
       vhtlcAddress = (swap as LightningToArkadeSwapResponse)
-        .arkade_vhtlc_address;
-    } else if (swap.direction === "arkade_to_lightning") {
-      vhtlcAddress = (swap as ArkadeToLightningSwapResponse)
         .arkade_vhtlc_address;
     } else if (
       swap.direction === "arkade_to_evm" ||
@@ -2125,12 +2107,10 @@ export class Client {
     // The destination is always the stored target_evm_address (set at swap creation time)
     if (
       swap.direction === "arkade_to_evm" ||
-      swap.direction === "lightning_to_evm" ||
       swap.direction === "bitcoin_to_evm"
     ) {
       const evmSwap = swap as (
         | ArkadeToEvmSwapResponse
-        | LightningToEvmSwapResponse
         | BitcoinToEvmSwapResponse
       ) & {
         direction: string;
@@ -2289,17 +2269,16 @@ export class Client {
 
     const swap = (await this.getSwap(id, {
       updateStorage: true,
-    })) as (ArkadeToEvmSwapResponse | LightningToEvmSwapResponse) & {
+    })) as ArkadeToEvmSwapResponse & {
       direction: string;
     };
 
     if (
       swap.direction !== "arkade_to_evm" &&
-      swap.direction !== "lightning_to_evm" &&
       swap.direction !== "bitcoin_to_evm"
     ) {
       throw new Error(
-        `Expected arkade_to_evm or lightning_to_evm swap, got ${swap.direction}. claimViaGasless is for EVM-targeted swaps.`,
+        `Expected arkade_to_evm or bitcoin_to_evm swap, got ${swap.direction}. claimViaGasless is for EVM-targeted swaps.`,
       );
     }
 
@@ -3143,11 +3122,7 @@ export class Client {
     }
 
     // EVM-sourced swaps: collaborative refund or timelock-based refund
-    if (
-      direction === "evm_to_arkade" ||
-      direction === "evm_to_bitcoin" ||
-      direction === "evm_to_lightning"
-    ) {
+    if (direction === "evm_to_arkade" || direction === "evm_to_bitcoin") {
       const evmOptions = options as EvmRefundOptions | undefined;
       const settlement = evmOptions?.mode ?? "swap-back";
 
@@ -3158,19 +3133,7 @@ export class Client {
       if (direction === "evm_to_arkade") {
         return this.#buildEvmToArkadeRefund(id, swap, settlement);
       }
-      if (direction === "evm_to_bitcoin") {
-        return this.#buildEvmToBitcoinRefund(id, swap, settlement);
-      }
-      return this.#buildEvmToLightningRefund(id, swap, settlement);
-    }
-
-    // Arkade-to-Lightning: collaborative refund or locktime refund
-    if (direction === "arkade_to_lightning") {
-      return this.#buildArkadeToLightningRefund(
-        id,
-        swap,
-        options as ArkadeRefundOptions,
-      );
+      return this.#buildEvmToBitcoinRefund(id, swap, settlement);
     }
 
     return {
@@ -3830,170 +3793,6 @@ export class Client {
   }
 
   /**
-   * Refund an Arkade-to-Lightning swap.
-   *
-   * Two paths:
-   * 1. **Collaborative refund** (instant) — available when status is `serverwontfund` or `clientinvalidfunded`
-   * 2. **Locktime refund** (after CLTV expiry) — fallback when the receiver doesn't cooperate
-   *
-   * For retrying with a new invoice, use {@link retryArkadeToLightningSwap} instead.
-   * @internal
-   */
-  async #buildArkadeToLightningRefund(
-    id: string,
-    swap: GetSwapResponse,
-    options?: ArkadeRefundOptions,
-  ): Promise<RefundResult> {
-    if (!options?.destinationAddress) {
-      return {
-        success: false,
-        message:
-          "Destination address is required for Arkade refunds. " +
-          'Provide it via the options parameter: { destinationAddress: "ark1..." }',
-      };
-    }
-
-    if (!this.#swapStorage) {
-      return {
-        success: false,
-        message:
-          "Swap storage is not configured. Cannot retrieve the secret key needed for refund.",
-      };
-    }
-
-    const storedSwap = await this.#swapStorage.get(id);
-    if (!storedSwap) {
-      return {
-        success: false,
-        message: `Swap ${id} not found in local storage. The secret key is required to sign the refund transaction.`,
-      };
-    }
-
-    if (swap.direction !== "arkade_to_lightning") {
-      return {
-        success: false,
-        message: `Expected arkade_to_lightning swap, got ${swap.direction}`,
-      };
-    }
-
-    const s = swap as ArkadeToLightningSwapResponse & {
-      direction: "arkade_to_lightning";
-    };
-
-    const fullPubKey = storedSwap.publicKey;
-    const userPubKey =
-      fullPubKey.length === 66 ? fullPubKey.slice(2) : fullPubKey;
-
-    const hashLock = s.hash_lock.startsWith("0x")
-      ? s.hash_lock.slice(2)
-      : s.hash_lock;
-
-    // Try collaborative refund first (instant)
-    try {
-      // TODO: Add collabRefundArkadeToLightningDelegate
-      const result = await collabRefundArkadeToLightningOffchain({
-        userSecretKey: storedSwap.secretKey,
-        userPubKey,
-        receiverPubKey: s.receiver_pk,
-        arkadeServerPubKey: s.arkade_server_pk,
-        hashLock,
-        vhtlcAddress: s.arkade_vhtlc_address,
-        refundLocktime: s.vhtlc_refund_locktime,
-        unilateralClaimDelay: s.unilateral_claim_delay,
-        unilateralRefundDelay: s.unilateral_refund_delay,
-        unilateralRefundWithoutReceiverDelay:
-          s.unilateral_refund_without_receiver_delay,
-        destinationAddress: options.destinationAddress,
-        network: s.network,
-        arkadeServerUrl:
-          options.arkadeServerUrl ?? this.#config.arkadeServerUrl,
-        swapId: id,
-        apiClient: this.#apiClient,
-        logger: this.#config.logger,
-        logLevel: this.#config.logLevel,
-      });
-
-      return {
-        success: true,
-        message:
-          "Arkade-to-Lightning refund executed via collaborative refund!",
-        txId: result.txId,
-        refundAmount: result.refundAmount,
-        broadcast: true,
-      };
-    } catch (collabError) {
-      const collabMsg =
-        collabError instanceof Error
-          ? collabError.message
-          : String(collabError);
-      this.#logger.warn({
-        event: "arkade_to_lightning.refund.collab_failed",
-        message: "Collaborative refund failed, checking locktime fallback",
-        swapId: id,
-        data: { reason: collabMsg },
-        error: collabError,
-      });
-    }
-
-    // Fallback: non-collaborative refund (requires locktime to have expired)
-    // TODO: Should use Bitcoin's MTP.
-    const now = Math.floor(Date.now() / 1000);
-    if (now < s.vhtlc_refund_locktime) {
-      const remainingSeconds = s.vhtlc_refund_locktime - now;
-      const remainingMinutes = Math.ceil(remainingSeconds / 60);
-      return {
-        success: false,
-        message:
-          `collaborative refund failed and non-collaborative refund ` +
-          `is not yet available. The VHTLC locktime expires in ${remainingMinutes} minutes ` +
-          `(at ${new Date(s.vhtlc_refund_locktime * 1000).toISOString()}). ` +
-          `Try again after the locktime expires, or use retryArkadeToLightningSwap() to ` +
-          `retry with a new Lightning invoice.`,
-      };
-    }
-
-    // Locktime expired — use refund_without_receiver path (2-of-2: sender + server)
-    // This reuses the existing Arkade refund logic — lendaswapPubKey is set to
-    // the receiver key from this swap's VHTLC script.
-    // TODO: Not yet e2e-tested!
-    const refundParams = {
-      userSecretKey: storedSwap.secretKey,
-      userPubKey,
-      lendaswapPubKey: s.receiver_pk,
-      arkadeServerPubKey: s.arkade_server_pk,
-      hashLock,
-      vhtlcAddress: s.arkade_vhtlc_address,
-      refundLocktime: s.vhtlc_refund_locktime,
-      unilateralClaimDelay: s.unilateral_claim_delay,
-      unilateralRefundDelay: s.unilateral_refund_delay,
-      unilateralRefundWithoutReceiverDelay:
-        s.unilateral_refund_without_receiver_delay,
-      destinationAddress: options.destinationAddress,
-      network: s.network,
-    };
-
-    // Query VTXO status to determine refund method
-    const amounts = await this.amountsForSwap(id);
-    const vtxoStatus = amounts.vtxoStatus;
-
-    if (vtxoStatus === "not_funded" || vtxoStatus === "spent") {
-      return {
-        success: false,
-        message:
-          vtxoStatus === "not_funded"
-            ? "No VTXOs found at the VHTLC address."
-            : "All VTXOs have already been spent.",
-      };
-    }
-
-    if (vtxoStatus === "spendable") {
-      return this.#refundArkadeOffchain(refundParams, options);
-    }
-
-    return this.#refundArkadeDelegate(refundParams, options);
-  }
-
-  /**
    * Refunds via the offchain submitTx/finalizeTx path (spendable VTXOs only).
    * @internal
    */
@@ -4263,101 +4062,6 @@ export class Client {
       },
     };
   }
-
-  /**
-   * Builds refund data for an EVM-to-Lightning swap via the coordinator.
-   *
-   * Like EVM-to-Arkade, the coordinator atomically swapped the source token to WBTC
-   * before locking in the HTLC. For refunds:
-   * - If source was WBTC: direct HTLCErc20 refund
-   * - Otherwise: use coordinator refund endpoint (swap-back or direct mode)
-   *
-   * @internal
-   */
-  async #buildEvmToLightningRefund(
-    id: string,
-    swap: GetSwapResponse,
-    mode: "swap-back" | "direct" = "swap-back",
-  ): Promise<RefundResult> {
-    const evmSwap = swap as EvmToLightningSwapResponse & {
-      direction: "evm_to_lightning";
-    };
-
-    const timelock = evmSwap.evm_refund_locktime;
-    const now = Math.floor(Date.now() / 1000);
-    const timelockExpired = now >= timelock;
-
-    // Check if source token is BTC-pegged (WBTC/tBTC) - if so, use direct HTLCErc20 refund
-    const isWbtcSource = evmSwap.source_token
-      ? isBtcPegged(evmSwap.source_token)
-      : false;
-
-    if (isWbtcSource) {
-      // Direct HTLCErc20 refund - no DEX swap needed
-      const htlcAddress = evmSwap.evm_htlc_address;
-      const hashLock = evmSwap.hash_lock;
-
-      const refundData = encodeHtlcErc20RefundCallData(htlcAddress, {
-        preimageHash: hashLock,
-        amount: BigInt(evmSwap.source_amount),
-        token: evmSwap.source_token.token_id,
-        claimAddress: evmSwap.server_evm_address,
-        timelock: timelock,
-      });
-
-      return {
-        success: true,
-        message: timelockExpired
-          ? "EVM refund calldata ready. Submit this transaction with your EVM wallet."
-          : `Timelock has not expired yet. Refund will be available at ${new Date(timelock * 1000).toISOString()}.`,
-        evmRefundData: {
-          to: refundData.to,
-          data: refundData.data,
-          timelockExpired,
-          timelockExpiry: timelock,
-        },
-      };
-    }
-
-    // Non-WBTC source: fetch coordinator refund calldata from server
-    // - "swap-back": swap WBTC back to original token via DEX (default)
-    // - "direct": return WBTC directly (useful when DEX calldata is stale)
-    const response = await this.#apiClient.GET(
-      "/swap/{id}/refund-and-swap-calldata",
-      {
-        params: {
-          path: { id },
-          query: { mode },
-        },
-      },
-    );
-
-    if (response.error) {
-      return {
-        success: false,
-        message: `Failed to fetch refund calldata: ${response.error.error || "Unknown error"}`,
-      };
-    }
-
-    const { coordinator_address, calldata } = response.data;
-
-    return {
-      success: true,
-      message: timelockExpired
-        ? "EVM refund calldata ready. Submit this transaction with your EVM wallet."
-        : `Timelock has not expired yet. Refund will be available at ${new Date(timelock * 1000).toISOString()}.`,
-      evmRefundData: {
-        to: coordinator_address,
-        data: calldata,
-        timelockExpired,
-        timelockExpiry: timelock,
-      },
-    };
-  }
-
-  // =========================================================================
-  // Collaborative EVM Refund
-  // =========================================================================
 
   /**
    * Fetches the EIP-712 parameters for collaborative EVM HTLC refund.
@@ -4775,71 +4479,22 @@ export class Client {
       });
     }
 
-    // Lightning → EVM
-    if (isLightning(sourceAsset) && isEvmToken(targetChain)) {
-      return this.createLightningToEvmSwapGeneric({
-        targetAddress: options.targetAddress,
-        tokenAddress,
-        evmChainId: Number(targetChain),
-        amountIn:
-          options.sourceAmount == null
-            ? undefined
-            : Number(options.sourceAmount),
-        amountOut:
-          options.targetAmount == null
-            ? undefined
-            : Number(options.targetAmount),
-        referralCode: options.referralCode,
-        extraFees: options.extraFees,
-        bridgeParams,
-      });
-    }
-
-    // Arkade → Lightning
-    if (isArkade(sourceAsset) && isLightning(targetAsset)) {
-      // Detect whether targetAddress is a Lightning address (user@domain),
-      // an LNURL (lnurl1...), or a BOLT11 invoice (starts with ln...).
-      const isAddress = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
-        options.targetAddress,
-      );
-      const isLnurlStr = /^lnurl1[a-z0-9]+$/i.test(options.targetAddress);
-
-      if (isAddress || isLnurlStr) {
-        if (
-          options.targetAmount == null ||
-          !Number.isFinite(options.targetAmount) ||
-          options.targetAmount <= 0
-        ) {
-          throw new Error(
-            "targetAmount (in sats) is required when using a Lightning address or LNURL",
-          );
-        }
-        return this.createArkadeToLightningSwap({
-          ...(isAddress
-            ? { lightningAddress: options.targetAddress }
-            : { lnurl: options.targetAddress }),
-          amountSats: Number(options.targetAmount),
-          referralCode: options.referralCode,
-          extraFees: options.extraFees,
-        });
-      }
-
-      return this.createArkadeToLightningSwap({
-        lightningInvoice: options.targetAddress,
-        referralCode: options.referralCode,
-        extraFees: options.extraFees,
-      });
-    }
-
     // Lightning → Arkade
     if (isLightning(sourceAsset) && isArkade(targetAsset)) {
-      if (options.targetAmount == null) {
+      if ((options.sourceAmount == null) === (options.targetAmount == null)) {
         throw new Error(
-          "targetAmount (sats to receive on Arkade) is required for Lightning → Arkade swaps",
+          "Provide exactly one of sourceAmount (invoice sats) or targetAmount (sats to receive on Arkade) for Lightning → Arkade swaps",
         );
       }
       return this.createLightningToArkadeSwap({
-        satsReceive: Number(options.targetAmount),
+        sourceAmountSats:
+          options.sourceAmount == null
+            ? undefined
+            : Number(options.sourceAmount),
+        targetAmountSats:
+          options.targetAmount == null
+            ? undefined
+            : Number(options.targetAmount),
         targetAddress: options.targetAddress,
         referralCode: options.referralCode,
         extraFees: options.extraFees,
@@ -4933,71 +4588,6 @@ export class Client {
       });
     }
 
-    // EVM → Lightning
-    if (isSourceEvmChain(sourceChain) && isLightning(targetAsset)) {
-      if (!options.userAddress && !options.gasless) {
-        throw new Error(
-          "userAddress is required for EVM → Lightning swaps (unless gasless)",
-        );
-      }
-
-      // Detect whether targetAddress is a Lightning address (user@domain),
-      // an LNURL (lnurl1...), or a BOLT11 invoice (starts with ln...).
-      const isAddress = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
-        options.targetAddress,
-      );
-      const isLnurlStr = /^lnurl1[a-z0-9]+$/i.test(options.targetAddress);
-
-      if (isAddress || isLnurlStr) {
-        if (
-          options.targetAmount == null ||
-          !Number.isFinite(options.targetAmount) ||
-          options.targetAmount <= 0
-        ) {
-          throw new Error(
-            "targetAmount (in sats) is required when using a Lightning address or LNURL",
-          );
-        }
-        return this.createEvmToLightningSwapGeneric({
-          ...(isAddress
-            ? { lightningAddress: options.targetAddress }
-            : { lnurl: options.targetAddress }),
-          amountSats: Number(options.targetAmount),
-          evmChainId: Number(sourceChain),
-          tokenAddress: sourceTokenId,
-          userAddress: options.userAddress ?? "",
-          referralCode: options.referralCode,
-          extraFees: options.extraFees,
-          gasless: options.gasless,
-          inboundBridgeParams,
-        });
-      }
-
-      if (isArkade(targetAsset) && isLightning(sourceAsset)) {
-        if (!options.targetAmount) {
-          throw new Error("Target amount must be set");
-        }
-
-        return this.createLightningToArkadeSwap({
-          targetAddress: options.targetAddress,
-          referralCode: options.referralCode,
-          extraFees: options.extraFees,
-          satsReceive: Number(options.targetAmount),
-        });
-      }
-
-      return this.createEvmToLightningSwapGeneric({
-        lightningInvoice: options.targetAddress,
-        evmChainId: Number(sourceChain),
-        tokenAddress: sourceTokenId,
-        userAddress: options.userAddress ?? "",
-        referralCode: options.referralCode,
-        extraFees: options.extraFees,
-        gasless: options.gasless,
-        inboundBridgeParams,
-      });
-    }
-
     throw new Error(
       `Unsupported swap direction: ${sourceChain} → ${targetChain}`,
     );
@@ -5030,18 +4620,6 @@ export class Client {
     options: ArkadeToEvmSwapOptions,
   ): Promise<ArkadeToEvmSwapResult> {
     return createArkadeToEvmSwapGeneric(options, this.#getCreateContext());
-  }
-
-  /**
-   * Creates a new Lightning to EVM swap using the generic chain-agnostic endpoint.
-   *
-   * @param options - The swap options including evmChainId and tokenAddress.
-   * @returns The swap response and parameters for storage.
-   */
-  async createLightningToEvmSwapGeneric(
-    options: LightningToEvmSwapGenericOptions,
-  ): Promise<LightningToEvmSwapGenericResult> {
-    return createLightningToEvmSwapGeneric(options, this.#getCreateContext());
   }
 
   /**
@@ -5132,274 +4710,6 @@ export class Client {
   }
 
   // =========================================================================
-  // Swap Creation - Arkade to Lightning
-  // =========================================================================
-
-  /**
-   * Creates a new Arkade to Lightning swap.
-   *
-   * The user sends Arkade VTXOs and a Lightning invoice gets paid
-   * via the Lendaswap server.
-   *
-   * @param options - The swap options.
-   * @returns The swap response and parameters for storage.
-   * @throws Error if the swap creation fails.
-   *
-   * @example
-   * ```ts
-   * const result = await client.createArkadeToLightningSwap({
-   *   lightningInvoice: "lnbc100u1p...",
-   * });
-   * console.log("Fund:", result.response.arkade_vhtlc_address);
-   * console.log("Amount:", result.response.source_amount, "sats");
-   * ```
-   */
-  async createArkadeToLightningSwap(
-    options: ArkadeToLightningSwapOptions,
-  ): Promise<ArkadeToLightningSwapResult> {
-    return createArkadeToLightningSwap(options, this.#getCreateContext());
-  }
-
-  // =========================================================================
-  // Arkade-to-Lightning: Fee Estimation & Retry
-  // =========================================================================
-
-  /**
-   * Calculate the correct Lightning invoice amount for an Arkade→Lightning swap.
-   *
-   * Given the source amount in sats (what will be locked in the VHTLC), returns
-   * the target amount that the Lightning invoice should be for (after fees
-   * are deducted).
-   *
-   * Useful for:
-   * - Knowing what invoice amount to generate before creating a swap
-   * - Retrying a failed swap: the user's funds are locked in the old VHTLC at
-   *   `sourceAmountSats`, and the new invoice must match the expected target amount
-   *
-   * @param sourceAmountSats - Amount in sats that will fund the VHTLC
-   * @returns Quote with target amount, fee breakdown, and exchange rate
-   * @throws Error if the quote request fails or the amount is out of range
-   *
-   * @example
-   * ```ts
-   * const quote = await client.getArkadeToLightningQuote(100000);
-   * console.log(`Invoice should be for ${quote.net_target_amount} sats`);
-   * console.log(`Fees: ${quote.fee} sats`);
-   * ```
-   */
-  async getArkadeToLightningQuote(
-    sourceAmountSats: number,
-  ): Promise<QuoteResponse> {
-    const { data, error } = await this.#apiClient.GET("/quote", {
-      params: {
-        query: {
-          source_chain: "Arkade",
-          source_token: "btc",
-          target_chain: "Lightning",
-          target_token: "btc",
-          source_amount: sourceAmountSats,
-        },
-      },
-    });
-
-    if (error) {
-      throw new Error(
-        `Failed to get Arkade→Lightning quote: ${typeof error === "string" ? error : JSON.stringify(error)}`,
-      );
-    }
-    if (!data) {
-      throw new Error("No quote data returned");
-    }
-    return fromWireQuoteResponse(data as WireQuoteResponse);
-  }
-
-  /**
-   * Retry a failed Arkade→Lightning swap with a new Lightning invoice or LNURL.
-   *
-   * When an Arkade→Lightning swap fails (status `serverwontfund` or `clientinvalidfunded`),
-   * this method:
-   * 1. Creates a new Arkade→Lightning swap with the new invoice/LNURL
-   * 2. Collaboratively refunds the old VHTLC into the new swap's VHTLC
-   *
-   * The refund uses the collaborative `refund` script leaf (3-of-3: sender + receiver + Arkade),
-   * which is instant (no locktime wait). The receiver cooperates because the swap is in
-   * `invoice.failedToPay` state.
-   *
-   * **Invoice amount**: The new invoice must match the expected target amount for the
-   * source amount locked in the old VHTLC. Use {@link getArkadeToLightningQuote} to
-   * calculate the correct invoice amount, or use `lightningAddress` (LNURL) which
-   * handles amount negotiation automatically.
-   *
-   * @param swapId - ID of the failed swap (must be in `serverwontfund` or `clientinvalidfunded` status)
-   * @param options - New invoice or Lightning address for the retry
-   * @returns The new swap response and the refund transaction ID
-   * @throws Error if the swap is not in the right state, amount mismatch, or server refuses
-   *
-   * @example
-   * ```ts
-   * // With LNURL (recommended — handles amount automatically):
-   * const result = await client.retryArkadeToLightningSwap(swapId, {
-   *   lightningAddress: "user@speed.app",
-   * });
-   *
-   * // With invoice (must match expected amount):
-   * const quote = await client.getArkadeToLightningQuote(oldSwap.boltz_amount_sats);
-   * // Generate invoice for quote.net_target_amount sats, then:
-   * const result = await client.retryArkadeToLightningSwap(swapId, {
-   *   lightningInvoice: "lnbc...",
-   * });
-   * ```
-   */
-  async retryArkadeToLightningSwap(
-    swapId: string,
-    options: {
-      /** BOLT11 Lightning invoice. Must be for the correct amount (use getArkadeToLightningQuote). */
-      lightningInvoice?: string;
-      /** Lightning address (LNURL). Amount is negotiated automatically. */
-      lightningAddress?: string;
-    },
-  ): Promise<{
-    /** The new swap */
-    newSwap: ArkadeToLightningSwapResponse;
-    /** Transaction ID of the collaborative refund from old → new VHTLC */
-    refundTxId: string;
-    /** Amount refunded in sats */
-    refundAmount: bigint;
-  }> {
-    if (!this.#swapStorage) {
-      throw new Error(
-        "Swap storage not configured. Cannot retrieve keys needed for refund.",
-      );
-    }
-
-    if (!options.lightningInvoice && !options.lightningAddress) {
-      throw new Error(
-        "Provide either lightningInvoice or lightningAddress for retry",
-      );
-    }
-    if (options.lightningInvoice && options.lightningAddress) {
-      throw new Error(
-        "Provide either lightningInvoice or lightningAddress, not both",
-      );
-    }
-
-    // 1. Validate the old swap is in a retryable state
-    const oldSwap = await this.getSwap(swapId, {
-      updateStorage: true,
-    });
-
-    if (oldSwap.direction !== "arkade_to_lightning") {
-      throw new Error(
-        `Expected arkade_to_lightning swap, got ${oldSwap.direction}`,
-      );
-    }
-
-    const retryableStatuses = ["serverwontfund", "clientinvalidfunded"];
-    if (!retryableStatuses.includes(oldSwap.status)) {
-      throw new Error(
-        `Swap must be in serverwontfund or clientinvalidfunded status to retry ` +
-          `(current: ${oldSwap.status}). ` +
-          (oldSwap.status === "serverredeemed"
-            ? "This swap completed successfully — no retry needed."
-            : oldSwap.status === "clientrefunded"
-              ? "This swap was already refunded."
-              : "The swap may still be in progress."),
-      );
-    }
-
-    // 2. Get the source amount locked in the old VHTLC
-    const sourceAmountSats = oldSwap.boltz_amount_sats;
-
-    // 3. Build create-swap options
-    const createOptions: ArkadeToLightningSwapOptions = {};
-
-    if (options.lightningAddress) {
-      // LNURL: use the quote to determine the right amount
-      const quote = await this.getArkadeToLightningQuote(sourceAmountSats);
-      createOptions.lightningAddress = options.lightningAddress;
-      createOptions.amountSats = Number(quote.net_target_amount);
-    } else if (options.lightningInvoice) {
-      createOptions.lightningInvoice = options.lightningInvoice;
-    }
-
-    // 4. Create the new swap
-    const newSwapResult = await this.createArkadeToLightningSwap(createOptions);
-    const newSwap = newSwapResult.response;
-
-    // 5. Verify the new swap's expected funding amount matches our old VHTLC
-    const newExpectedAmount = newSwap.boltz_amount_sats;
-    if (newExpectedAmount !== sourceAmountSats) {
-      const mismatchHint =
-        newExpectedAmount > sourceAmountSats
-          ? "The invoice amount may be too high"
-          : "The invoice amount may be too low";
-
-      throw new Error(
-        `Amount mismatch: new swap expects ${newExpectedAmount} sats in VHTLC ` +
-          `but old VHTLC has ${sourceAmountSats} sats. ` +
-          `${mismatchHint} — use getArkadeToLightningQuote(${sourceAmountSats}) ` +
-          `to calculate the correct invoice amount before retrying.`,
-      );
-    }
-
-    const storedSwap = await this.#swapStorage.get(swapId);
-    if (!storedSwap) {
-      throw new Error(
-        `Swap ${swapId} not found in local storage. ` +
-          `The secret key is required to sign the collaborative refund.`,
-      );
-    }
-
-    const fullPubKey = storedSwap.publicKey;
-    const userPubKey =
-      fullPubKey.length === 66 ? fullPubKey.slice(2) : fullPubKey;
-
-    const hashLock = oldSwap.hash_lock.startsWith("0x")
-      ? oldSwap.hash_lock.slice(2)
-      : oldSwap.hash_lock;
-
-    // Collaborative refund: old VHTLC → new VHTLC address
-    this.#logger.info({
-      event: "arkade_to_lightning.retry.collab_refund_start",
-      message: "Starting collaborative refund before retry",
-      swapId,
-      data: {
-        oldSwapId: swapId,
-        newSwapId: newSwap.id,
-        sourceAmount: sourceAmountSats,
-        network: oldSwap.network,
-      },
-    });
-
-    const refundResult = await collabRefundArkadeToLightningOffchain({
-      userSecretKey: storedSwap.secretKey,
-      userPubKey,
-      receiverPubKey: oldSwap.receiver_pk,
-      arkadeServerPubKey: oldSwap.arkade_server_pk,
-      hashLock,
-      vhtlcAddress: oldSwap.arkade_vhtlc_address,
-      refundLocktime: oldSwap.vhtlc_refund_locktime,
-      unilateralClaimDelay: oldSwap.unilateral_claim_delay,
-      unilateralRefundDelay: oldSwap.unilateral_refund_delay,
-      unilateralRefundWithoutReceiverDelay:
-        oldSwap.unilateral_refund_without_receiver_delay,
-      destinationAddress: newSwap.arkade_vhtlc_address,
-      network: oldSwap.network,
-      arkadeServerUrl: this.#config.arkadeServerUrl,
-      swapId,
-      apiClient: this.#apiClient,
-      logger: this.#config.logger,
-      logLevel: this.#config.logLevel,
-    });
-
-    return {
-      newSwap,
-      refundTxId: refundResult.txId,
-      refundAmount: refundResult.refundAmount,
-    };
-  }
-
-  // =========================================================================
   // Swap Creation - EVM to Arkade
   // =========================================================================
 
@@ -5460,34 +4770,6 @@ export class Client {
     return createEvmToBitcoinSwap(options, this.#getCreateContext());
   }
 
-  /**
-   * Creates a new EVM to Lightning swap using the chain-agnostic generic endpoint.
-   *
-   * This allows users to swap any ERC-20 token from any supported EVM chain
-   * to pay a Lightning invoice.
-   *
-   * @param options - The swap options including Lightning invoice, chain ID, and token address.
-   * @returns The swap response and parameters for storage.
-   * @throws Error if the swap creation fails.
-   *
-   * @example
-   * ```ts
-   * const result = await client.createEvmToLightningSwapGeneric({
-   *   lightningInvoice: "lnbc...",
-   *   evmChainId: 137, // Polygon
-   *   tokenAddress: "0x1BFD67037B42Cf73acF2047067bd4F2C47D9BfD6", // WBTC
-   *   userAddress: "0x1234...",
-   * });
-   * console.log("HTLC contract:", result.response.evm_htlc_address);
-   * console.log("Swap ID:", result.response.id);
-   * ```
-   */
-  async createEvmToLightningSwapGeneric(
-    options: EvmToLightningSwapGenericOptions,
-  ): Promise<EvmToLightningSwapGenericResult> {
-    return createEvmToLightningSwapGeneric(options, this.#getCreateContext());
-  }
-
   // =========================================================================
   // Coordinator Funding (EVM-to-BTC via DEX + HTLC)
   // =========================================================================
@@ -5533,11 +4815,10 @@ export class Client {
 
     if (
       swap.direction !== "evm_to_arkade" &&
-      swap.direction !== "evm_to_bitcoin" &&
-      swap.direction !== "evm_to_lightning"
+      swap.direction !== "evm_to_bitcoin"
     ) {
       throw new Error(
-        `Expected evm_to_arkade/evm_to_bitcoin/evm_to_lightning swap, got ${swap.direction}. Permit2 fund method is for EVM-sourced swaps.`,
+        `Expected evm_to_arkade/evm_to_bitcoin swap, got ${swap.direction}. Permit2 fund method is for EVM-sourced swaps.`,
       );
     }
 
@@ -5703,11 +4984,10 @@ export class Client {
 
     if (
       swap.direction !== "evm_to_arkade" &&
-      swap.direction !== "evm_to_bitcoin" &&
-      swap.direction !== "evm_to_lightning"
+      swap.direction !== "evm_to_bitcoin"
     ) {
       throw new Error(
-        `Expected evm_to_arkade/evm_to_bitcoin/evm_to_lightning swap, got ${swap.direction}. Permit2 fund method is for EVM-sourced swaps.`,
+        `Expected evm_to_arkade/evm_to_bitcoin swap, got ${swap.direction}. Permit2 fund method is for EVM-sourced swaps.`,
       );
     }
 
@@ -6172,8 +5452,7 @@ export class Client {
 
     if (
       oldSwap.direction !== "evm_to_arkade" &&
-      oldSwap.direction !== "evm_to_bitcoin" &&
-      oldSwap.direction !== "evm_to_lightning"
+      oldSwap.direction !== "evm_to_bitcoin"
     ) {
       return {
         eligible: false,
@@ -6346,39 +5625,6 @@ export class Client {
         targetAddress: options.targetAddress,
         sourceAmount: BigInt(info.amount),
       });
-    } else if (info.oldSwap.direction === "evm_to_lightning") {
-      const target = options.targetAddress.trim();
-      const isAddress = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(
-        target,
-      );
-      const isLnurlStr = /^lnurl1[a-z0-9]+$/i.test(target);
-      const quote = await this.getQuote({
-        sourceChain: info.token.chain,
-        sourceToken: info.token.address,
-        targetChain: "Lightning",
-        targetToken: "btc",
-        sourceAmount: BigInt(info.amount),
-      });
-      const targetSats = Number(quote.net_target_amount || quote.target_amount);
-      if (!Number.isFinite(targetSats) || targetSats <= 0) {
-        throw new Error(
-          `Unable to derive Lightning target amount from source-fixed quote: ${JSON.stringify(quote)}`,
-        );
-      }
-      created = await this.createEvmToLightningSwapGeneric({
-        ...common,
-        ...(isAddress
-          ? { lightningAddress: target, amountSats: targetSats }
-          : isLnurlStr
-            ? { lnurl: target, amountSats: targetSats }
-            : { lightningInvoice: target }),
-      });
-      const needed = BigInt(String(created.response.source_amount));
-      if (needed > BigInt(info.amount)) {
-        throw new Error(
-          `New Lightning swap requires ${needed} source units, but the recovered balance is ${info.amount}. Please use a smaller invoice/target amount.`,
-        );
-      }
     } else {
       throw new Error(
         `Cannot continue refunded swap with direction ${info.oldSwap.direction}.`,
@@ -6431,11 +5677,10 @@ export class Client {
 
     if (
       swap.direction !== "evm_to_arkade" &&
-      swap.direction !== "evm_to_bitcoin" &&
-      swap.direction !== "evm_to_lightning"
+      swap.direction !== "evm_to_bitcoin"
     ) {
       throw new Error(
-        `Expected evm_to_arkade/evm_to_bitcoin/evm_to_lightning swap, got ${swap.direction}. Gasless fund is for EVM-sourced swaps.`,
+        `Expected evm_to_arkade/evm_to_bitcoin swap, got ${swap.direction}. Gasless fund is for EVM-sourced swaps.`,
       );
     }
 
@@ -6678,8 +5923,7 @@ export class Client {
     const swap = await this.getSwap(swapId);
     if (
       swap.direction !== "evm_to_arkade" &&
-      swap.direction !== "evm_to_bitcoin" &&
-      swap.direction !== "evm_to_lightning"
+      swap.direction !== "evm_to_bitcoin"
     ) {
       throw new Error(
         `Expected EVM-sourced swap, got ${swap.direction}. Recovery is only for gasless EVM swaps.`,

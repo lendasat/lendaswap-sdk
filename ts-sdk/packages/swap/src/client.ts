@@ -488,15 +488,6 @@ export class Client {
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
-  createLightningToEvmSwapGeneric(
-    ...args: Parameters<LegacyClient["createLightningToEvmSwapGeneric"]>
-  ): ReturnType<LegacyClient["createLightningToEvmSwapGeneric"]> {
-    return this.#trackAfterCreate(
-      this.#legacy.createLightningToEvmSwapGeneric(...args),
-    );
-  }
-
-  /** Delegated to the legacy client (migration checkpoint). */
   createBitcoinToEvmSwap(
     ...args: Parameters<LegacyClient["createBitcoinToEvmSwap"]>
   ): ReturnType<LegacyClient["createBitcoinToEvmSwap"]> {
@@ -522,31 +513,6 @@ export class Client {
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
-  createArkadeToLightningSwap(
-    ...args: Parameters<LegacyClient["createArkadeToLightningSwap"]>
-  ): ReturnType<LegacyClient["createArkadeToLightningSwap"]> {
-    return this.#trackAfterCreate(
-      this.#legacy.createArkadeToLightningSwap(...args),
-    );
-  }
-
-  /** Delegated to the legacy client (migration checkpoint). */
-  getArkadeToLightningQuote(
-    ...args: Parameters<LegacyClient["getArkadeToLightningQuote"]>
-  ): ReturnType<LegacyClient["getArkadeToLightningQuote"]> {
-    return this.#legacy.getArkadeToLightningQuote(...args);
-  }
-
-  /** Delegated to the legacy client (migration checkpoint). */
-  retryArkadeToLightningSwap(
-    ...args: Parameters<LegacyClient["retryArkadeToLightningSwap"]>
-  ): ReturnType<LegacyClient["retryArkadeToLightningSwap"]> {
-    return this.#trackAfterRetry(
-      this.#legacy.retryArkadeToLightningSwap(...args),
-    );
-  }
-
-  /** Delegated to the legacy client (migration checkpoint). */
   createEvmToArkadeSwapGeneric(
     ...args: Parameters<LegacyClient["createEvmToArkadeSwapGeneric"]>
   ): ReturnType<LegacyClient["createEvmToArkadeSwapGeneric"]> {
@@ -560,15 +526,6 @@ export class Client {
     ...args: Parameters<LegacyClient["createEvmToBitcoinSwap"]>
   ): ReturnType<LegacyClient["createEvmToBitcoinSwap"]> {
     return this.#trackAfterCreate(this.#legacy.createEvmToBitcoinSwap(...args));
-  }
-
-  /** Delegated to the legacy client (migration checkpoint). */
-  createEvmToLightningSwapGeneric(
-    ...args: Parameters<LegacyClient["createEvmToLightningSwapGeneric"]>
-  ): ReturnType<LegacyClient["createEvmToLightningSwapGeneric"]> {
-    return this.#trackAfterCreate(
-      this.#legacy.createEvmToLightningSwapGeneric(...args),
-    );
   }
 
   /** Delegated to the legacy client (migration checkpoint). */

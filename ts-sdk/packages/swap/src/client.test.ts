@@ -248,12 +248,12 @@ describe("Client tracking", () => {
     Object.assign(legacy, {
       listAllSwaps: async () => swaps,
       // The real retry creates + persists a replacement swap internally.
-      retryArkadeToLightningSwap: async () => {
+      continueRefundedEvmSwap: async () => {
         swaps.push(arkadeEvmSwap);
         return {
-          newSwap: { id: "swap-1" },
-          refundTxId: "tx",
-          refundAmount: 1n,
+          oldSwapId: "old-swap",
+          newSwapId: "swap-1",
+          txHash: "tx",
         };
       },
     });
@@ -261,8 +261,9 @@ describe("Client tracking", () => {
     await client.startTracking();
     expect(m.arkade.registered.size).toBe(0);
 
-    await client.retryArkadeToLightningSwap("old-swap", {
-      lightningAddress: "user@example.com",
+    await client.continueRefundedEvmSwap("old-swap", {
+      targetAddress: "ark1qexample",
+      signer: {} as Parameters<Client["continueRefundedEvmSwap"]>[1]["signer"],
     });
 
     await vi.waitFor(() => {
@@ -278,12 +279,12 @@ describe("Client tracking", () => {
     const legacy = Object.create(LegacyClient.prototype) as LegacyClient;
     Object.assign(legacy, {
       listAllSwaps: async () => swaps,
-      retryArkadeToLightningSwap: async () => {
+      continueRefundedEvmSwap: async () => {
         swaps.push(arkadeEvmSwap);
         return {
-          newSwap: { id: "swap-1" },
-          refundTxId: "tx",
-          refundAmount: 1n,
+          oldSwapId: "old-swap",
+          newSwapId: "swap-1",
+          txHash: "tx",
         };
       },
     });
@@ -294,10 +295,13 @@ describe("Client tracking", () => {
     // the wrapper must return the result instead of throwing; tracking just
     // skips the unobservable swap.
     await expect(
-      client.retryArkadeToLightningSwap("old-swap", {
-        lightningAddress: "user@example.com",
+      client.continueRefundedEvmSwap("old-swap", {
+        targetAddress: "ark1qexample",
+        signer: {} as Parameters<
+          Client["continueRefundedEvmSwap"]
+        >[1]["signer"],
       }),
-    ).resolves.toMatchObject({ refundTxId: "tx" });
+    ).resolves.toMatchObject({ txHash: "tx" });
     expect(m.arkade.registered.size).toBe(0);
   });
 

@@ -29,10 +29,6 @@ export type ClaimGaslessResponse =
 export type RedeemAndSwapResponse =
   components["schemas"]["RedeemAndSwapResponse"];
 
-// Arkade-to-Lightning types
-export type ArkadeToLightningSwapResponse =
-  components["schemas"]["ArkadeToLightningSwapResponse"];
-
 // Arkade-to-EVM (generic endpoint) types
 export type ArkadeToEvmSwapRequest =
   components["schemas"]["ArkadeToEvmSwapRequest"];
@@ -55,14 +51,6 @@ export type EvmToBitcoinSwapRequest =
   components["schemas"]["EvmToBitcoinSwapRequest"];
 export type EvmToBitcoinSwapResponse =
   components["schemas"]["EvmToBitcoinSwapResponse"];
-
-// EVM-to-Lightning (generic endpoint) types
-export type EvmToLightningSwapResponse =
-  components["schemas"]["EvmToLightningSwapResponse"];
-
-// Lightning-to-EVM (generic endpoint) types
-export type LightningToEvmSwapResponse =
-  components["schemas"]["LightningToEvmSwapResponse"];
 
 // Lightning-to-Arkade types
 export type LightningToArkadeSwapResponse =

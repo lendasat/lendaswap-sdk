@@ -219,23 +219,6 @@ describe("swapToTracked", () => {
     boltz_amount_sats: 1450, // source minus fees — what actually gets locked
   };
 
-  it("maps arkade_to_lightning: client funds Arkade, no server leg", () => {
-    const tracked = swapToTracked(
-      stored({ ...lnArkadeFields, direction: "arkade_to_lightning" }),
-    );
-    expect(tracked?.serverHtlc).toBeUndefined();
-    expect(tracked?.clientHtlc).toEqual({
-      ledger: "arkade",
-      script: expectedArkadeScript,
-      address: "ark1qlnexample",
-      preimageHash: hashLock,
-      expectedSats: 1450, // boltz_amount_sats — what the client actually locks
-      params: expect.any(Object),
-    });
-    expect(tracked?.clientRefundLocktime).toBe(1_000_000_000); // vhtlc leg
-    expect(tracked?.serverRefundLocktime).toBe(0); // no on-chain server leg
-  });
-
   it("maps lightning_to_arkade: client claims Arkade, no client leg", () => {
     const tracked = swapToTracked(
       stored({ ...lnArkadeFields, direction: "lightning_to_arkade" }),
@@ -253,31 +236,11 @@ describe("swapToTracked", () => {
     expect(tracked?.serverRefundLocktime).toBe(1_000_000_000); // vhtlc leg
   });
 
-  it("maps evm_to_lightning: client funds EVM (server claims), no server leg", () => {
-    const tracked = swapToTracked(
-      stored({ ...arkadeEvmFields, direction: "evm_to_lightning" }),
-    );
-    expect(tracked?.serverHtlc).toBeUndefined();
-    expect(tracked?.clientHtlc).toEqual({
-      ledger: "evm",
-      chainId: 137,
-      htlc: "0xhtlc",
-      preimageHash: `0x${hashLock}`,
-      claimAddress: "0xserver", // the server claims the client's EVM HTLC
-      expectedAmount: 1450n, // evm_expected_sats
-      expectedToken: undefined, // no wbtc_address — amount-only
-      sender: "0xclient", // the client funded it
-      timelockSec: 900_000,
-    });
-    expect(tracked?.clientRefundLocktime).toBe(900_000_000); // EVM leg
-    expect(tracked?.serverRefundLocktime).toBe(0);
-  });
-
   it("token-less directions fall back to the per-chain locked token on mainnet", () => {
     const tracked = swapToTracked(
       stored({
         ...arkadeEvmFields,
-        direction: "evm_to_lightning",
+        direction: "evm_to_arkade",
         network: "bitcoin",
       } as Partial<GetSwapResponse>),
     );
@@ -290,31 +253,11 @@ describe("swapToTracked", () => {
     const tracked = swapToTracked(
       stored({
         ...arkadeEvmFields,
-        direction: "evm_to_lightning",
+        direction: "evm_to_arkade",
         network: "regtest",
       } as Partial<GetSwapResponse>),
     );
     expect(tracked?.clientHtlc).toMatchObject({ expectedToken: undefined });
-  });
-
-  it("maps lightning_to_evm: client claims EVM, no client leg", () => {
-    const tracked = swapToTracked(
-      stored({ ...arkadeEvmFields, direction: "lightning_to_evm" }),
-    );
-    expect(tracked?.clientHtlc).toBeUndefined();
-    expect(tracked?.serverHtlc).toEqual({
-      ledger: "evm",
-      chainId: 137,
-      htlc: "0xhtlc",
-      preimageHash: `0x${hashLock}`,
-      claimAddress: "0xclient", // the client claims the server's EVM HTLC
-      expectedAmount: 1450n, // evm_expected_sats
-      expectedToken: "0xwbtc",
-      sender: "0xserver", // the server funded it
-      timelockSec: 900_000,
-    });
-    expect(tracked?.clientRefundLocktime).toBe(0);
-    expect(tracked?.serverRefundLocktime).toBe(900_000_000); // EVM leg
   });
 
   it("maps btc_to_arkade: client funds BTC, claims the Arkade VHTLC (HASH160 lock)", () => {

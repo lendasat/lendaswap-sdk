@@ -95,34 +95,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/swap/arkade-lightning/{id}/collab-refund": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Collaboratively refund an Arkade-to-Lightning VHTLC.
-         * @description The client builds and partially signs the refund transaction, then POSTs it
-         *     here. The server obtains the receiver cosignature and returns the result.
-         *     Only allowed when the swap is in `ServerWontFund` or `ClientInvalidFunded`
-         *     state.
-         *
-         *     After receiving the response the client must:
-         *     1. Submit the cosigned PSBTs to the Arkade server for the server signature
-         *     2. Merge all checkpoint signatures and sign as sender
-         *     3. Finalize the transaction with the Arkade server
-         */
-        post: operations["collab_refund_arkade_to_lightning"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/swap/{id}/collab-refund-evm": {
         parameters: {
             query?: never;
@@ -513,31 +485,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/swap/arkade/lightning": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create a new Arkade-to-Lightning swap.
-         * @description Flow:
-         *     1. User provides a Lightning invoice they want paid
-         *     2. Server creates a Boltz submarine swap
-         *     3. User funds the Arkade VHTLC (returned in response)
-         *     4. Server claims the Arkade VHTLC and funds the Boltz VHTLC
-         *     5. Boltz pays the Lightning invoice
-         */
-        post: operations["create_arkade_to_lightning_swap"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/swap/bitcoin/arkade": {
         parameters: {
             query?: never;
@@ -636,31 +583,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/swap/evm/lightning": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create a chain-agnostic EVM-to-Lightning swap.
-         * @description Flow:
-         *     1. User provides their Lightning invoice (they want to receive BTC)
-         *     2. Server prepares Boltz submarine swap to pay the invoice
-         *     3. User funds EVM HTLCErc20 with tokens
-         *     4. Server pays Lightning invoice via Boltz (gets preimage)
-         *     5. Server claims EVM HTLCErc20 using preimage
-         */
-        post: operations["create_evm_to_lightning_swap_generic"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/swap/lightning/arkade": {
         parameters: {
             query?: never;
@@ -671,31 +593,15 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Create a new Lightning-to-Arkade swap.
-         * @description Flow:
-         *     1. User pays the Lightning invoice returned
-         *     2. Server receives BTC via Boltz and creates Arkade VHTLC for user
-         *     3. User claims Arkade VHTLC with secret, revealing it
-         *     4. Server claims Boltz VHTLC with the revealed secret
+         * Create a new Lightning to Arkade swap request
+         * @description The user pays a BOLT11 hold invoice and receives Arkade VTXOs.
+         *     Flow:
+         *     1. User pays the returned hold invoice (the payment is held, not settled)
+         *     2. Server creates an Arkade VHTLC locked to the same hash
+         *     3. User claims the VHTLC with their secret, revealing it
+         *     4. Server settles the held Lightning payment with the revealed secret
          */
-        post: operations["create_lightning_to_arkade_swap"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/swap/lightning/evm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create a chain-agnostic Lightning-to-EVM swap. */
-        post: operations["create_lightning_evm_swap"];
+        post: operations["lightning_to_arkade_swap"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1180,114 +1086,6 @@ export interface components {
             vhtlc_refund_locktime: number;
             /** @description WBTC token contract address on the target EVM chain (the token locked in the HTLC). */
             wbtc_address: string;
-        };
-        /** @description Request for a collaborative VHTLC refund. */
-        ArkadeToLightningCollabRefundRequest: {
-            /** @description Base64-encoded ark transaction PSBT, partially signed by the sender (client). */
-            ark_tx: string;
-            /** @description Base64-encoded checkpoint transaction PSBT (unsigned). */
-            checkpoint: string;
-        };
-        /** @description Response with cosigned PSBTs for a collaborative refund. */
-        ArkadeToLightningCollabRefundResponse: {
-            /** @description Base64-encoded ark transaction PSBT with receiver cosignature added. */
-            ark_tx: string;
-            /** @description Base64-encoded checkpoint PSBT with receiver cosignature added. */
-            checkpoint: string;
-        };
-        /**
-         * @description Request for creating an Arkade-to-Lightning swap.
-         *
-         *     The user sends Arkade VTXOs and a Lightning invoice gets paid.
-         */
-        ArkadeToLightningSwapRequest: {
-            /**
-             * Format: int64
-             * @description Amount in satoshis the recipient should receive on Lightning.
-             *     Required when `lightning_address` or `lnurl` is provided; ignored when
-             *     `lightning_invoice` is provided (amount is read from the invoice).
-             */
-            amount_sats?: number | null;
-            /**
-             * @description Lightning address (e.g. `user@speed.app`) to resolve via LNURL-pay.
-             *     Mutually exclusive with `lightning_invoice` and `lnurl`. Requires `amount_sats`.
-             */
-            lightning_address?: string | null;
-            /** @description Lightning BOLT11 invoice the user wants paid. */
-            lightning_invoice?: string | null;
-            /**
-             * @description Raw LNURL string (e.g. `lnurl1...`) to resolve via LNURL-pay.
-             *     Mutually exclusive with `lightning_invoice` and `lightning_address`. Requires
-             *     `amount_sats`.
-             */
-            lnurl?: string | null;
-            /** @description Optional referral code for fee tracking. */
-            referral_code?: string | null;
-            /** @description User's refund public key for the Arkade VHTLC (if swap fails/expires). */
-            refund_pk: string;
-            /** @description User ID derived from wallet for recovery purposes. */
-            user_id: string;
-        };
-        /** @description Arkade → Lightning swap response. */
-        ArkadeToLightningSwapResponse: {
-            /** @description Arkade VHTLC claim transaction ID (server claim) */
-            arkade_claim_txid?: string | null;
-            /** @description Arkade VHTLC fund transaction ID */
-            arkade_fund_txid?: string | null;
-            /** @description Arkade server's public key */
-            arkade_server_pk: string;
-            /** @description Arkade VHTLC address (user funds) */
-            arkade_vhtlc_address: string;
-            /**
-             * Format: int64
-             * @description Amount server must fund on Boltz VHTLC
-             */
-            boltz_amount_sats: number;
-            /** @description Boltz submarine swap ID */
-            boltz_swap_id: string;
-            /** @description Boltz VHTLC address (server funds for Boltz to claim) */
-            boltz_vhtlc_address: string;
-            /** @description User's Lightning invoice */
-            client_lightning_invoice: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: int64 */
-            fee_sats: number;
-            hash_lock: string;
-            id: string;
-            /** @description Bitcoin network */
-            network: string;
-            /** @description Server's claim public key (receiver in the VHTLC) */
-            receiver_pk: string;
-            /** @description User's refund public key (sender in the VHTLC) */
-            sender_pk: string;
-            /** @description Amount user sends on Arkade in sats */
-            source_amount: string;
-            source_token: components["schemas"]["TokenInfo"];
-            status: components["schemas"]["SwapStatus"];
-            /** @description Amount user receives via Lightning in sats */
-            target_amount: string;
-            target_token: components["schemas"]["TokenInfo"];
-            /**
-             * Format: int64
-             * @description Unilateral claim delay in seconds
-             */
-            unilateral_claim_delay: number;
-            /**
-             * Format: int64
-             * @description Unilateral refund delay in seconds
-             */
-            unilateral_refund_delay: number;
-            /**
-             * Format: int64
-             * @description Unilateral refund without receiver delay in seconds
-             */
-            unilateral_refund_without_receiver_delay: number;
-            /**
-             * Format: int64
-             * @description VHTLC refund locktime
-             */
-            vhtlc_refund_locktime: number;
         };
         BitcoinToArkadeSwapRequest: {
             /**
@@ -2499,125 +2297,6 @@ export interface components {
             /** @description WBTC token contract address on the EVM chain */
             wbtc_address: string;
         };
-        /**
-         * @description Request to create an EVM-to-Lightning swap.
-         *
-         *     User sends any ERC-20 token on EVM, receives BTC via Lightning.
-         *     The hash_lock is derived from the Lightning invoice's payment hash.
-         *
-         *     Provide **one of**:
-         *     - `lightning_invoice` — a BOLT11 invoice
-         *     - `lightning_address` + `amount_sats` — a Lightning address resolved via LNURL-pay
-         *     - `lnurl` + `amount_sats` — a raw LNURL string (bech32-encoded URL) resolved via LNURL-pay
-         */
-        EvmToLightningSwapRequest: {
-            /**
-             * Format: int64
-             * @description Amount in satoshis the recipient should receive on Lightning.
-             *     Required when `lightning_address` or `lnurl` is provided; ignored when
-             *     `lightning_invoice` is provided (amount is read from the invoice).
-             */
-            amount_sats?: number | null;
-            /**
-             * @description Optional: CCTP bridge source chain (e.g., "Ethereum", "Optimism"). When set,
-             *     the user's source USDC originates on this chain and hops through CCTPv2 to
-             *     Arbitrum before the HTLC is created. The backend pads `deposit_amount` by
-             *     the fast-transfer fee at UserOp-calldata time.
-             */
-            bridge_source_chain?: string | null;
-            /** @description Optional: USDC address on the bridge source chain. */
-            bridge_source_token_address?: string | null;
-            /**
-             * Format: int64
-             * @description Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum).
-             */
-            evm_chain_id: number;
-            /**
-             * Format: int32
-             * @description Optional per-swap fee surcharge in basis points
-             *     (0..=max_extra_fee_bps configured on the matching developer key).
-             */
-            extra_fees?: number | null;
-            /** @description Whether to use gasless relay for funding (server submits tx on behalf of user). */
-            gasless?: boolean;
-            /**
-             * @description Lightning address (e.g. `user@speed.app`) to resolve via LNURL-pay.
-             *     Mutually exclusive with `lightning_invoice` and `lnurl`. Requires `amount_sats`.
-             */
-            lightning_address?: string | null;
-            /**
-             * @description User's Lightning BOLT11 invoice to receive payment.
-             *     Mutually exclusive with `lightning_address` and `lnurl`.
-             */
-            lightning_invoice?: string | null;
-            /**
-             * @description Raw LNURL string (e.g. `lnurl1...`) to resolve via LNURL-pay.
-             *     Mutually exclusive with `lightning_invoice` and `lightning_address`. Requires
-             *     `amount_sats`.
-             */
-            lnurl?: string | null;
-            /** @description Optional referral code for tracking. */
-            referral_code?: string | null;
-            /** @description ERC-20 contract address of the source token on the EVM chain. */
-            token_address: string;
-            /** @description User's EVM address (sender of the ERC-20 token). */
-            user_address: string;
-            /** @description User ID derived from wallet for recovery purposes. */
-            user_id: string;
-        };
-        /** @description EVM → Lightning swap response */
-        EvmToLightningSwapResponse: {
-            arkade_server_pk: string;
-            /**
-             * @description CCTP bridge source chain. Set when the source USDC originated on
-             *     another CCTP chain and hopped to Arbitrum via CCTPv2 before the
-             *     HTLC was created. `source_token` still reports the post-hop
-             *     Arbitrum USDC; this field tells the SDK what chain the user is
-             *     expected to burn from.
-             */
-            bridge_source_chain?: string | null;
-            /** @description Native USDC address on the bridge source chain. */
-            bridge_source_token_address?: string | null;
-            chain: string;
-            client_evm_address: string;
-            /** @description User's Lightning invoice to receive payment */
-            client_lightning_invoice: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: int64 */
-            evm_chain_id: number;
-            evm_claim_txid?: string | null;
-            evm_expected_sats: string;
-            evm_fund_txid?: string | null;
-            evm_htlc_address: string;
-            /** Format: int64 */
-            evm_refund_locktime: number;
-            /** Format: int64 */
-            fee_sats: number;
-            /** @description Whether this swap was created with gasless relay (Permit2) */
-            gasless: boolean;
-            hash_lock: string;
-            id: string;
-            /** @description Whether the Lightning payment has been made */
-            lightning_paid: boolean;
-            network: string;
-            receiver_pk: string;
-            sender_pk: string;
-            server_evm_address: string;
-            source_amount: string;
-            source_token: components["schemas"]["TokenInfo"];
-            status: components["schemas"]["SwapStatus"];
-            target_amount: string;
-            target_token: components["schemas"]["TokenInfo"];
-            /** Format: int64 */
-            unilateral_claim_delay: number;
-            /** Format: int64 */
-            unilateral_refund_delay: number;
-            /** Format: int64 */
-            unilateral_refund_without_receiver_delay: number;
-            /** Format: int64 */
-            vhtlc_refund_locktime: number;
-        };
         EvmTokenInfo: {
             address: string;
             /** Format: int32 */
@@ -2654,6 +2333,9 @@ export interface components {
         GetSwapResponse: (components["schemas"]["BtcToArkadeSwapResponse"] & {
             /** @enum {string} */
             direction: "btc_to_arkade";
+        }) | (components["schemas"]["LightningToArkadeSwapResponse"] & {
+            /** @enum {string} */
+            direction: "lightning_to_arkade";
         }) | (components["schemas"]["BitcoinToEvmSwapResponse"] & {
             /** @enum {string} */
             direction: "bitcoin_to_evm";
@@ -2666,248 +2348,111 @@ export interface components {
         }) | (components["schemas"]["EvmToBitcoinSwapResponse"] & {
             /** @enum {string} */
             direction: "evm_to_bitcoin";
-        }) | (components["schemas"]["LightningToEvmSwapResponse"] & {
-            /** @enum {string} */
-            direction: "lightning_to_evm";
-        }) | (components["schemas"]["EvmToLightningSwapResponse"] & {
-            /** @enum {string} */
-            direction: "evm_to_lightning";
-        }) | (components["schemas"]["LightningToArkadeSwapResponse"] & {
-            /** @enum {string} */
-            direction: "lightning_to_arkade";
-        }) | (components["schemas"]["ArkadeToLightningSwapResponse"] & {
-            /** @enum {string} */
-            direction: "arkade_to_lightning";
         });
-        /**
-         * @description Request for creating a Lightning-to-Arkade swap.
-         *
-         *     The user pays a Lightning invoice and receives Arkade VTXOs.
-         */
         LightningToArkadeSwapRequest: {
+            /**
+             * Format: int64
+             * @description Arkade VHTLC script version. New swaps must use version 1.
+             */
+            arkade_htlc_script_version: number;
             /** @description User's claim public key for the Arkade VHTLC */
             claim_pk: string;
             /**
-             * @description Hash lock provided by the client (32-byte hex string with 0x prefix).
-             *     Used for the Boltz VHTLC. RIPEMD160 of this is used for the Arkade VHTLC.
+             * Format: int32
+             * @description Optional per-swap fee surcharge in basis points
+             *     (0..=max_extra_fee_bps configured on the matching developer key).
+             */
+            extra_fees?: number | null;
+            /**
+             * @description Hash lock provided by the client (0x-prefixed 32-byte hex).
+             *     The client generates a secret and computes SHA256(secret); the hold
+             *     invoice and the Arkade VHTLC both lock on this hash.
              */
             hash_lock: string;
-            /**
-             * @description Optional description shown in the payer's wallet when they open the Lightning
-             *     invoice. When omitted (`null`), a default is used. Use empty string to unset it.
-             */
+            /** @description Optional BOLT11 invoice description (max 639 bytes). */
             invoice_description?: string | null;
             /** @description Optional referral code for fee exemption */
             referral_code?: string | null;
             /**
              * Format: int64
-             * @description Amount the user wants to receive on Arkade in satoshis
+             * @description Amount the user wants to send via Lightning in satoshis (fees are
+             *     deducted from it — use this for send-max flows). Mutually exclusive
+             *     with `target_amount_sats`.
              */
-            sats_receive: number;
+            source_amount_sats?: number | null;
+            /**
+             * Format: int64
+             * @description Amount the user wants to receive on Arkade in satoshis (fees are
+             *     added on top of it). Mutually exclusive with `source_amount_sats`.
+             */
+            target_amount_sats?: number | null;
             /** @description User's target Arkade address to receive VTXOs */
             target_arkade_address: string;
             /** @description User ID derived from wallet for recovery purposes */
             user_id: string;
         };
-        /** @description Lightning → Arkade swap response */
+        /** @description Lightning → Arkade swap response. */
         LightningToArkadeSwapResponse: {
             /** @description Arkade VHTLC claim transaction ID (user claim) */
             arkade_claim_txid?: string | null;
-            /** @description Arkade VHTLC fund transaction ID */
+            /** @description Arkade VHTLC fund transaction ID (server funding) */
             arkade_fund_txid?: string | null;
             /** Format: int64 */
             arkade_htlc_script_version: number;
             /** @description Arkade server's public key */
             arkade_server_pk: string;
-            /** @description Arkade VHTLC address (server creates, user claims) */
+            /** @description Arkade VHTLC address the server funds */
             arkade_vhtlc_address: string;
-            /** @description Lightning invoice to pay */
+            /** @description BOLT11 hold invoice the user must pay */
             bolt11_invoice: string;
             /**
-             * @description Lightning invoice to pay
-             *     DEPRECATED use [`boltz_invoice`] instead
+             * Format: date-time
+             * @description Timestamp of when the swap was created
              */
-            boltz_invoice: string;
-            /** @description Boltz swap ID */
-            boltz_swap_id: string;
-            /** @description Server's VHTLC claim transaction ID (Boltz claim) */
-            btc_claim_txid?: string | null;
-            /** Format: date-time */
             created_at: string;
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Protocol fee in satoshis
+             */
             fee_sats: number;
+            /** @description Hash lock (0x-prefixed 32-byte hex; sha256 of the client's secret) */
             hash_lock: string;
+            /** @description Unique swap identifier */
             id: string;
+            /**
+             * Format: int64
+             * @description Unix timestamp after which the invoice can no longer be paid
+             */
+            invoice_expires_at: number;
             /** @description Bitcoin network */
             network: string;
             /** @description User's claim public key (receiver in the VHTLC) */
             receiver_pk: string;
             /** @description Server's VHTLC public key (sender in the VHTLC) */
             sender_pk: string;
-            /** @description Amount user must send via Lightning in sats */
+            /** @description Amount the user must pay via Lightning in satoshis */
             source_amount: string;
+            /** @description Source token info */
             source_token: components["schemas"]["TokenInfo"];
+            /** @description Current status of the swap */
             status: components["schemas"]["SwapStatus"];
-            /** @description Amount user will receive on Arkade in sats */
+            /** @description Amount the user will receive on Arkade in satoshis */
             target_amount: string;
             /** @description User's target Arkade address */
             target_arkade_address: string;
+            /** @description Target token info */
             target_token: components["schemas"]["TokenInfo"];
-            /**
-             * Format: int64
-             * @description Unilateral claim delay in seconds
-             */
+            /** Format: int64 */
             unilateral_claim_delay: number;
-            /**
-             * Format: int64
-             * @description Unilateral refund delay in seconds
-             */
+            /** Format: int64 */
             unilateral_refund_delay: number;
-            /**
-             * Format: int64
-             * @description Unilateral refund without receiver delay in seconds
-             */
+            /** Format: int64 */
             unilateral_refund_without_receiver_delay: number;
             /**
              * Format: int64
              * @description VHTLC refund locktime (unix timestamp)
              */
             vhtlc_refund_locktime: number;
-        };
-        /**
-         * @description Chain-agnostic request for Lightning-to-EVM swaps.
-         *
-         *     The caller specifies the target chain via `evm_chain_id` and the token
-         *     via its ERC-20 contract `token_address`. This endpoint supports any token
-         *     reachable through 1inch aggregation.
-         */
-        LightningToEvmSwapRequest: {
-            /**
-             * Format: int64
-             * @description How many sats the user wants to send (mutually exclusive with `amount_out`).
-             *     Value is in satoshis (smallest BTC unit).
-             */
-            amount_in?: number | null;
-            /**
-             * Format: int64
-             * @description How much target token the user wants to receive (mutually exclusive with `amount_in`).
-             *     Value is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1
-             *     USDC).
-             */
-            amount_out?: number | null;
-            /**
-             * @description ATA-existence flag for non-EVM CCTP destinations (Solana).
-             *     See `BitcoinToEvmSwapRequest::bridge_recipient_setup`.
-             */
-            bridge_recipient_setup?: boolean;
-            /**
-             * @description Optional: CCTP bridge destination chain (e.g., "Ethereum", "Arbitrum"). When set,
-             *     USDC will be bridged to this chain after the DEX swap.
-             */
-            bridge_target_chain?: string | null;
-            /** @description Optional: USDC address on the bridge destination chain. */
-            bridge_target_token_address?: string | null;
-            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
-            claiming_address: string;
-            /**
-             * Format: int64
-             * @description Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum).
-             */
-            evm_chain_id: number;
-            /**
-             * Format: int32
-             * @description Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps
-             *     configured on the matching developer key). Rejected with 400 if it
-             *     exceeds the per-key cap.
-             */
-            extra_fees?: number | null;
-            /**
-             * @description Whether the server should execute the DEX swap on behalf of the user (gasless claim).
-             *     When true, the gasless network fee is added to the total fee charged.
-             *     Defaults to true.
-             */
-            gasless?: boolean;
-            /** @description Hash lock provided by the client (32-byte hex string with 0x prefix). */
-            hash_lock: string;
-            /**
-             * @description Optional description shown in the payer's wallet when they open the Lightning
-             *     invoice. When omitted (`null`), a default is used. Use empty string to unset it.
-             */
-            invoice_description?: string | null;
-            /**
-             * @description Optional referral code for tracking. Matches a developer's API key
-             *     (`referral_id` on `developer_api_keys`) and is persisted for attribution.
-             */
-            referral_code?: string | null;
-            /** @description Refund public key used to generate the Arkade VHTLC. */
-            refund_pk: string;
-            /**
-             * @description Recipient where tokens land after the claim (user's final destination).
-             *     An EVM hex address, or a base58 Solana pubkey for a Solana bridge target.
-             */
-            target_address: string;
-            /** @description ERC-20 contract address of the desired token on the target chain. */
-            token_address: string;
-            /** @description User ID derived from wallet for recovery purposes. */
-            user_id: string;
-        };
-        /** @description Lightning → EVM swap response */
-        LightningToEvmSwapResponse: {
-            arkade_server_pk: string;
-            /** @description Lightning invoice to pay */
-            bolt11_invoice: string;
-            /**
-             * @description Lightning invoice to pay
-             *     DEPRECATED: use [`bolt11_invoice`] instead
-             */
-            boltz_invoice: string;
-            /** @description Boltz swap ID */
-            boltz_swap_id: string;
-            /** @description CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap. */
-            bridge_target_chain?: string | null;
-            /** @description USDC address on the bridge destination chain. */
-            bridge_target_token_address?: string | null;
-            /** @description Server's claim transaction ID on Arkade (Boltz VHTLC claim) */
-            btc_claim_txid?: string | null;
-            chain: string;
-            /** @description EVM address that will sign the HTLC claim */
-            client_evm_address: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: int64 */
-            evm_chain_id: number;
-            evm_claim_txid?: string | null;
-            evm_coordinator_address: string;
-            evm_expected_sats: string;
-            evm_fund_txid?: string | null;
-            evm_htlc_address: string;
-            /** Format: int64 */
-            evm_refund_locktime: number;
-            /** Format: int64 */
-            fee_sats: number;
-            hash_lock: string;
-            id: string;
-            network: string;
-            receiver_pk: string;
-            sender_pk: string;
-            server_evm_address: string;
-            source_amount: string;
-            source_token: components["schemas"]["TokenInfo"];
-            status: components["schemas"]["SwapStatus"];
-            target_amount: string;
-            /** @description EVM address where tokens are swept after the claim */
-            target_evm_address?: string | null;
-            target_token: components["schemas"]["TokenInfo"];
-            /** Format: int64 */
-            unilateral_claim_delay: number;
-            /** Format: int64 */
-            unilateral_refund_delay: number;
-            /** Format: int64 */
-            unilateral_refund_without_receiver_delay: number;
-            /** Format: int64 */
-            vhtlc_refund_locktime: number;
-            /** @description WBTC token contract address on the target EVM chain */
-            wbtc_address: string;
         };
         MtpResponse: {
             /**
@@ -3166,7 +2711,6 @@ export interface components {
             arkade: components["schemas"]["ServiceStatus"];
             bitcoin: components["schemas"]["ServiceStatus"];
             ethereum: components["schemas"]["ServiceStatus"];
-            lightning: components["schemas"]["ServiceStatus"];
             polygon: components["schemas"]["ServiceStatus"];
         };
         SettleDelegateRequest: {
@@ -3631,69 +3175,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollabRefundDelegateResponse"];
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Refund not allowed in current swap state */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Swap not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    collab_refund_arkade_to_lightning: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Swap ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArkadeToLightningCollabRefundRequest"];
-            };
-        };
-        responses: {
-            /** @description Cosigned PSBTs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArkadeToLightningCollabRefundResponse"];
                 };
             };
             /** @description Bad request */
@@ -4495,57 +3976,6 @@ export interface operations {
             };
         };
     };
-    create_arkade_to_lightning_swap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArkadeToLightningSwapRequest"];
-            };
-        };
-        responses: {
-            /** @description Swap created successfully */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArkadeToLightningSwapResponse"];
-                };
-            };
-            /** @description Bad request - invalid parameters */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Conflict - a swap with this preimage hash exists already */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     bitcoin_to_arkade_swap: {
         parameters: {
             query?: never;
@@ -4792,58 +4222,7 @@ export interface operations {
             };
         };
     };
-    create_evm_to_lightning_swap_generic: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EvmToLightningSwapRequest"];
-            };
-        };
-        responses: {
-            /** @description Swap created successfully */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EvmToLightningSwapResponse"];
-                };
-            };
-            /** @description Bad request - invalid parameters */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Conflict - a swap with this preimage hash exists already */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_lightning_to_arkade_swap: {
+    lightning_to_arkade_swap: {
         parameters: {
             query?: never;
             header?: never;
@@ -4892,50 +4271,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-        };
-    };
-    create_lightning_evm_swap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LightningToEvmSwapRequest"];
-            };
-        };
-        responses: {
-            /** @description Swap created successfully */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LightningToEvmSwapResponse"];
-                };
-            };
-            /** @description Bad request - invalid parameters */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Conflict - a swap with this preimage hash exists already */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal server error */
-            500: {
+            /** @description Lightning is not available on this deployment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

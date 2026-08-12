@@ -1,7 +1,7 @@
 /**
- * Collaborative refund: EVM → Lightning swap that expired.
+ * Collaborative refund: EVM → Arkade swap that expired.
  *
- * When an EVM-to-Lightning swap fails (e.g. the Lightning payment
+ * When an EVM-to-Arkade swap fails (e.g. the Arkade payout
  * could not be routed), the user can get their funds back immediately
  * via a collaborative refund — no timelock wait required.
  *
@@ -23,7 +23,7 @@ const client = await Client.builder()
   .build();
 // #endregion setup
 
-// Assume an EVM-to-Lightning swap was created and funded, but expired
+// Assume an EVM-to-Arkade swap was created and funded, but expired
 const swapId = "550e8400-e29b-41d4-a716-446655440000";
 
 // #region check-status
@@ -31,7 +31,7 @@ const swap = await client.getSwap(swapId);
 console.log("Status:", swap.status);
 // ... "expired"
 console.log("Direction:", swap.direction);
-// ... "evm_to_lightning"
+// ... "evm_to_arkade"
 // #endregion check-status
 
 // #region collab-refund

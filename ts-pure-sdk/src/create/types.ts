@@ -7,12 +7,9 @@ import type {
   ApiClient,
   EvmToBitcoinSwapResponse as ApiEvmToBitcoinSwapResponse,
   ArkadeToEvmSwapResponse,
-  ArkadeToLightningSwapResponse,
   BtcToArkadeSwapResponse,
   EvmToArkadeSwapResponse,
-  EvmToLightningSwapResponse,
   LightningToArkadeSwapResponse,
-  LightningToEvmSwapResponse,
   TokenId,
   TokenInfo,
 } from "../api/client.js";
@@ -165,95 +162,6 @@ export interface EvmToArkadeSwapOptions {
 export interface EvmToArkadeSwapResult {
   /** The swap response from the API */
   response: EvmToArkadeSwapResponse;
-  /** The swap parameters used (for storage/recovery) */
-  swapParams: SwapParams;
-}
-
-/** Options for creating an EVM to Lightning swap (chain-specific - deprecated) */
-export interface EvmToLightningSwapOptions {
-  /** Source EVM chain */
-  sourceChain: EvmChain;
-  /** Source token ID (e.g., "usdc_pol", "usdt_arb", "usdc_eth") */
-  sourceToken: string;
-  /** Lightning BOLT11 invoice to pay */
-  bolt11Invoice: string;
-  /** User's EVM wallet address (for checking allowance and building transactions) */
-  userAddress: string;
-  /** Optional referral code for fee exemption */
-  referralCode?: string;
-  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
-  extraFees?: number;
-}
-
-/** Options for creating a Lightning-to-EVM swap via the generic endpoint */
-export interface LightningToEvmSwapGenericOptions {
-  /** EVM address where tokens are swept after the claim (user's final destination) */
-  targetAddress: string;
-  /** Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum) */
-  evmChainId: number;
-  /** ERC-20 contract address of the desired token on the target chain */
-  tokenAddress: string;
-  /** Amount in satoshis to send (mutually exclusive with amountOut) */
-  amountIn?: number;
-  /** Amount of target token to receive in smallest unit (mutually exclusive with amountIn) */
-  amountOut?: number;
-  /** Optional referral code */
-  referralCode?: string;
-  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
-  extraFees?: number;
-  /** Whether the server should execute the DEX swap on behalf of the user (gasless claim). Defaults to true. */
-  gasless?: boolean;
-  /** Optional: when set, USDC is bridged via CCTP to the destination chain after the DEX swap. */
-  bridgeParams?: UsdcBridgeParams;
-  /**
-   * Optional description shown in the payer's wallet when they open the Lightning
-   * invoice. When omitted, the server uses a default. An empty string is honored
-   * as-is (invoice with no description).
-   */
-  invoiceDescription?: string;
-}
-
-/** Result of creating a Lightning-to-EVM swap via the generic endpoint */
-export interface LightningToEvmSwapGenericResult {
-  /** The swap response from the API */
-  response: LightningToEvmSwapResponse;
-  /** The swap parameters used (for storage/recovery) */
-  swapParams: SwapParams;
-}
-
-/** Options for creating an EVM-to-Lightning swap via the generic endpoint.
- *
- * Provide **one of** `lightningInvoice`, `lightningAddress` + `amountSats`, or `lnurl` + `amountSats`.
- */
-export interface EvmToLightningSwapGenericOptions {
-  /** User's BOLT11 Lightning invoice. Mutually exclusive with `lightningAddress` and `lnurl`. */
-  lightningInvoice?: string;
-  /** Lightning address (e.g. `user@speed.app`). Mutually exclusive with `lightningInvoice` and `lnurl`. Requires `amountSats`. */
-  lightningAddress?: string;
-  /** Raw LNURL string (e.g. `lnurl1...`). Mutually exclusive with `lightningInvoice` and `lightningAddress`. Requires `amountSats`. */
-  lnurl?: string;
-  /** Amount in satoshis the recipient should receive. Required when `lightningAddress` or `lnurl` is provided. */
-  amountSats?: number;
-  /** Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum) */
-  evmChainId: number;
-  /** ERC-20 contract address of the source token on the EVM chain */
-  tokenAddress: string;
-  /** User's EVM address (sender of the ERC-20 token) */
-  userAddress: string;
-  /** Optional referral code */
-  referralCode?: string;
-  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
-  extraFees?: number;
-  /** Use gasless relay. When true, userAddress is auto-derived from the SDK EVM key. */
-  gasless?: boolean;
-  /** Optional: when set, source USDC originates on another CCTP chain and hops to Arbitrum via CCTPv2. */
-  inboundBridgeParams?: UsdcInboundBridgeParams;
-}
-
-/** Result of creating an EVM-to-Lightning swap via the generic endpoint */
-export interface EvmToLightningSwapGenericResult {
-  /** The swap response from the API */
-  response: EvmToLightningSwapResponse;
   /** The swap parameters used (for storage/recovery) */
   swapParams: SwapParams;
 }
@@ -422,10 +330,15 @@ export interface CreateSwapOptions {
   inboundBridgeParams?: UsdcInboundBridgeParams;
 }
 
-/** Options for creating a Lightning-to-Arkade swap */
+/** Options for creating a Lightning-to-Arkade swap.
+ *
+ * Provide **one of** `sourceAmountSats` or `targetAmountSats`.
+ */
 export interface LightningToArkadeSwapOptions {
-  /** Amount in satoshis to receive on Arkade */
-  satsReceive: number;
+  /** Invoice amount in satoshis; fees are deducted from it. Mutually exclusive with `targetAmountSats`. */
+  sourceAmountSats?: number;
+  /** Exact amount in satoshis to receive on Arkade; fees are added on top. Mutually exclusive with `sourceAmountSats`. */
+  targetAmountSats?: number;
   /** Target Arkade address to receive VTXOs */
   targetAddress: string;
   /** Optional referral code for fee exemption */
@@ -448,44 +361,14 @@ export interface LightningToArkadeSwapResult {
   swapParams: SwapParams;
 }
 
-/** Options for creating an Arkade-to-Lightning swap.
- *
- * Provide **one of** `lightningInvoice`, `lightningAddress` + `amountSats`, or `lnurl` + `amountSats`.
- */
-export interface ArkadeToLightningSwapOptions {
-  /** User's BOLT11 Lightning invoice. Mutually exclusive with `lightningAddress` and `lnurl`. */
-  lightningInvoice?: string;
-  /** Lightning address (e.g. `user@speed.app`). Mutually exclusive with `lightningInvoice` and `lnurl`. Requires `amountSats`. */
-  lightningAddress?: string;
-  /** Raw LNURL string (e.g. `lnurl1...`). Mutually exclusive with `lightningInvoice` and `lightningAddress`. Requires `amountSats`. */
-  lnurl?: string;
-  /** Amount in satoshis the recipient should receive. Required when `lightningAddress` or `lnurl` is provided. */
-  amountSats?: number;
-  /** Optional referral code for fee tracking */
-  referralCode?: string;
-  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
-  extraFees?: number;
-}
-
-/** Result of creating an Arkade-to-Lightning swap */
-export interface ArkadeToLightningSwapResult {
-  /** The swap response from the API */
-  response: ArkadeToLightningSwapResponse;
-  /** The swap parameters used (for storage/recovery) */
-  swapParams: SwapParams;
-}
-
 /** Union of all swap creation results returned by `createSwap`. */
 export type CreateSwapResult =
   | ArkadeToEvmSwapResult
-  | ArkadeToLightningSwapResult
   | BitcoinToEvmSwapResult
   | BitcoinToArkadeSwapResult
-  | LightningToEvmSwapGenericResult
   | LightningToArkadeSwapResult
   | EvmToArkadeSwapGenericResult
-  | EvmToBitcoinSwapResult
-  | EvmToLightningSwapGenericResult;
+  | EvmToBitcoinSwapResult;
 
 /**
  * Context passed to swap creation functions.

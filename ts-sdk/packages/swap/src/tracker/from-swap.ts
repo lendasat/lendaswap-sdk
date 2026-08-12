@@ -276,44 +276,6 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
       };
 
     // ─── Lightning: one on-chain leg, one off-chain LN payment ───────────────
-    // Receive-on-Lightning: the client funds an on-chain HTLC and is paid over
-    // Lightning. No server leg to watch — the server sweeping the client's leg
-    // (with the preimage it got by paying the invoice) is the done signal.
-
-    // Client funds the Arkade VHTLC; Boltz pays the invoice. The deposit is
-    // `boltz_amount_sats` (source minus fees) — the amount actually locked, not
-    // `source_amount` — else the client's own funding reads as under-funded.
-    case "arkade_to_lightning":
-      return {
-        swapId: r.id,
-        clientHtlc: arkadeLeg(
-          r,
-          r.arkade_vhtlc_address,
-          Number(r.boltz_amount_sats),
-        ),
-        clientRefundLocktime: ms(r.vhtlc_refund_locktime),
-        serverRefundLocktime: 0, // no on-chain server leg
-      };
-    // Client funds the EVM HTLC (server claims it after paying the invoice).
-    case "evm_to_lightning":
-      return {
-        swapId: r.id,
-        clientHtlc: evmLeg({
-          chainId: r.evm_chain_id,
-          htlc: r.evm_htlc_address,
-          hashLock: r.hash_lock,
-          claimAddress: r.server_evm_address, // the server claims the client's leg
-          expectedSats: r.evm_expected_sats,
-          // evm_to_lightning doesn't expose the locked token — fall back to the
-          // per-chain mainnet constant so the isActive tuple is complete.
-          token: lockedTokenFallback(r.evm_chain_id, r.network),
-          sender: r.client_evm_address, // the client funded it
-          timelockSec: r.evm_refund_locktime,
-          createdAt: r.created_at,
-        }),
-        clientRefundLocktime: ms(r.evm_refund_locktime),
-        serverRefundLocktime: 0, // no on-chain server leg
-      };
 
     // Pay-on-Lightning: the client pays a Lightning invoice (off-chain, nothing to
     // watch) and claims an on-chain HTLC. No client-funded leg — the client's
@@ -331,25 +293,6 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
         clientRefundLocktime: 0, // no on-chain client leg
         serverRefundLocktime: ms(r.vhtlc_refund_locktime),
       };
-    // Client pays the invoice, then claims the EVM HTLC.
-    case "lightning_to_evm":
-      return {
-        swapId: r.id,
-        serverHtlc: evmLeg({
-          chainId: r.evm_chain_id,
-          htlc: r.evm_htlc_address,
-          hashLock: r.hash_lock,
-          claimAddress: r.client_evm_address, // the client claims the server's leg
-          expectedSats: r.evm_expected_sats,
-          token: r.wbtc_address,
-          sender: r.server_evm_address, // the server funded it
-          timelockSec: r.evm_refund_locktime,
-          createdAt: r.created_at,
-        }),
-        clientRefundLocktime: 0, // no on-chain client leg
-        serverRefundLocktime: ms(r.evm_refund_locktime),
-      };
-
     default:
       return undefined;
   }

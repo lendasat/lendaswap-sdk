@@ -80,11 +80,6 @@ describe("API Client - Type Safety", () => {
         body: evmBody,
       });
 
-    const _createLightningToPolygon = () =>
-      client.POST("/swap/lightning/evm", {
-        body: evmBody,
-      });
-
     const _createBitcoinToPolygon = () =>
       client.POST("/swap/bitcoin/evm", {
         body: {
@@ -94,7 +89,6 @@ describe("API Client - Type Safety", () => {
       });
 
     expect(_createArkadeToPolygon).toBeDefined();
-    expect(_createLightningToPolygon).toBeDefined();
     expect(_createBitcoinToPolygon).toBeDefined();
   });
 });

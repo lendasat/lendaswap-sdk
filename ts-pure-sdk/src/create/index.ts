@@ -3,27 +3,21 @@
  *
  * Provides swap creation logic for different source types:
  * - Arkade (off-chain) to EVM
- * - Lightning to EVM
  * - Bitcoin (on-chain) to EVM
  * - EVM to Arkade
- * - EVM to Lightning
+ * - Lightning to Arkade
  */
 
 export { createArkadeToEvmSwapGeneric } from "./arkade.js";
-export { createArkadeToLightningSwap } from "./arkade-to-lightning.js";
 export { createBitcoinToEvmSwap } from "./bitcoin.js";
 export { createBitcoinToArkadeSwap } from "./bitcoin-to-arkade.js";
 export { createEvmToArkadeSwapGeneric } from "./evm-to-arkade.js";
 export { createEvmToBitcoinSwap } from "./evm-to-bitcoin.js";
-export { createEvmToLightningSwapGeneric } from "./evm-to-lightning.js";
-export { createLightningToEvmSwapGeneric } from "./lightning.js";
 export { createLightningToArkadeSwap } from "./lightning-to-arkade.js";
 export { DuplicateInvoiceError } from "./retry.js";
 export type {
   ArkadeToEvmSwapOptions,
   ArkadeToEvmSwapResult,
-  ArkadeToLightningSwapOptions,
-  ArkadeToLightningSwapResult,
   BitcoinToArkadeSwapOptions,
   BitcoinToArkadeSwapResult,
   BitcoinToEvmSwapOptions,
@@ -40,12 +34,7 @@ export type {
   EvmToArkadeSwapResult,
   EvmToBitcoinSwapOptions,
   EvmToBitcoinSwapResult,
-  EvmToLightningSwapGenericOptions,
-  EvmToLightningSwapGenericResult,
-  EvmToLightningSwapOptions,
   LightningToArkadeSwapOptions,
   LightningToArkadeSwapResult,
-  LightningToEvmSwapGenericOptions,
-  LightningToEvmSwapGenericResult,
   UsdcBridgeParams,
 } from "./types.js";

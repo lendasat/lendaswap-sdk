@@ -1,6 +1,6 @@
 /**
  * Tokens & Quotes: list available tokens and get quotes for
- * USDT ↔ Lightning BTC in both directions.
+ * USDT ↔ Arkade BTC in both directions.
  */
 
 import {
@@ -24,7 +24,6 @@ console.log("=== BTC tokens ===");
 for (const t of tokens.btc_tokens) {
   console.log(`  ${t.symbol} on ${t.chain} (${t.decimals} decimals)`);
 }
-// ... BTC on Lightning (8 decimals)
 // ... BTC on Arkade (8 decimals)
 // ... BTC on Bitcoin (8 decimals)
 
@@ -47,21 +46,21 @@ const usdtPolygon = tokens.evm_tokens.find(
 );
 if (!usdtPolygon) throw new Error("USDT on Polygon not found");
 
-const btcLightning = tokens.btc_tokens.find((t) => t.chain === "Lightning");
-if (!btcLightning) throw new Error("BTC on Lightning not found");
+const btcArkade = tokens.btc_tokens.find((t) => t.chain === "Arkade");
+if (!btcArkade) throw new Error("BTC on Arkade not found");
 // #endregion find-pair
 
 // #region quote-sell-btc
 // Quote: sell 100,000 sats (0.001 BTC) for USDT on Polygon
 const sellBtcQuote = await client.getQuote({
-  sourceChain: btcLightning.chain,
-  sourceToken: btcLightning.token_id,
+  sourceChain: btcArkade.chain,
+  sourceToken: btcArkade.token_id,
   targetChain: usdtPolygon.chain,
   targetToken: usdtPolygon.token_id,
   sourceAmount: 100_000, // 100,000 sats
 });
 
-console.log("\n=== Lightning BTC → USDT (Polygon) ===");
+console.log("\n=== Arkade BTC → USDT (Polygon) ===");
 console.log(`  Selling:      100,000 sats (0.001 BTC)`);
 console.log(
   `  You receive:  ${sellBtcQuote.target_amount} USDT smallest units`,
@@ -77,16 +76,16 @@ console.log(
 // #endregion quote-sell-btc
 
 // #region quote-buy-btc
-// Quote: sell 50 USDT (50,000,000 smallest units) for Lightning BTC
+// Quote: sell 50 USDT (50,000,000 smallest units) for Arkade BTC
 const buyBtcQuote = await client.getQuote({
   sourceChain: usdtPolygon.chain,
   sourceToken: usdtPolygon.token_id,
-  targetChain: btcLightning.chain,
-  targetToken: btcLightning.token_id,
+  targetChain: btcArkade.chain,
+  targetToken: btcArkade.token_id,
   sourceAmount: 50_000_000, // 50 USDT (6 decimals)
 });
 
-console.log("\n=== USDT (Polygon) → Lightning BTC ===");
+console.log("\n=== USDT (Polygon) → Arkade BTC ===");
 console.log(`  Selling:      50 USDT`);
 console.log(`  You receive:  ${buyBtcQuote.target_amount} sats`);
 console.log(`  Exchange rate: ${buyBtcQuote.exchange_rate}`);
