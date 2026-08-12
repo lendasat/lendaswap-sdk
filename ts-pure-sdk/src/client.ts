@@ -4696,8 +4696,10 @@ export class Client {
    *
    * @example
    * ```ts
+   * // Provide exactly one of targetAmountSats (receive amount, fees added
+   * // on top) or sourceAmountSats (invoice amount, fees deducted from it).
    * const result = await client.createLightningToArkadeSwap({
-   *   satsReceive: 100000, // 100k sats to receive on Arkade
+   *   targetAmountSats: 100000, // 100k sats to receive on Arkade
    *   targetAddress: "ark1q...", // Arkade address
    * });
    * console.log("Pay this invoice:", result.response.bolt11_invoice);
