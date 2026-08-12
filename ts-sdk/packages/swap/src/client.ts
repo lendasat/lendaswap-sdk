@@ -701,7 +701,20 @@ export class Client {
     const swaps = await this.listAllSwaps();
     return swaps
       .filter((s) => !SETTLED_STORED_STATUSES.has(s.response.status))
-      .map(swapToTracked)
+      .map((s) => {
+        // Isolate per swap: one unmappable stored swap (e.g. a legacy record
+        // with an unsupported script version) must not prevent every other
+        // swap from being tracked and auto-claimed.
+        try {
+          return swapToTracked(s);
+        } catch (error) {
+          console.warn(
+            `Client: skipping untrackable stored swap ${s.response.id}:`,
+            error,
+          );
+          return undefined;
+        }
+      })
       .filter((s): s is TrackedSwap => s !== undefined);
   }
 
