@@ -2376,6 +2376,7 @@
           "target_amount",
           "btc_vhtlc_address",
           "evm_htlc_address",
+          "evm_htlc_version",
           "evm_coordinator_address",
           "wbtc_address",
           "client_evm_address",
@@ -2463,6 +2464,11 @@
           },
           "evm_htlc_address": {
             "type": "string"
+          },
+          "evm_htlc_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "HTLCErc20 contract VERSION of the deployment this swap lives on —\nthe EIP-712 domain version string for redeem/refund signatures."
           },
           "evm_refund_locktime": {
             "type": "integer",
@@ -2937,6 +2943,7 @@
           "evm_chain_id",
           "client_evm_address",
           "evm_htlc_address",
+          "evm_htlc_version",
           "evm_coordinator_address",
           "server_evm_address",
           "evm_refund_locktime",
@@ -3044,6 +3051,11 @@
           "evm_htlc_address": {
             "type": "string",
             "description": "EVM HTLC contract address"
+          },
+          "evm_htlc_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "HTLCErc20 contract VERSION of the deployment this swap lives on —\nthe EIP-712 domain version string for redeem/refund signatures."
           },
           "evm_refund_locktime": {
             "type": "integer",
@@ -4422,6 +4434,7 @@
           "target_amount",
           "evm_expected_sats",
           "evm_htlc_address",
+          "evm_htlc_version",
           "client_evm_address",
           "server_evm_address",
           "evm_refund_locktime",
@@ -4506,6 +4519,11 @@
           },
           "evm_htlc_address": {
             "type": "string"
+          },
+          "evm_htlc_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "HTLCErc20 contract VERSION of the deployment this swap lives on —\nthe EIP-712 domain version string for redeem/refund signatures."
           },
           "evm_refund_locktime": {
             "type": "integer",
@@ -4694,6 +4712,7 @@
           "evm_expected_sats",
           "target_amount",
           "evm_htlc_address",
+          "evm_htlc_version",
           "client_evm_address",
           "server_evm_address",
           "evm_refund_locktime",
@@ -4805,6 +4824,11 @@
           "evm_htlc_address": {
             "type": "string",
             "description": "EVM HTLC contract address (user creates, server claims)"
+          },
+          "evm_htlc_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "HTLCErc20 contract VERSION of the deployment this swap lives on —\nthe EIP-712 domain version string for redeem/refund signatures."
           },
           "evm_refund_locktime": {
             "type": "integer",

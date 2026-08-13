@@ -1082,6 +1082,12 @@ export interface components {
             evm_expected_sats: string;
             evm_fund_txid?: string | null;
             evm_htlc_address: string;
+            /**
+             * Format: int64
+             * @description HTLCErc20 contract VERSION of the deployment this swap lives on —
+             *     the EIP-712 domain version string for redeem/refund signatures.
+             */
+            evm_htlc_version: number;
             /** Format: int64 */
             evm_refund_locktime: number;
             /** Format: int64 */
@@ -1404,6 +1410,12 @@ export interface components {
             evm_hash_lock: string;
             /** @description EVM HTLC contract address */
             evm_htlc_address: string;
+            /**
+             * Format: int64
+             * @description HTLCErc20 contract VERSION of the deployment this swap lives on —
+             *     the EIP-712 domain version string for redeem/refund signatures.
+             */
+            evm_htlc_version: number;
             /**
              * Format: int64
              * @description EVM HTLC refund locktime (unix timestamp)
@@ -2251,6 +2263,12 @@ export interface components {
             evm_expected_sats: string;
             evm_fund_txid?: string | null;
             evm_htlc_address: string;
+            /**
+             * Format: int64
+             * @description HTLCErc20 contract VERSION of the deployment this swap lives on —
+             *     the EIP-712 domain version string for redeem/refund signatures.
+             */
+            evm_htlc_version: number;
             /** Format: int64 */
             evm_refund_locktime: number;
             /** Format: int64 */
@@ -2385,6 +2403,12 @@ export interface components {
             evm_hash_lock: string;
             /** @description EVM HTLC contract address (user creates, server claims) */
             evm_htlc_address: string;
+            /**
+             * Format: int64
+             * @description HTLCErc20 contract VERSION of the deployment this swap lives on —
+             *     the EIP-712 domain version string for redeem/refund signatures.
+             */
+            evm_htlc_version: number;
             /**
              * Format: int64
              * @description EVM HTLC refund locktime (unix timestamp)
