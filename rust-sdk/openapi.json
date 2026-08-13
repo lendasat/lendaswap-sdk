@@ -957,7 +957,10 @@
             "description": "Amount in smallest unit of source token (mutually exclusive with target_amount)",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -966,7 +969,10 @@
             "description": "Amount in smallest unit of target token (mutually exclusive with source_amount)",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
