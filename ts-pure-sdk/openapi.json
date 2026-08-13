@@ -2641,6 +2641,7 @@
           "client_lightning_invoice",
           "invoice_expires_at",
           "fee_sats",
+          "network_fee_sats",
           "hash_lock",
           "arkade_vhtlc_address",
           "arkade_htlc_script_version",
@@ -2697,7 +2698,7 @@
           "fee_sats": {
             "type": "integer",
             "format": "int64",
-            "description": "Protocol fee in satoshis (the provider's Lightning send fee is paid\nout of this margin, never billed on top)"
+            "description": "Protocol fee in satoshis"
           },
           "hash_lock": {
             "type": "string",
@@ -2715,6 +2716,11 @@
           "network": {
             "type": "string",
             "description": "Bitcoin network"
+          },
+          "network_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Flat network fee in satoshis; the provider's actual Lightning send\nfee is paid out of `fee_sats + network_fee_sats`, never on top"
           },
           "receiver_pk": {
             "type": "string",
@@ -5284,6 +5290,7 @@
           "bolt11_invoice",
           "invoice_expires_at",
           "fee_sats",
+          "network_fee_sats",
           "hash_lock",
           "arkade_vhtlc_address",
           "arkade_htlc_script_version",
@@ -5359,6 +5366,11 @@
           "network": {
             "type": "string",
             "description": "Bitcoin network"
+          },
+          "network_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Flat network fee in satoshis; the provider's actual Lightning\nreceive fee is paid out of `fee_sats + network_fee_sats`"
           },
           "receiver_pk": {
             "type": "string",
