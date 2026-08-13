@@ -88,7 +88,19 @@ describe("API Client - Type Safety", () => {
         },
       });
 
+    const _createArkadeToLightning = () =>
+      client.POST("/swap/arkade/lightning", {
+        body: {
+          lightning_address: "user@wallet.com",
+          target_amount_sats: 100000,
+          refund_pk: `02${"cd".repeat(32)}`,
+          user_id: `03${"ef".repeat(32)}`,
+          arkade_htlc_script_version: ARKADE_HTLC_SCRIPT_VERSION_STRICT,
+        },
+      });
+
     expect(_createArkadeToPolygon).toBeDefined();
     expect(_createBitcoinToPolygon).toBeDefined();
+    expect(_createArkadeToLightning).toBeDefined();
   });
 });

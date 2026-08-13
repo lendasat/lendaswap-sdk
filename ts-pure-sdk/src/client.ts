@@ -1,6 +1,7 @@
 import {
   type ApiClient,
   type ArkadeToEvmSwapResponse,
+  type ArkadeToLightningSwapResponse,
   type BtcToArkadeSwapResponse,
   type BulkStatusResponse,
   createApiClient,
@@ -34,6 +35,8 @@ import {
 import {
   type ArkadeToEvmSwapOptions,
   type ArkadeToEvmSwapResult,
+  type ArkadeToLightningSwapOptions,
+  type ArkadeToLightningSwapResult,
   type BitcoinToArkadeSwapOptions,
   type BitcoinToArkadeSwapResult,
   type BitcoinToEvmSwapOptions,
@@ -42,6 +45,7 @@ import {
   type CreateSwapOptions,
   type CreateSwapResult,
   createArkadeToEvmSwapGeneric,
+  createArkadeToLightningSwap,
   createBitcoinToArkadeSwap,
   createBitcoinToEvmSwap,
   createEvmToArkadeSwapGeneric,
@@ -179,6 +183,8 @@ import {
 export type {
   ArkadeToEvmSwapOptions,
   ArkadeToEvmSwapResult,
+  ArkadeToLightningSwapOptions,
+  ArkadeToLightningSwapResult,
   BitcoinToArkadeSwapOptions,
   BitcoinToArkadeSwapResult,
   BitcoinToEvmSwapOptions,
@@ -2016,7 +2022,8 @@ export class Client {
       swap.direction !== "btc_to_arkade" &&
       swap.direction !== "arkade_to_evm" &&
       swap.direction !== "evm_to_arkade" &&
-      swap.direction !== "lightning_to_arkade"
+      swap.direction !== "lightning_to_arkade" &&
+      swap.direction !== "arkade_to_lightning"
     ) {
       throw new Error(
         `amountsForSwap only applies to VHTLC-based swaps, got ${swap.direction}`,
@@ -2029,6 +2036,9 @@ export class Client {
       vhtlcAddress = (swap as BtcToArkadeSwapResponse).arkade_vhtlc_address;
     } else if (swap.direction === "lightning_to_arkade") {
       vhtlcAddress = (swap as LightningToArkadeSwapResponse)
+        .arkade_vhtlc_address;
+    } else if (swap.direction === "arkade_to_lightning") {
+      vhtlcAddress = (swap as ArkadeToLightningSwapResponse)
         .arkade_vhtlc_address;
     } else if (
       swap.direction === "arkade_to_evm" ||
@@ -3107,8 +3117,8 @@ export class Client {
     // Use direction to determine refund method (source_token may be a TokenSummary object)
     const direction = swap.direction;
 
-    // Arkade swaps require off-chain refund
-    if (direction === "arkade_to_evm") {
+    // Arkade-funded swaps require off-chain refund
+    if (direction === "arkade_to_evm" || direction === "arkade_to_lightning") {
       return this.#buildArkadeRefund(id, swap, options as ArkadeRefundOptions);
     }
 
@@ -3673,16 +3683,33 @@ export class Client {
     }
 
     // Ensure we have an arkade_to_evm swap
-    if (swap.direction !== "arkade_to_evm") {
+    if (
+      swap.direction !== "arkade_to_evm" &&
+      swap.direction !== "arkade_to_lightning"
+    ) {
       return {
         success: false,
-        message: `Expected arkade_to_evm swap, got ${swap.direction}`,
+        message: `Expected an Arkade-funded swap, got ${swap.direction}`,
       };
     }
 
-    const s = swap as ArkadeToEvmSwapResponse & {
-      direction: "arkade_to_evm";
-    };
+    // Both directions share the client-funded VHTLC shape; only the
+    // address field name differs.
+    const s =
+      swap.direction === "arkade_to_evm"
+        ? {
+            ...(swap as ArkadeToEvmSwapResponse & {
+              direction: "arkade_to_evm";
+            }),
+            vhtlc_address: (swap as ArkadeToEvmSwapResponse).btc_vhtlc_address,
+          }
+        : {
+            ...(swap as ArkadeToLightningSwapResponse & {
+              direction: "arkade_to_lightning";
+            }),
+            vhtlc_address: (swap as ArkadeToLightningSwapResponse)
+              .arkade_vhtlc_address,
+          };
 
     const fullPubKey = storedSwap.publicKey;
     const userPubKey =
@@ -3712,7 +3739,7 @@ export class Client {
       lendaswapPubKey: s.receiver_pk,
       arkadeServerPubKey: s.arkade_server_pk,
       hashLock,
-      vhtlcAddress: s.btc_vhtlc_address,
+      vhtlcAddress: s.vhtlc_address,
       refundLocktime: s.vhtlc_refund_locktime,
       unilateralClaimDelay: s.unilateral_claim_delay,
       unilateralRefundDelay: s.unilateral_refund_delay,
@@ -4479,6 +4506,58 @@ export class Client {
       });
     }
 
+    // Arkade → Lightning. `targetAddress` carries the Lightning
+    // destination: a BOLT11 invoice ("ln..."), an LNURL ("lnurl1..."),
+    // or a lightning address ("user@domain").
+    if (isArkade(sourceAsset) && isLightning(targetAsset)) {
+      const destination = options.targetAddress;
+      const lower = destination.toLowerCase();
+      const common = {
+        referralCode: options.referralCode,
+        extraFees: options.extraFees,
+      };
+
+      if (!lower.startsWith("lnurl") && lower.startsWith("ln")) {
+        // The invoice pins the payout; targetAmount is an optional
+        // cross-check, sourceAmount is not applicable.
+        if (options.sourceAmount != null) {
+          throw new Error(
+            "sourceAmount cannot be combined with a BOLT11 invoice destination (the invoice fixes the payout)",
+          );
+        }
+        return this.createArkadeToLightningSwap({
+          lightningInvoice: destination,
+          ...(options.targetAmount != null
+            ? { targetAmountSats: Number(options.targetAmount) }
+            : {}),
+          ...common,
+        });
+      }
+
+      if ((options.sourceAmount == null) === (options.targetAmount == null)) {
+        throw new Error(
+          "Provide exactly one of sourceAmount (sats to lock on Arkade) or targetAmount (sats to receive over Lightning) for Arkade → Lightning swaps",
+        );
+      }
+      const amount =
+        options.sourceAmount != null
+          ? { sourceAmountSats: Number(options.sourceAmount) }
+          : { targetAmountSats: Number(options.targetAmount) };
+
+      if (lower.startsWith("lnurl")) {
+        return this.createArkadeToLightningSwap({
+          lnurl: destination,
+          ...amount,
+          ...common,
+        });
+      }
+      return this.createArkadeToLightningSwap({
+        lightningAddress: destination,
+        ...amount,
+        ...common,
+      });
+    }
+
     // Lightning → Arkade
     if (isLightning(sourceAsset) && isArkade(targetAsset)) {
       if ((options.sourceAmount == null) === (options.targetAmount == null)) {
@@ -4706,6 +4785,41 @@ export class Client {
     options: LightningToArkadeSwapOptions,
   ): Promise<LightningToArkadeSwapResult> {
     return createLightningToArkadeSwap(options, this.#getCreateContext());
+  }
+
+  // =========================================================================
+  // Swap Creation - Arkade to Lightning
+  // =========================================================================
+
+  /**
+   * Creates a new Arkade to Lightning swap.
+   *
+   * The user locks Arkade VTXOs in the returned VHTLC
+   * (`arkade_vhtlc_address`, `source_amount` sats); the server pays the
+   * Lightning invoice and claims the VHTLC. On failure the locked VTXOs
+   * come back via `refundSwap()` (collaborative, no locktime wait).
+   *
+   * @param options - The swap options.
+   * @returns The swap response and parameters for storage.
+   * @throws Error if the swap creation fails.
+   *
+   * @example
+   * ```ts
+   * // Destination is one of lightningInvoice (amount pinned by the
+   * // invoice), or lightningAddress/lnurl plus one of sourceAmountSats
+   * // (send-max) or targetAmountSats (exact payout).
+   * const result = await client.createArkadeToLightningSwap({
+   *   lightningAddress: "user@wallet.com",
+   *   targetAmountSats: 100000,
+   * });
+   * console.log("Fund:", result.response.arkade_vhtlc_address);
+   * console.log("Lock amount:", result.response.source_amount);
+   * ```
+   */
+  async createArkadeToLightningSwap(
+    options: ArkadeToLightningSwapOptions,
+  ): Promise<ArkadeToLightningSwapResult> {
+    return createArkadeToLightningSwap(options, this.#getCreateContext());
   }
 
   // =========================================================================

@@ -7,6 +7,7 @@ import type {
   ApiClient,
   EvmToBitcoinSwapResponse as ApiEvmToBitcoinSwapResponse,
   ArkadeToEvmSwapResponse,
+  ArkadeToLightningSwapResponse,
   BtcToArkadeSwapResponse,
   EvmToArkadeSwapResponse,
   LightningToArkadeSwapResponse,
@@ -361,6 +362,59 @@ export type LightningToArkadeSwapOptions = {
     }
 );
 
+/** Exactly one of source (Arkade lock) or target (Lightning payout) pins the amount. */
+type ArkadeToLightningAmount =
+  | {
+      /** Total sats to lock on Arkade; fees are deducted from the payout (send-max). Mutually exclusive with `targetAmountSats`. */
+      sourceAmountSats: number;
+      targetAmountSats?: undefined;
+    }
+  | {
+      /** Sats the recipient receives over Lightning; fees are added on top. Mutually exclusive with `sourceAmountSats`. */
+      targetAmountSats: number;
+      sourceAmountSats?: undefined;
+    };
+
+export type ArkadeToLightningSwapOptions = {
+  /** Optional referral code for fee exemption */
+  referralCode?: string;
+  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
+  extraFees?: number;
+} & (
+  | {
+      /**
+       * BOLT11 invoice to pay. Its amount pins the payout, so no
+       * `sourceAmountSats` here; an optional `targetAmountSats` is
+       * cross-checked against the invoice by the server.
+       */
+      lightningInvoice: string;
+      lightningAddress?: undefined;
+      lnurl?: undefined;
+      sourceAmountSats?: undefined;
+      targetAmountSats?: number;
+    }
+  | ({
+      /** Lightning address (`user@domain`) resolved into an invoice over the payout amount. */
+      lightningAddress: string;
+      lightningInvoice?: undefined;
+      lnurl?: undefined;
+    } & ArkadeToLightningAmount)
+  | ({
+      /** LNURL-pay string resolved into an invoice over the payout amount. */
+      lnurl: string;
+      lightningInvoice?: undefined;
+      lightningAddress?: undefined;
+    } & ArkadeToLightningAmount)
+);
+
+/** Result of creating an Arkade-to-Lightning swap */
+export interface ArkadeToLightningSwapResult {
+  /** The swap response from the API */
+  response: ArkadeToLightningSwapResponse;
+  /** The swap parameters used (for storage/recovery) */
+  swapParams: SwapParams;
+}
+
 /** Result of creating a Lightning-to-Arkade swap */
 export interface LightningToArkadeSwapResult {
   /** The swap response from the API */
@@ -372,6 +426,7 @@ export interface LightningToArkadeSwapResult {
 /** Union of all swap creation results returned by `createSwap`. */
 export type CreateSwapResult =
   | ArkadeToEvmSwapResult
+  | ArkadeToLightningSwapResult
   | BitcoinToEvmSwapResult
   | BitcoinToArkadeSwapResult
   | LightningToArkadeSwapResult

@@ -45,13 +45,14 @@ function deps(overrides: Partial<ComposeQuoteDeps> = {}): ComposeQuoteDeps {
         min_sats: 1000,
         max_sats: 100_000_000,
         fee_percentage: 0,
+        network_fee_sats: 0,
       })),
     },
     networkFees: {
       pairs: zeroPairs.map((p) => ({
         source: p.source,
         target: p.target,
-        fees: { source_sats: 0, target_sats: 0 },
+        fees: { source_sats: 0, target_sats: 0, flat_sats: 0 },
       })),
     },
     chainConfig: {
@@ -196,6 +197,7 @@ describe("composeQuote — direct BTC↔pegged pivot (no DEX)", () => {
             min_sats: 1000,
             max_sats: 100_000_000,
             fee_percentage: 0.0025,
+            network_fee_sats: 0,
           },
         ],
       },
@@ -204,7 +206,7 @@ describe("composeQuote — direct BTC↔pegged pivot (no DEX)", () => {
           {
             source: "Bitcoin",
             target: "42161",
-            fees: { source_sats: 500, target_sats: 300 },
+            fees: { source_sats: 500, target_sats: 300, flat_sats: 0 },
           },
         ],
       },

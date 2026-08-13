@@ -513,6 +513,15 @@ export class Client {
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
+  createArkadeToLightningSwap(
+    ...args: Parameters<LegacyClient["createArkadeToLightningSwap"]>
+  ): ReturnType<LegacyClient["createArkadeToLightningSwap"]> {
+    return this.#trackAfterCreate(
+      this.#legacy.createArkadeToLightningSwap(...args),
+    );
+  }
+
+  /** Delegated to the legacy client (migration checkpoint). */
   createEvmToArkadeSwapGeneric(
     ...args: Parameters<LegacyClient["createEvmToArkadeSwapGeneric"]>
   ): ReturnType<LegacyClient["createEvmToArkadeSwapGeneric"]> {

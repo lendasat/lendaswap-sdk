@@ -18,6 +18,12 @@ export interface NetworkFee {
    * `0` for Arkade / Lightning).
    */
   target_sats: number;
+  /**
+   * Flat route-level network fee in sats charged on every swap of this
+   * pair (Lightning routes: the provider's flat fee component; `0`
+   * elsewhere). Composed total = `source_sats + target_sats + flat_sats`.
+   */
+  flat_sats: number;
 }
 
 export interface NetworkFeePairEntry {
@@ -33,6 +39,7 @@ export interface NetworkFeesResponse {
 export interface WireNetworkFee {
   source_sats: number;
   target_sats: number;
+  flat_sats: number;
 }
 
 export interface WireNetworkFeePairEntry {
@@ -54,6 +61,7 @@ export function fromWireNetworkFeePairEntry(
     fees: {
       source_sats: wire.fees.source_sats,
       target_sats: wire.fees.target_sats,
+      flat_sats: wire.fees.flat_sats,
     },
   };
 }

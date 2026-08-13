@@ -293,6 +293,21 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
         clientRefundLocktime: 0, // no on-chain client leg
         serverRefundLocktime: ms(r.vhtlc_refund_locktime),
       };
+
+    // Client funds the Arkade VHTLC (source_amount); the server pays the
+    // Lightning invoice off-chain and claims the VHTLC — no server leg to
+    // watch.
+    case "arkade_to_lightning":
+      return {
+        swapId: r.id,
+        clientHtlc: arkadeLeg(
+          r,
+          r.arkade_vhtlc_address,
+          Number(r.source_amount),
+        ),
+        clientRefundLocktime: ms(r.vhtlc_refund_locktime),
+        serverRefundLocktime: 0, // no on-chain server leg
+      };
     default:
       return undefined;
   }

@@ -15,10 +15,13 @@ export interface SwapPairInfo {
   max_sats: number;
   /**
    * Fee percentage as a decimal (e.g. 0.0025 = 0.25%).
-   *
-   * Lightning legs may add a separate routing fee on top of this.
    */
   fee_percentage: number;
+  /**
+   * Flat network fee in satoshis charged on every swap of this pair on
+   * top of `fee_percentage` (`0` for pairs that do not charge one).
+   */
+  network_fee_sats: number;
 }
 
 export interface SwapPairsResponse {
@@ -31,6 +34,7 @@ export interface WireSwapPairInfo {
   min_sats: number;
   max_sats: number;
   fee_percentage: number;
+  network_fee_sats: number;
 }
 
 export interface WireSwapPairsResponse {
@@ -44,6 +48,7 @@ export function fromWireSwapPairInfo(wire: WireSwapPairInfo): SwapPairInfo {
     min_sats: wire.min_sats,
     max_sats: wire.max_sats,
     fee_percentage: wire.fee_percentage,
+    network_fee_sats: wire.network_fee_sats,
   };
 }
 

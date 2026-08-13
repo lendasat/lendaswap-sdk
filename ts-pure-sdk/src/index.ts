@@ -4,6 +4,7 @@ export type {
   ApiClientOptions,
   ArkadeToEvmSwapRequest,
   ArkadeToEvmSwapResponse,
+  ArkadeToLightningSwapResponse,
   BitcoinToEvmSwapRequest,
   BtcToArkadeSwapResponse,
   BulkStatusRequest,
@@ -139,6 +140,10 @@ export {
 } from "./cctp-inbound/index.js";
 export type {
   ArkadeClaimOptions,
+  ArkadeToEvmSwapOptions,
+  ArkadeToEvmSwapResult,
+  ArkadeToLightningSwapOptions,
+  ArkadeToLightningSwapResult,
   BitcoinToArkadeSwapOptions,
   BitcoinToArkadeSwapResult,
   BitcoinToEvmSwapOptions,
