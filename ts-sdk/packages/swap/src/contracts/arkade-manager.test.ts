@@ -156,13 +156,21 @@ describe("ArkadeContractManager", () => {
   });
 
   it("reports chainNow only once a chain time is provided", async () => {
-    const withClock = ArkadeContractManager.fromDeps({
-      indexer,
-      chainTime: async () => 1_700_000_000_000,
-    });
-    expect(withClock.chainNow(ref)).toBeUndefined();
-    await withClock.refresh();
-    expect(withClock.chainNow(ref)).toBe(1_700_000_000_000);
+    // Freeze wall clock: chainNow extrapolates by the ms elapsed since the
+    // clock read, so real time passing between refresh() and the assertion
+    // would flake the exact-equality check.
+    vi.useFakeTimers();
+    try {
+      const withClock = ArkadeContractManager.fromDeps({
+        indexer,
+        chainTime: async () => 1_700_000_000_000,
+      });
+      expect(withClock.chainNow(ref)).toBeUndefined();
+      await withClock.refresh();
+      expect(withClock.chainNow(ref)).toBe(1_700_000_000_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("unregisters and forgets state", async () => {
