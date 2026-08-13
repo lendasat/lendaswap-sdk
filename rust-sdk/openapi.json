@@ -5439,9 +5439,16 @@
         "description": "Sats the server pays on each side of the pair at *current* gas/mining\nprices. Extensible — future breakouts (`htlc_create_sats`,\n`dex_swap_sats`, …) land alongside.",
         "required": [
           "source_sats",
-          "target_sats"
+          "target_sats",
+          "flat_sats"
         ],
         "properties": {
+          "flat_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Flat route-level network fee in sats charged on every swap of this\npair (Lightning routes: covers the provider's flat fee component).\nComposed total = `source_sats + target_sats + flat_sats`.",
+            "minimum": 0
+          },
           "source_sats": {
             "type": "integer",
             "format": "int64",
@@ -5939,7 +5946,8 @@
           "target",
           "min_sats",
           "max_sats",
-          "fee_percentage"
+          "fee_percentage",
+          "network_fee_sats"
         ],
         "properties": {
           "fee_percentage": {
@@ -5957,6 +5965,12 @@
             "type": "integer",
             "format": "int64",
             "description": "Minimum BTC amount in satoshis.",
+            "minimum": 0
+          },
+          "network_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Flat network fee in satoshis charged on every swap of this pair on\ntop of `fee_percentage` (0 for pairs that do not charge one).\nStatic config, like the rest of this response — the dynamic\ngas-derived fees live on `/network-fees`.",
             "minimum": 0
           },
           "source": {
