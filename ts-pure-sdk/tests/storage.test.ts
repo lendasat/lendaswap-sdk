@@ -98,6 +98,7 @@ function createTestResponse(swapId: string): StoredSwap["response"] {
     evm_expected_sats: "100000",
     evm_hash_lock: `0x${"ab".repeat(32)}`,
     evm_htlc_address: "0x3333333333333333333333333333333333333333",
+    evm_htlc_version: 4,
     evm_refund_locktime: 1_700_000_100,
     fee_sats: 100,
     network: "testnet",
