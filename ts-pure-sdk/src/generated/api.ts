@@ -132,9 +132,8 @@ export interface paths {
          *     construct and sign the `CollabRefund` EIP-712 typed data. The client signs
          *     this, then POSTs the signature to the collab-refund-evm endpoint.
          *
-         *     Two settlement modes:
-         *     - `mode=direct` (default): `sweepToken` = WBTC, `minAmountOut` = 0
-         *     - `mode=swap-back`: `sweepToken` = original source token, includes DEX calldata from 1inch
+         *     The refund always sweeps the BTC-pegged HTLC token (tBTC/WBTC) to the
+         *     depositor: `sweepToken` = tBTC/WBTC, `minAmountOut` = 0.
          */
         get: operations["collab_refund_evm_params"];
         put?: never;
@@ -866,12 +865,8 @@ export interface paths {
         };
         /**
          * Returns calldata to refund an expired EVM-to-Arkade HTLC via the coordinator.
-         * @description Two modes:
-         *     - `mode=swap-back` (default): calls `refundAndExecute` — refund WBTC from expired HTLC, swap
-         *       WBTC → source token via 1inch, sweep to caller.
-         *     - `mode=direct`: calls `refundTo` — refund WBTC directly to caller (no DEX).
-         *
-         *     Both are permissionless after the timelock expires.
+         * @description Calls `refundTo` — refunds the BTC-pegged HTLC token (tBTC/WBTC) directly to
+         *     the caller. Permissionless after the timelock expires.
          */
         get: operations["get_refund_calldata"];
         put?: never;
@@ -1738,15 +1733,6 @@ export interface components {
             /** @description Base64-encoded countersigned intent proof PSBT. */
             intent_proof: string;
         };
-        /** @description DEX calldata returned by the params endpoint for swap-back mode. */
-        CollabRefundDexCalldata: {
-            /** @description Encoded swap calldata (0x-prefixed hex string) */
-            data: string;
-            /** @description DEX router address */
-            to: string;
-            /** @description Native token value (usually "0") */
-            value: string;
-        };
         /** @description EIP-712 parameters the client needs to sign for collaborative refund. */
         CollabRefundEvmParams: {
             /** @description WBTC amount locked in the HTLC (decimal string) */
@@ -1762,25 +1748,17 @@ export interface components {
             claim_address: string;
             /** @description HTLCCoordinator contract address (EIP-712 verifyingContract) */
             coordinator_address: string;
-            dex_calldata?: null | components["schemas"]["CollabRefundDexCalldata"];
             /**
-             * @description Minimum output amount for the sweep (0 for direct, DEX-quoted for swap-back).
+             * @description Minimum output amount for the sweep (always 0).
              *     This is the `minAmountOut` field in the EIP-712 struct.
              */
             min_amount_out: string;
-            /** @description Settlement mode used to compute sweep fields. */
-            mode: components["schemas"]["RefundMode"];
             /** @description Preimage hash (0x-prefixed, 32-byte hex) */
             preimage_hash: string;
             /** @description Server's signer EOA address (the `caller` field in the EIP-712 struct) */
             server_signer_address: string;
             /**
-             * @description Source token address (the token the user originally deposited).
-             *     Only relevant for swap-back mode.
-             */
-            source_token_address?: string | null;
-            /**
-             * @description Token the depositor receives after refund (WBTC for direct, source token for swap-back).
+             * @description Token the depositor receives after refund (always the BTC-pegged HTLC token, tBTC/WBTC).
              *     This is the `sweepToken` field in the EIP-712 struct.
              */
             sweep_token: string;
@@ -1800,22 +1778,10 @@ export interface components {
              *     Required so the server can sign the correct HTLC refund digest.
              */
             depositor_address: string;
-            /** @description Minimum amount out for the sweep (0 = no minimum). Defaults to 0. */
-            min_amount_out?: string;
-            /**
-             * @description Refund mode: "direct" (WBTC back to depositor) or "swap"/"swap-back" (DEX swap-back to
-             *     original token)
-             */
-            mode?: components["schemas"]["RefundMode"];
             /** @description EIP-712 signature r (32-byte hex string, with or without 0x prefix) */
             r: string;
             /** @description EIP-712 signature s (32-byte hex string, with or without 0x prefix) */
             s: string;
-            /**
-             * @description Token to sweep to depositor after refund. Required for "swap" mode.
-             *     For "direct" mode, defaults to WBTC.
-             */
-            sweep_token?: string | null;
             /**
              * Format: int32
              * @description EIP-712 signature v (depositor's coordinator-level signature)
@@ -2836,11 +2802,6 @@ export interface components {
             coordinator_address: string;
         };
         /**
-         * @description Settlement mode for collaborative refund.
-         * @enum {string}
-         */
-        RefundMode: "direct" | "swap-back";
-        /**
          * @description Per-service health datapoint.
          *
          *     Failures intentionally do not include the underlying error: transport
@@ -3445,10 +3406,7 @@ export interface operations {
     };
     collab_refund_evm_params: {
         parameters: {
-            query?: {
-                /** @description Settlement mode: "direct" (default) or "swap-back" */
-                mode?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Swap ID */
@@ -4735,10 +4693,7 @@ export interface operations {
     };
     get_refund_calldata: {
         parameters: {
-            query?: {
-                /** @description Refund mode: "swap-back" (default) or "direct" */
-                mode?: string;
-            };
+            query?: never;
             header?: never;
             path: {
                 /** @description Swap ID */

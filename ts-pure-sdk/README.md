@@ -236,16 +236,13 @@ const result = await client.refundSwap(swapId, {
 const {txHash} = await client.refundEvmWithSigner(swapId, signer, "direct");
 
 // EVM swaps — collaborative refund (instant, gasless, server cosigns)
-const {txHash} = await client.collabRefundEvmWithSigner(swapId, signer, "swap-back");
+const {txHash} = await client.collabRefundEvmWithSigner(swapId, signer);
 
 // EVM swaps — collaborative refund for gasless swaps (SDK signs internally)
-const {txHash} = await client.collabRefundEvmSwap(swapId, "swap-back");
+const {txHash} = await client.collabRefundEvmSwap(swapId);
 ```
 
-Refund mode controls what token you receive:
-
-- `"direct"` — refund as WBTC/TBTC (the HTLC lock token)
-- `"swap-back"` — refund as the original source token (e.g., USDC) via DEX swap
+EVM refunds always return the HTLC lock token (WBTC/tBTC) to the depositor.
 
 ### Storage
 

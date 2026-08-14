@@ -356,7 +356,7 @@
           "swap-evm-btc"
         ],
         "summary": "Get EIP-712 parameters for collaborative EVM HTLC refund.",
-        "description": "Returns the addresses, amounts, and struct fields the client needs to\nconstruct and sign the `CollabRefund` EIP-712 typed data. The client signs\nthis, then POSTs the signature to the collab-refund-evm endpoint.\n\nTwo settlement modes:\n- `mode=direct` (default): `sweepToken` = WBTC, `minAmountOut` = 0\n- `mode=swap-back`: `sweepToken` = original source token, includes DEX calldata from 1inch",
+        "description": "Returns the addresses, amounts, and struct fields the client needs to\nconstruct and sign the `CollabRefund` EIP-712 typed data. The client signs\nthis, then POSTs the signature to the collab-refund-evm endpoint.\n\nThe refund always sweeps the BTC-pegged HTLC token (tBTC/WBTC) to the\ndepositor: `sweepToken` = tBTC/WBTC, `minAmountOut` = 0.",
         "operationId": "collab_refund_evm_params",
         "parameters": [
           {
@@ -367,15 +367,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "description": "Settlement mode: \"direct\" (default) or \"swap-back\"",
-            "required": false,
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -2006,7 +1997,7 @@
           "refund-and-swap-calldata"
         ],
         "summary": "Returns calldata to refund an expired EVM-to-Arkade HTLC via the coordinator.",
-        "description": "Two modes:\n- `mode=swap-back` (default): calls `refundAndExecute` — refund WBTC from expired HTLC, swap\n  WBTC → source token via 1inch, sweep to caller.\n- `mode=direct`: calls `refundTo` — refund WBTC directly to caller (no DEX).\n\nBoth are permissionless after the timelock expires.",
+        "description": "Calls `refundTo` — refunds the BTC-pegged HTLC token (tBTC/WBTC) directly to\nthe caller. Permissionless after the timelock expires.",
         "operationId": "get_refund_calldata",
         "parameters": [
           {
@@ -2017,15 +2008,6 @@
             "schema": {
               "type": "string",
               "format": "uuid"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "description": "Refund mode: \"swap-back\" (default) or \"direct\"",
-            "required": false,
-            "schema": {
-              "type": "string"
             }
           }
         ],
@@ -3626,29 +3608,6 @@
           }
         }
       },
-      "CollabRefundDexCalldata": {
-        "type": "object",
-        "description": "DEX calldata returned by the params endpoint for swap-back mode.",
-        "required": [
-          "to",
-          "data",
-          "value"
-        ],
-        "properties": {
-          "data": {
-            "type": "string",
-            "description": "Encoded swap calldata (0x-prefixed hex string)"
-          },
-          "to": {
-            "type": "string",
-            "description": "DEX router address"
-          },
-          "value": {
-            "type": "string",
-            "description": "Native token value (usually \"0\")"
-          }
-        }
-      },
       "CollabRefundEvmParams": {
         "type": "object",
         "description": "EIP-712 parameters the client needs to sign for collaborative refund.",
@@ -3661,7 +3620,6 @@
           "claim_address",
           "timelock",
           "chain_id",
-          "mode",
           "sweep_token",
           "min_amount_out",
           "calls_hash"
@@ -3689,24 +3647,9 @@
             "type": "string",
             "description": "HTLCCoordinator contract address (EIP-712 verifyingContract)"
           },
-          "dex_calldata": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/CollabRefundDexCalldata",
-                "description": "DEX calldata for the swap-back. Only present when mode=swap-back."
-              }
-            ]
-          },
           "min_amount_out": {
             "type": "string",
-            "description": "Minimum output amount for the sweep (0 for direct, DEX-quoted for swap-back).\nThis is the `minAmountOut` field in the EIP-712 struct."
-          },
-          "mode": {
-            "$ref": "#/components/schemas/RefundMode",
-            "description": "Settlement mode used to compute sweep fields."
+            "description": "Minimum output amount for the sweep (always 0).\nThis is the `minAmountOut` field in the EIP-712 struct."
           },
           "preimage_hash": {
             "type": "string",
@@ -3716,16 +3659,9 @@
             "type": "string",
             "description": "Server's signer EOA address (the `caller` field in the EIP-712 struct)"
           },
-          "source_token_address": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Source token address (the token the user originally deposited).\nOnly relevant for swap-back mode."
-          },
           "sweep_token": {
             "type": "string",
-            "description": "Token the depositor receives after refund (WBTC for direct, source token for swap-back).\nThis is the `sweepToken` field in the EIP-712 struct."
+            "description": "Token the depositor receives after refund (always the BTC-pegged HTLC token, tBTC/WBTC).\nThis is the `sweepToken` field in the EIP-712 struct."
           },
           "timelock": {
             "type": "integer",
@@ -3753,14 +3689,6 @@
             "type": "string",
             "description": "On-chain depositor address (the address that funded the HTLC via the coordinator).\nIn the Permit2 flow this is a derived key, not the user's wallet address.\nRequired so the server can sign the correct HTLC refund digest."
           },
-          "min_amount_out": {
-            "type": "string",
-            "description": "Minimum amount out for the sweep (0 = no minimum). Defaults to 0."
-          },
-          "mode": {
-            "$ref": "#/components/schemas/RefundMode",
-            "description": "Refund mode: \"direct\" (WBTC back to depositor) or \"swap\"/\"swap-back\" (DEX swap-back to\noriginal token)"
-          },
           "r": {
             "type": "string",
             "description": "EIP-712 signature r (32-byte hex string, with or without 0x prefix)"
@@ -3768,13 +3696,6 @@
           "s": {
             "type": "string",
             "description": "EIP-712 signature s (32-byte hex string, with or without 0x prefix)"
-          },
-          "sweep_token": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Token to sweep to depositor after refund. Required for \"swap\" mode.\nFor \"direct\" mode, defaults to WBTC."
           },
           "v": {
             "type": "integer",
@@ -5756,14 +5677,6 @@
             "description": "The HTLCCoordinator contract address"
           }
         }
-      },
-      "RefundMode": {
-        "type": "string",
-        "description": "Settlement mode for collaborative refund.",
-        "enum": [
-          "direct",
-          "swap-back"
-        ]
       },
       "ServiceStatus": {
         "type": "object",

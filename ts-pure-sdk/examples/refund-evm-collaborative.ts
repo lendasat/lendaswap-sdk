@@ -37,11 +37,8 @@ console.log("Direction:", swap.direction);
 // #region collab-refund
 // Collaborative refund: the SDK signs an EIP-712 message and the
 // server cosigns + submits the on-chain transaction. No gas needed.
-//
-// Settlement modes:
-// - "swap-back": swap WBTC back to your original token (e.g. USDT) via DEX
-// - "direct":    return the locked WBTC/tBTC directly
-const result = await client.collabRefundEvmSwap(swapId, "swap-back");
+// The locked WBTC/tBTC is returned directly to the depositor.
+const result = await client.collabRefundEvmSwap(swapId);
 
 console.log("Refund TX:", result.txHash);
 // ... "0xabc123..."

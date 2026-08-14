@@ -43,15 +43,8 @@ declare const signer: EvmSigner; // your wallet — see EvmSigner docs
 
 // refundEvmWithSigner handles everything: fetches calldata, sends the
 // transaction, and waits for the receipt.
-//
-// Settlement modes:
-// - "swap-back": swap WBTC back to your original token (e.g. USDT) via DEX
-// - "direct":    return the locked WBTC/tBTC directly
-const { txHash } = await client.refundEvmWithSigner(
-  swapId,
-  signer,
-  "swap-back",
-);
+// The locked WBTC/tBTC is returned directly to the depositor.
+const { txHash } = await client.refundEvmWithSigner(swapId, signer);
 
 console.log("Refund TX:", txHash);
 // ... "0xabc123..."

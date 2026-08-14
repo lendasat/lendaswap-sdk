@@ -351,12 +351,6 @@ export interface ArkadeRefundOptions {
 /** Options for EVM refund via coordinator */
 export interface EvmRefundOptions {
   /**
-   * Settlement mode — what asset you receive:
-   * - "swap-back" (default): Swap WBTC back to original token via DEX
-   * - "direct": Return WBTC directly
-   */
-  mode?: "swap-back" | "direct";
-  /**
    * Whether to use collaborative refund (server cosigns + submits, gasless, no timelock wait).
    * When false/undefined, the refund requires timelock expiry and the caller submits the tx.
    * @default false
@@ -392,18 +386,12 @@ export interface CollabRefundEvmParams {
   timelock: number;
   /** EVM chain ID */
   chainId: number;
-  /** Settlement mode: "direct" or "swap-back" */
-  mode: string;
-  /** Token the depositor receives (WBTC for direct, source token for swap-back) — the EIP-712 `sweepToken` field */
+  /** Token the depositor receives (always the BTC-pegged HTLC token, tBTC/WBTC) — the EIP-712 `sweepToken` field */
   sweepToken: string;
   /** Minimum output amount for the sweep — the EIP-712 `minAmountOut` field */
   minAmountOut: string;
   /** keccak256(abi.encode(calls)) for the exact calls array signed in CollabRefund */
   callsHash: string;
-  /** Source token address (only present for swap-back) */
-  sourceTokenAddress?: string;
-  /** DEX calldata for swap-back (only present when mode=swap-back) */
-  dexCalldata?: { to: string; data: string; value: string };
 }
 
 export interface ContinueRefundedEvmSwapInfo {
@@ -520,20 +508,6 @@ export interface EvmFundingCallData {
     /** Encoded createSwap call data (from server) */
     data: string;
   };
-}
-
-/** Result of getting coordinator refund call data */
-export interface CoordinatorRefundCallData {
-  /** Contract address to call */
-  to: string;
-  /** Encoded refund call data */
-  data: string;
-  /** Whether the timelock has expired (refund is possible) */
-  timelockExpired: boolean;
-  /** Unix timestamp when the timelock expires */
-  timelockExpiry: number;
-  /** Refund mode used */
-  mode: "swap-back" | "direct";
 }
 
 /** Internal type for VHTLC claim/refund parameters extracted from a stored swap. */
@@ -3134,16 +3108,15 @@ export class Client {
     // EVM-sourced swaps: collaborative refund or timelock-based refund
     if (direction === "evm_to_arkade" || direction === "evm_to_bitcoin") {
       const evmOptions = options as EvmRefundOptions | undefined;
-      const settlement = evmOptions?.mode ?? "swap-back";
 
       if (evmOptions?.collaborative) {
-        return this.#collabRefundEvm(id, settlement);
+        return this.#collabRefundEvm(id);
       }
 
       if (direction === "evm_to_arkade") {
-        return this.#buildEvmToArkadeRefund(id, swap, settlement);
+        return this.#buildEvmToArkadeRefund(id, swap);
       }
-      return this.#buildEvmToBitcoinRefund(id, swap, settlement);
+      return this.#buildEvmToBitcoinRefund(id, swap);
     }
 
     return {
@@ -3918,15 +3891,13 @@ export class Client {
    * Builds refund data for an EVM-to-Arkade swap via the coordinator.
    *
    * Calls the server's refund-calldata endpoint which builds coordinator
-   * calldata for `refundAndExecute` (swap WBTC back to source token) or
-   * `refundTo` (return WBTC directly).
+   * calldata for `refundTo` (return the BTC-pegged HTLC token directly).
    *
    * @internal
    */
   async #buildEvmToArkadeRefund(
     id: string,
     swap: GetSwapResponse,
-    mode: "swap-back" | "direct" = "swap-back",
   ): Promise<RefundResult> {
     const evmSwap = swap as EvmToArkadeSwapResponse & {
       direction: "evm_to_arkade";
@@ -3969,14 +3940,12 @@ export class Client {
     }
 
     // Non-WBTC source: fetch coordinator refund calldata from server
-    // - "swap-back": swap WBTC back to original token via DEX (default)
-    // - "direct": return WBTC directly (useful when DEX calldata is stale)
+    // (returns the BTC-pegged HTLC token directly to the caller)
     const response = await this.#apiClient.GET(
       "/swap/{id}/refund-and-swap-calldata",
       {
         params: {
           path: { id },
-          query: { mode },
         },
       },
     );
@@ -4012,7 +3981,6 @@ export class Client {
   async #buildEvmToBitcoinRefund(
     id: string,
     swap: GetSwapResponse,
-    mode: "swap-back" | "direct" = "swap-back",
   ): Promise<RefundResult> {
     const evmSwap = swap as EvmToBitcoinSwapResponse & {
       direction: "evm_to_bitcoin";
@@ -4055,14 +4023,12 @@ export class Client {
     }
 
     // Non-WBTC source: use coordinator refund
-    // - "swap-back": swap WBTC back to original token via DEX (default)
-    // - "direct": return WBTC directly (useful when DEX calldata is stale)
+    // (returns the BTC-pegged HTLC token directly to the caller)
     const response = await this.#apiClient.GET(
       "/swap/{id}/refund-and-swap-calldata",
       {
         params: {
           path: { id },
-          query: { mode },
         },
       },
     );
@@ -4101,14 +4067,12 @@ export class Client {
    */
   async getCollabRefundEvmParams(
     swapId: string,
-    settlement: "swap-back" | "direct" = "direct",
   ): Promise<CollabRefundEvmParams> {
     const response = await this.#apiClient.GET(
       "/api/swap/{id}/collab-refund-evm/params",
       {
         params: {
           path: { id: swapId },
-          query: { mode: settlement },
         },
       },
     );
@@ -4129,18 +4093,9 @@ export class Client {
       claimAddress: d.claim_address,
       timelock: d.timelock,
       chainId: d.chain_id,
-      mode: d.mode,
       sweepToken: d.sweep_token,
       minAmountOut: d.min_amount_out,
       callsHash: d.calls_hash,
-      sourceTokenAddress: d.source_token_address ?? undefined,
-      dexCalldata: d.dex_calldata
-        ? {
-            to: d.dex_calldata.to,
-            data: d.dex_calldata.data,
-            value: d.dex_calldata.value,
-          }
-        : undefined,
     };
   }
 
@@ -4152,18 +4107,14 @@ export class Client {
    * refund on-chain.
    *
    * @param swapId - Swap ID
-   * @param settlement - Settlement mode: "direct" (WBTC) or "swap-back" (original token via DEX)
    * @returns Typed data and digest for signing
    */
-  async buildCollabRefundEvmTypedData(
-    swapId: string,
-    settlement: "swap-back" | "direct" = "direct",
-  ): Promise<{
+  async buildCollabRefundEvmTypedData(swapId: string): Promise<{
     typedData: CollabRefundEvmTypedData;
     digest: string;
     params: CollabRefundEvmParams;
   }> {
-    const params = await this.getCollabRefundEvmParams(swapId, settlement);
+    const params = await this.getCollabRefundEvmParams(swapId);
 
     const digestParams: CollabRefundEvmDigestParams = {
       coordinatorAddress: params.coordinatorAddress,
@@ -4193,17 +4144,10 @@ export class Client {
    * the transaction on-chain. Gasless for the client — no timelock wait.
    *
    * @param swapId - Swap ID
-   * @param settlement - Settlement mode: "direct" (WBTC) or "swap-back" (original token via DEX)
    * @returns Refund result with transaction hash
    */
-  async collabRefundEvmSwap(
-    swapId: string,
-    settlement: "swap-back" | "direct" = "direct",
-  ): Promise<CollabRefundEvmResult> {
-    const { params, digest } = await this.buildCollabRefundEvmTypedData(
-      swapId,
-      settlement,
-    );
+  async collabRefundEvmSwap(swapId: string): Promise<CollabRefundEvmResult> {
+    const { digest } = await this.buildCollabRefundEvmTypedData(swapId);
 
     // Sign using the SDK-controlled EVM key that matches the on-chain depositor.
     const storedSwap = await this.getStoredSwap(swapId);
@@ -4228,9 +4172,6 @@ export class Client {
           r: sig.r,
           s: sig.s,
           depositor_address: depositorAddress,
-          mode: settlement,
-          sweep_token: params.sweepToken,
-          min_amount_out: params.minAmountOut,
         },
       },
     );
@@ -4267,9 +4208,6 @@ export class Client {
       r: string;
       s: string;
       depositor_address: string;
-      mode: "direct" | "swap-back";
-      sweep_token?: string;
-      min_amount_out: string;
     },
   ): Promise<CollabRefundEvmResult> {
     const response = await this.#apiClient.POST(
@@ -4297,12 +4235,9 @@ export class Client {
    * Collaborative EVM refund — internal method called by refundSwap.
    * @internal
    */
-  async #collabRefundEvm(
-    id: string,
-    settlement: "swap-back" | "direct" = "direct",
-  ): Promise<RefundResult> {
+  async #collabRefundEvm(id: string): Promise<RefundResult> {
     try {
-      const result = await this.collabRefundEvmSwap(id, settlement);
+      const result = await this.collabRefundEvmSwap(id);
       return {
         success: true,
         message: `${result.message} (tx: ${result.txHash})`,
@@ -5423,15 +5358,13 @@ export class Client {
    *
    * @param swapId - The UUID of the swap
    * @param signer - An {@link EvmSigner} wrapping the user's wallet
-   * @param mode - "swap-back" (refund as original token via DEX) or "direct" (refund as WBTC)
    * @returns The refund transaction hash
    */
   async refundEvmWithSigner(
     swapId: string,
     signer: EvmSigner,
-    mode: "swap-back" | "direct" = "swap-back",
   ): Promise<{ txHash: string }> {
-    const result = await this.refundSwap(swapId, { mode });
+    const result = await this.refundSwap(swapId, {});
 
     if (!result.evmRefundData) {
       throw new Error(
@@ -5482,18 +5415,13 @@ export class Client {
    *
    * @param swapId - The UUID of the swap
    * @param signer - An {@link EvmSigner} wrapping the user's wallet
-   * @param settlement - "swap-back" (original token via DEX) or "direct" (WBTC)
    * @returns The refund transaction hash
    */
   async collabRefundEvmWithSigner(
     swapId: string,
     signer: EvmSigner,
-    settlement: "swap-back" | "direct" = "direct",
   ): Promise<{ txHash: string }> {
-    const { typedData, params } = await this.buildCollabRefundEvmTypedData(
-      swapId,
-      settlement,
-    );
+    const { typedData } = await this.buildCollabRefundEvmTypedData(swapId);
 
     const signature = await signer.signTypedData(typedData);
     const { v, r, s } = parseSignature(signature);
@@ -5503,9 +5431,6 @@ export class Client {
       r,
       s,
       depositor_address: signer.address,
-      mode: settlement,
-      sweep_token: params.sweepToken,
-      min_amount_out: params.minAmountOut,
     });
 
     return { txHash: result.txHash };

@@ -94,7 +94,7 @@ await client.claim(swapId);
 
 // Refund after timeout
 await client.refundSwap(swapId, {destinationAddress: "bc1q…"}); // or "ark1…"
-await client.collabRefundEvmWithSigner(swapId, signer, "swap-back"); // EVM, instant/gasless
+await client.collabRefundEvmWithSigner(swapId, signer); // EVM, instant/gasless
 ```
 
 ## License
