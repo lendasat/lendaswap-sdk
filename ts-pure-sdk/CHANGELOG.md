@@ -1,5 +1,52 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 2.0.0
+
+### Major Changes
+
+- 9f3bb60: Removed the swap-back refund mode. EVM-sourced swaps now always refund
+  the BTC-pegged HTLC token (tBTC/WBTC) directly to the depositor; the
+  DEX swap back to the original source token is gone.
+
+  Breaking API changes:
+
+  - `refundSwap()`'s `EvmRefundOptions` no longer has `mode`.
+  - `refundEvmWithSigner`, `collabRefundEvmSwap`,
+    `collabRefundEvmWithSigner`, `getCollabRefundEvmParams`, and
+    `buildCollabRefundEvmTypedData` lost their `mode`/`settlement`
+    parameter.
+  - `submitCollabRefundEvm`'s body no longer takes `mode`, `sweep_token`,
+    or `min_amount_out` — the server hardcodes `sweepToken` = tBTC/WBTC
+    and `minAmountOut` = 0.
+  - `CollabRefundEvmParams` lost `mode`, `sourceTokenAddress`, and
+    `dexCalldata`; the unused `CoordinatorRefundCallData` type was
+    removed.
+
+  Old 1.x clients keep working against the new server: the removed fields
+  are ignored and refunds degrade to direct settlement.
+
+### Minor Changes
+
+- d50ee09: Arkade→Lightning swaps, rebuilt on the Spark provider.
+
+  - New `createArkadeToLightningSwap` (and a `createSwap` dispatcher route):
+    destination is one of `lightningInvoice` (its amount pins the payout),
+    or `lightningAddress`/`lnurl` with exactly one of `sourceAmountSats`
+    (send-max, fees deducted from the payout) or `targetAmountSats` (exact
+    payout, fees added on top). The swap's hash lock is the invoice's
+    payment hash; the derived swap key only signs refunds.
+  - `refundSwap()` and `amountsForSwap()` accept `arkade_to_lightning`
+    swaps — collaborative refund first (server cosigns, no locktime wait),
+    unilateral fallback.
+  - Fee model: the user pays `payout + protocol fee + flat network fee`;
+    the provider's actual Lightning fee is paid out of that margin, so
+    quote and create can never disagree. `SwapPairInfo` gains
+    `network_fee_sats`, and `composeQuote()` folds it into `network_fee`.
+
+### Patch Changes
+
+- f96e1f3: Target backend 0.3.5 in the x-satora-server-version header.
+
 ## 1.0.0
 
 ### Major Changes

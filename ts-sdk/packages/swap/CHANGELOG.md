@@ -1,5 +1,36 @@
 # @satora/swap
 
+## 1.1.0
+
+### Minor Changes
+
+- d50ee09: Arkade→Lightning swaps, rebuilt on the Spark provider.
+
+  - `createArkadeToLightningSwap` is delegated to the underlying client
+    (see `@lendasat/lendaswap-sdk-pure` for the API shape) and created
+    swaps are tracked: the client-funded Arkade VHTLC leg is watched; the
+    Lightning payout has no on-chain leg.
+  - `refundSwap()` handles the direction via the shared Arkade VHTLC
+    collaborative-refund flow.
+
+- 9f3bb60: Removed the swap-back refund mode. EVM-sourced swaps now always refund
+  the BTC-pegged HTLC token (tBTC/WBTC) directly to the depositor.
+
+  The delegated refund methods (`refundSwap`, `refundEvmWithSigner`,
+  `collabRefundEvmSwap`, `collabRefundEvmWithSigner`,
+  `submitCollabRefundEvm`) inherit the new signatures from
+  `@lendasat/lendaswap-sdk-pure` — the `mode`/`settlement` parameter is
+  gone.
+
+### Patch Changes
+
+- f96e1f3: Target backend 0.3.5 in the x-satora-server-version header.
+- e389209: Tracking readers (Electrum and Esplora) now select the funding candidate as
+  the transaction paying the MOST to the HTLC address instead of the first one
+  listed. The address is public, so a stray dust payment could previously be
+  mistaken for the funding — observing the swap as underfunded/invalid and
+  suppressing auto-claim while the real deposit sat at the address.
+
 ## 1.0.0
 
 ### Major Changes
