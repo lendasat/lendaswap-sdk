@@ -428,7 +428,7 @@ async function composeBtcToEvm(
   const networkFeeSats =
     feeEntry.fees.source_sats +
     feeEntry.fees.target_sats +
-    feeEntry.fees.flat_sats;
+    pair.network_fee_sats;
   // `gasless_network_fee` is always 0: the gasless settlement cost is folded
   // into `network_fee` upstream (the `/network-fees` values already include it
   // on chains that pass settlement gas through). The field is kept on the
@@ -664,7 +664,7 @@ async function composeEvmToBtc(
   const networkFeeSats =
     feeEntry.fees.source_sats +
     feeEntry.fees.target_sats +
-    feeEntry.fees.flat_sats;
+    pair.network_fee_sats;
   const gaslessNetworkFee = 0;
 
   // Pivot scale: BTC sats (8-dec) ↔ tBTC/WBTC base units. Same direction-

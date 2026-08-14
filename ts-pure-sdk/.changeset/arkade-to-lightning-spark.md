@@ -16,5 +16,4 @@ Arkade→Lightning swaps, rebuilt on the Spark provider.
 - Fee model: the user pays `payout + protocol fee + flat network fee`;
   the provider's actual Lightning fee is paid out of that margin, so
   quote and create can never disagree. `SwapPairInfo` gains
-  `network_fee_sats`, `NetworkFee` gains `flat_sats`, and
-  `composeQuote()` folds the flat fee into `network_fee`.
+  `network_fee_sats`, and `composeQuote()` folds it into `network_fee`.

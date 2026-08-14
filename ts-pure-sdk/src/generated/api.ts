@@ -2630,13 +2630,6 @@ export interface components {
         NetworkFee: {
             /**
              * Format: int64
-             * @description Flat route-level network fee in sats charged on every swap of this
-             *     pair (Lightning routes: covers the provider's flat fee component).
-             *     Composed total = `source_sats + target_sats + flat_sats`.
-             */
-            flat_sats: number;
-            /**
-             * Format: int64
              * @description Sats the server incurs on the source side of the swap.
              *
              *     - **Bitcoin**: BTC mining fee for the HTLC claim transaction.

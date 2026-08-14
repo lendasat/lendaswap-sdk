@@ -52,7 +52,7 @@ function deps(overrides: Partial<ComposeQuoteDeps> = {}): ComposeQuoteDeps {
       pairs: zeroPairs.map((p) => ({
         source: p.source,
         target: p.target,
-        fees: { source_sats: 0, target_sats: 0, flat_sats: 0 },
+        fees: { source_sats: 0, target_sats: 0 },
       })),
     },
     chainConfig: {
@@ -206,7 +206,7 @@ describe("composeQuote — direct BTC↔pegged pivot (no DEX)", () => {
           {
             source: "Bitcoin",
             target: "42161",
-            fees: { source_sats: 500, target_sats: 300, flat_sats: 0 },
+            fees: { source_sats: 500, target_sats: 300 },
           },
         ],
       },

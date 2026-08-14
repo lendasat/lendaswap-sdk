@@ -5445,16 +5445,9 @@
         "description": "Sats the server pays on each side of the pair at *current* gas/mining\nprices. Extensible — future breakouts (`htlc_create_sats`,\n`dex_swap_sats`, …) land alongside.",
         "required": [
           "source_sats",
-          "target_sats",
-          "flat_sats"
+          "target_sats"
         ],
         "properties": {
-          "flat_sats": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Flat route-level network fee in sats charged on every swap of this\npair (Lightning routes: covers the provider's flat fee component).\nComposed total = `source_sats + target_sats + flat_sats`.",
-            "minimum": 0
-          },
           "source_sats": {
             "type": "integer",
             "format": "int64",
