@@ -837,7 +837,14 @@ export class Client {
    * otherwise it runs observe-only, hints in, no spends.
    */
   #startWorker(tracker: SwapTracker | HintTracker): void {
-    const serverUrl = this.#tracking.serverUrl;
+    // Fall back to the URL the legacy REST client resolved to (its mainnet
+    // default when withBaseUrl was never called): tracking must open the hint
+    // feed against the same server the REST calls go to — without this, the
+    // default-URL builder flow gets a HintTracker but no hints, freezing
+    // tracking at each swap's stored status. A legacy-like stand-in whose
+    // `baseUrl` getter throws (no internal config) simply yields no fallback,
+    // keeping the old no-worker behavior.
+    const serverUrl = this.#tracking.serverUrl ?? legacyBaseUrl(this.#legacy);
     if (!serverUrl) return;
     const autoClaim = this.#tracking.autoClaim;
 
@@ -1159,6 +1166,15 @@ export class ClientBuilder {
  * entirely, so tracking doesn't re-scan every historical swap on each start;
  * anything ambiguous stays chain-verified.
  */
+/** The legacy client's resolved base URL, or `undefined` if it can't provide one. */
+function legacyBaseUrl(legacy: LegacyClient): string | undefined {
+  try {
+    return legacy.baseUrl;
+  } catch {
+    return undefined;
+  }
+}
+
 const SETTLED_STORED_STATUSES = new Set<SwapStatus>([
   "serverredeemed",
   "clientrefunded",
