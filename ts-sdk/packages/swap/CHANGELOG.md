@@ -1,5 +1,40 @@
 # @satora/swap
 
+## 1.0.0
+
+### Major Changes
+
+- 6866996: Lightning v2 (Spark provider), clean wire break.
+
+  - `@satora/swap`: Lightning→Arkade tracking now reads the generic
+    `target_amount` field; wrappers for the removed Arkade→Lightning and
+    Lightning↔EVM directions are gone until those flows are rebuilt on the
+    new provider.
+  - `@satora/escrow-client`: `fundFromLightning` uses `targetAmountSats`;
+    `withdrawToLightning` / `quoteLightningWithdrawal` keep their signatures
+    but throw `LightningWithdrawalUnavailableError` while Arkade→Lightning
+    swaps are rebuilt.
+
+### Minor Changes
+
+- 473eac2: Electrum-backed Bitcoin chain reader with push reconciles, on by default for
+  mainnet (Satora's Fulcrum; `withElectrumWsUrl()` overrides, other networks
+  stay Esplora-only unless a URL is set). The tracker's Bitcoin manager reads
+  HTLC state from the Electrum server (fresher than public explorers) and
+  re-verifies the moment an address's history changes via
+  `blockchain.scripthash.subscribe` — so a server-funded swap claims in seconds
+  instead of waiting on the poll cadence. The Esplora reader remains the
+  fallback on Electrum errors. Non-mainnet deployments set
+  `withBitcoinNetwork()` so Electrum address decoding uses the right parameters.
+
+### Patch Changes
+
+- 64e8902: Scan every Arkade spend PSBT input when extracting a matching preimage, fixing classification for multi-input VHTLC spends.
+- 8dbb24f: Target backend 0.3.2 in the x-satora-server-version header.
+- b77fbf9: Target backend 0.3.3 in the x-satora-server-version header.
+- 1068ea3: Target backend 0.3.4 in the x-satora-server-version header.
+- e305ec8: Update Arkade VHTLC tracking helpers for the strict VHTLC script version and byte-parity vectors shared with the backend and SDKs.
+
 ## 0.3.2
 
 ### Patch Changes

@@ -1,5 +1,44 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 1.0.0
+
+### Major Changes
+
+- 6866996: Lightning v2 (Spark provider), clean wire break.
+
+  - `createLightningToArkadeSwap` now takes exactly one of `sourceAmountSats`
+    (invoice amount, fees deducted) or `targetAmountSats` (exact Arkade
+    receive amount) instead of `satsReceive`, and the response uses the
+    generic `source_amount`/`target_amount`/`source_token`/`target_token`
+    fields (no more `boltz_*`, `lightning_expected_sats`, or `sats_receive`).
+  - Removed until they are rebuilt on the new provider:
+    `createArkadeToLightningSwap`, `retryArkadeToLightningSwap`,
+    `getArkadeToLightningQuote`, `createLightningToEvmSwapGeneric`,
+    `createEvmToLightningSwapGeneric`, `collabRefundArkadeToLightningOffchain`,
+    and the corresponding `createSwap` dispatcher routes.
+
+### Minor Changes
+
+- 473eac2: Electrum-over-WebSocket support for Bitcoin chain access. On mainnet the
+  client now defaults to Satora's Fulcrum (`wss://electrs.satora.io`, see
+  `DEFAULT_ELECTRUM_WS_URLS`); `withElectrumWsUrl()` overrides it, and other
+  networks stay Esplora-only unless a URL is set. HTLC output lookups and
+  broadcasts prefer Electrum over Esplora, and waiting for an HTLC funding
+  becomes push-driven via `blockchain.scripthash.subscribe` instead of polling.
+  Esplora remains the automatic fallback whenever the Electrum server errors.
+  Address UTXO lookups (both backends) now select the largest output instead of
+  the explorer's first, so a stray dust output at the public HTLC address can no
+  longer shadow the real deposit.
+
+### Patch Changes
+
+- 8dbb24f: Target backend 0.3.2 in the x-satora-server-version header.
+- b77fbf9: Target backend 0.3.3 in the x-satora-server-version header.
+- 1068ea3: Target backend 0.3.4 in the x-satora-server-version header.
+- a5330b7: Serialize EVM token amounts as decimal strings so 18-decimal token values can exceed JavaScript's safe integer range.
+- d8e4232: Support large EVM token quote amounts as decimal strings.
+- e305ec8: Make strict Arkade VHTLC script construction byte-identical to the backend and add cross-language vectors for the scripts and address.
+
 ## 0.6.2
 
 ### Patch Changes

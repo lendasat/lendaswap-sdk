@@ -1,5 +1,31 @@
 # @satora/escrow-client
 
+## 4.0.0
+
+### Major Changes
+
+- 6866996: Lightning v2 (Spark provider), clean wire break.
+
+  - `@satora/swap`: Lightning→Arkade tracking now reads the generic
+    `target_amount` field; wrappers for the removed Arkade→Lightning and
+    Lightning↔EVM directions are gone until those flows are rebuilt on the
+    new provider.
+  - `@satora/escrow-client`: `fundFromLightning` uses `targetAmountSats`;
+    `withdrawToLightning` / `quoteLightningWithdrawal` keep their signatures
+    but throw `LightningWithdrawalUnavailableError` while Arkade→Lightning
+    swaps are rebuilt.
+
+### Patch Changes
+
+- Updated dependencies [64e8902]
+- Updated dependencies [8dbb24f]
+- Updated dependencies [b77fbf9]
+- Updated dependencies [1068ea3]
+- Updated dependencies [473eac2]
+- Updated dependencies [6866996]
+- Updated dependencies [e305ec8]
+  - @satora/swap@1.0.0
+
 ## 3.0.2
 
 ### Patch Changes
