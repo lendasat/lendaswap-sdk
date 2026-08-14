@@ -4,5 +4,5 @@
 export const SDK_NAME = "lendaswap-sdk-pure";
 export const SDK_VERSION = "0.6.2";
 export const SDK_COMMIT_HASH = "unknown";
-export const SATORA_SERVER_VERSION = "0.3.3";
+export const SATORA_SERVER_VERSION = "0.3.4";
 export const CLIENT_AGENT = `${SDK_NAME}/${SDK_VERSION}`;
