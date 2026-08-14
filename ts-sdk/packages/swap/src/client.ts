@@ -22,6 +22,7 @@ import { DEFAULT_ESPLORA_URLS } from "./contracts/bitcoin-reader-esplora.js";
 import { EvmContractManager } from "./contracts/evm-manager.js";
 import { defaultEvmReaders } from "./contracts/evm-reader-viem.js";
 import type { ContractManager, Ledger } from "./contracts/types.js";
+import { HintTracker } from "./hints/hint-tracker.js";
 import { SwapWorker } from "./hints/swap-worker.js";
 import { WsStatusSource } from "./hints/ws-status-source.js";
 import { swapToTracked } from "./tracker/from-swap.js";
@@ -93,6 +94,14 @@ type TrackingConfig = {
   refreshIntervalMs?: number;
   /** Opt-in hint-driven auto-claim; unset leaves tracking observe-only. */
   autoClaim?: AutoClaimConfig;
+  /**
+   * Verify against the chain instead of trusting server hints. Off by default
+   * (TEMP while the chain monitors are buggy): tracking then runs a
+   * {@link HintTracker} that derives actions from the server's pushed status,
+   * with zero chain access. Setting explicit `managers` implies chain-verified
+   * tracking (they exist for nothing else).
+   */
+  chainVerified?: boolean;
 };
 
 export class Client {
@@ -102,7 +111,7 @@ export class Client {
   readonly #tracking: TrackingConfig;
   /** Per-ledger monitors, resolved once from {@link #tracking}. */
   #managers: Map<Ledger, ContractManager> | undefined;
-  #tracker: SwapTracker | undefined;
+  #tracker: SwapTracker | HintTracker | undefined;
   /** Hint-driven auto-claim worker; only built when `withAutoClaim` opted in. */
   #worker: SwapWorker | undefined;
   #startPromise?: Promise<void>;
@@ -626,8 +635,11 @@ export class Client {
   /**
    * Start observing the user's active swaps and deriving each one's next action.
    *
-   * Loads stored swaps, maps the ones whose ledgers are observable to
-   * {@link TrackedSwap}s, and runs the per-ledger monitors. Idempotent. Requires
+   * Loads stored swaps, maps them to {@link TrackedSwap}s, and derives each
+   * one's actions — by default from the server's status hints alone (TEMP while
+   * the chain monitors are buggy; see
+   * {@link ClientBuilder.withChainVerifiedTracking} to re-enable the per-ledger
+   * chain monitors). Idempotent. Requires
    * the client to have been built with {@link ClientBuilder.withTracking}.
    * Subscribe with {@link subscribeToActions}; release with
    * {@link stopTracking}.
@@ -651,9 +663,19 @@ export class Client {
 
   async #doStartTracking(): Promise<void> {
     try {
-      const tracker = new SwapTracker(await this.#ensureManagers(), {
-        refreshIntervalMs: this.#tracking.refreshIntervalMs ?? 5_000,
-      });
+      // Explicit managers imply chain verification — they exist for nothing
+      // else, and every pre-existing withContractManagers caller expects it.
+      const chainVerified =
+        this.#tracking.chainVerified || this.#tracking.managers !== undefined;
+      const tracker = chainVerified
+        ? new SwapTracker(await this.#ensureManagers(), {
+            refreshIntervalMs: this.#tracking.refreshIntervalMs ?? 5_000,
+          })
+        : new HintTracker({
+            fetchStatus: async (swapId) =>
+              (await this.getSwap(swapId, { updateStorage: true })).status,
+            refreshIntervalMs: this.#tracking.refreshIntervalMs ?? 5_000,
+          });
       this.#tracker = tracker;
       await tracker.startTracking(await this.#loadTrackedSwaps());
       // Keep STORED statuses converging on chain truth: without this, a swap
@@ -710,12 +732,16 @@ export class Client {
     const swaps = await this.listAllSwaps();
     return swaps
       .filter((s) => !SETTLED_STORED_STATUSES.has(s.response.status))
-      .map((s) => {
+      .map((s): TrackedSwap | undefined => {
         // Isolate per swap: one unmappable stored swap (e.g. a legacy record
         // with an unsupported script version) must not prevent every other
         // swap from being tracked and auto-claimed.
         try {
-          return swapToTracked(s);
+          const tracked = swapToTracked(s);
+          if (!tracked) return undefined;
+          // Seed hints-only tracking with the last stored status (a possibly
+          // stale first derivation; the WS snapshot corrects it on subscribe).
+          return { ...tracked, storedStatus: s.response.status };
         } catch (error) {
           console.warn(
             `Client: skipping untrackable stored swap ${s.response.id}:`,
@@ -787,7 +813,10 @@ export class Client {
   }
 
   /** Track each given swap the tracker isn't already watching (isolated per swap). */
-  async #trackAll(tracker: SwapTracker, swaps: TrackedSwap[]): Promise<void> {
+  async #trackAll(
+    tracker: SwapTracker | HintTracker,
+    swaps: TrackedSwap[],
+  ): Promise<void> {
     // Isolate per swap: one that fails to register (and rolls itself back) must
     // not stop the rest of the batch from being tracked.
     for (const swap of swaps) {
@@ -807,7 +836,7 @@ export class Client {
    * worker get an `execute` (claims) and an `onActionRequired` surface —
    * otherwise it runs observe-only, hints in, no spends.
    */
-  #startWorker(tracker: SwapTracker): void {
+  #startWorker(tracker: SwapTracker | HintTracker): void {
     const serverUrl = this.#tracking.serverUrl;
     if (!serverUrl) return;
     const autoClaim = this.#tracking.autoClaim;
@@ -928,6 +957,7 @@ export class ClientBuilder {
   #evmRpcUrls: Record<number, string> | undefined;
   #managers: Map<Ledger, ContractManager> | undefined;
   #autoClaim: AutoClaimConfig | undefined;
+  #chainVerified = false;
 
   /**
    * Override the EVM JSON-RPC endpoint per chainId. Optional — tracking uses
@@ -957,6 +987,17 @@ export class ClientBuilder {
   /** Turn observe-mode tracking off. */
   withoutTracking(): this {
     this.#trackingEnabled = false;
+    return this;
+  }
+
+  /**
+   * Verify swap state against the chain (per-ledger contract managers) instead
+   * of trusting the server's status hints. TEMPORARILY off by default while the
+   * chain monitors are being fixed — without it, tracking derives actions from
+   * the server's pushed status alone, with zero chain access.
+   */
+  withChainVerifiedTracking(): this {
+    this.#chainVerified = true;
     return this;
   }
 
@@ -1105,6 +1146,7 @@ export class ClientBuilder {
       bitcoinMinConfirmations: this.#bitcoinMinConfirmations,
       evmRpcUrls: this.#evmRpcUrls,
       autoClaim: this.#autoClaim,
+      chainVerified: this.#chainVerified,
     });
   }
 }

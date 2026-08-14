@@ -63,6 +63,10 @@ export {
 export type * from "./contracts/types.js";
 export { htlcKey } from "./contracts/types.js";
 export {
+  HintTracker,
+  type HintTrackerOptions,
+} from "./hints/hint-tracker.js";
+export {
   SwapWorker,
   type SwapWorkerOptions,
   type WorkerHintSource,

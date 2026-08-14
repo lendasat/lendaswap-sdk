@@ -11,6 +11,7 @@
  * mode running the action) is a policy layer built on top of these same
  * notifications, gated by each action's `automation`.
  */
+import type { SwapStatus } from "@lendasat/lendaswap-sdk-pure";
 import { deriveSwapActions } from "../actions/derive.js";
 import { deriveSwapStatus } from "../actions/status.js";
 import type { HtlcObservation, SwapActions } from "../actions/types.js";
@@ -28,6 +29,12 @@ export type TrackedSwap = {
   serverHtlc?: HtlcRef;
   clientRefundLocktime: number;
   serverRefundLocktime: number;
+  /**
+   * The swap's last STORED server status, seeding hints-only tracking
+   * (`HintTracker`) with a first derivation before any hint arrives. Ignored by
+   * {@link SwapTracker}, which derives from chain observations only.
+   */
+  storedStatus?: SwapStatus;
 };
 
 export type ActionSubscriber = (swapId: string, actions: SwapActions) => void;

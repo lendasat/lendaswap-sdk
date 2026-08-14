@@ -14,13 +14,22 @@
  * or double-submit). After the attempt budget is spent the swap is surfaced via
  * `onActionRequired`, so it is never silently stuck.
  */
+import type { SwapStatus } from "@lendasat/lendaswap-sdk-pure";
 import type { SwapActionId, SwapActions } from "../actions/types.js";
 
 /** The tracker surface the worker drives. */
 export interface WorkerTracker {
   trackedSwapIds(): string[];
-  /** Reconcile a swap's legs from chain, then recompute. `force` re-emits even if unchanged. */
-  applyHint(swapId: string, opts?: { force?: boolean }): Promise<void>;
+  /**
+   * Re-verify a swap, then recompute. `force` re-emits even if unchanged.
+   * `status` is the hint's pushed status: a chain-verifying tracker ignores it
+   * (the chain stays its source of truth); a hints-only tracker applies it
+   * directly, saving a server round-trip.
+   */
+  applyHint(
+    swapId: string,
+    opts?: { force?: boolean; status?: SwapStatus },
+  ): Promise<void>;
   subscribeToActions(
     cb: (swapId: string, actions: SwapActions) => void,
   ): () => void;
@@ -32,7 +41,9 @@ export interface WorkerHintSource {
   stop(): void;
   subscribe(swapIds: string[]): void;
   unsubscribe(swapIds: string[]): void;
-  onStatus(cb: (update: { swapId: string }) => void): () => void;
+  onStatus(
+    cb: (update: { swapId: string; status?: SwapStatus }) => void,
+  ): () => void;
   /**
    * Optional: fires when the feed comes back up after an outage, during which
    * pushed transitions were lost for good. The worker answers by re-verifying
@@ -112,8 +123,8 @@ export class SwapWorker {
 
     this.#hintSource.subscribe(this.#tracker.trackedSwapIds());
     this.#unsubs.push(
-      this.#hintSource.onStatus(({ swapId }) => {
-        void this.#tracker.applyHint(swapId).catch((error) => {
+      this.#hintSource.onStatus(({ swapId, status }) => {
+        void this.#tracker.applyHint(swapId, { status }).catch((error) => {
           console.warn(`SwapWorker: applyHint(${swapId}) failed:`, error);
         });
       }),
