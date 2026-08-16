@@ -392,6 +392,11 @@ export interface CollabRefundEvmParams {
   minAmountOut: string;
   /** keccak256(abi.encode(calls)) for the exact calls array signed in CollabRefund */
   callsHash: string;
+  /**
+   * EIP-712 domain version of the coordinator at `coordinatorAddress`.
+   * Absent on servers predating the field — treat as 3.
+   */
+  coordinatorVersion?: number;
 }
 
 export interface ContinueRefundedEvmSwapInfo {
@@ -4096,6 +4101,10 @@ export class Client {
       sweepToken: d.sweep_token,
       minAmountOut: d.min_amount_out,
       callsHash: d.calls_hash,
+      // Cast: the field ships with newer servers; absent means a pre-v4
+      // coordinator deployment (domain version 3).
+      coordinatorVersion: (d as { coordinator_version?: number })
+        .coordinator_version,
     };
   }
 
@@ -4128,6 +4137,7 @@ export class Client {
       sweepToken: params.sweepToken,
       minAmountOut: BigInt(params.minAmountOut),
       callsHash: params.callsHash,
+      coordinatorVersion: params.coordinatorVersion,
     };
 
     const typedData = buildCollabRefundEvmTypedData(digestParams);

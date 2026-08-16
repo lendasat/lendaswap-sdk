@@ -492,6 +492,11 @@ const COLLAB_REFUND_TYPEHASH =
 export interface CollabRefundEvmDigestParams {
   /** HTLCCoordinator contract address (verifyingContract) */
   coordinatorAddress: string;
+  /**
+   * EIP-712 domain version of the coordinator at `coordinatorAddress`.
+   * Comes from the server's collab-refund params (`coordinator_version`);.
+   */
+  coordinatorVersion?: number | string;
   /** EVM chain ID */
   chainId: number;
   /** SHA-256 preimage hash (32-byte hex with 0x prefix) */
@@ -568,7 +573,11 @@ export function buildCollabRefundEvmDigest(
       },
       {
         type: "bytes32",
-        value: keccak256(stringToUtf8Bytes(COORDINATOR_VERSION)),
+        value: keccak256(
+          stringToUtf8Bytes(
+            String(params.coordinatorVersion ?? COORDINATOR_VERSION),
+          ),
+        ),
       },
       { type: "uint256", value: BigInt(params.chainId) },
       { type: "address", value: params.coordinatorAddress },
@@ -620,7 +629,7 @@ export function buildCollabRefundEvmTypedData(
   return {
     domain: {
       name: COORDINATOR_NAME,
-      version: COORDINATOR_VERSION,
+      version: String(params.coordinatorVersion ?? COORDINATOR_VERSION),
       chainId: params.chainId,
       verifyingContract: params.coordinatorAddress,
     },
