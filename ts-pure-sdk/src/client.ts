@@ -4101,10 +4101,7 @@ export class Client {
       sweepToken: d.sweep_token,
       minAmountOut: d.min_amount_out,
       callsHash: d.calls_hash,
-      // Cast: the field ships with newer servers; absent means a pre-v4
-      // coordinator deployment (domain version 3).
-      coordinatorVersion: (d as { coordinator_version?: number })
-        .coordinator_version,
+      coordinatorVersion: d.coordinator_version,
     };
   }
 

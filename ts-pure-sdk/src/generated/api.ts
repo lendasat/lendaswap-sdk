@@ -1761,6 +1761,12 @@ export interface components {
             /** @description HTLCCoordinator contract address (EIP-712 verifyingContract) */
             coordinator_address: string;
             /**
+             * Format: int32
+             * @description EIP-712 domain version of the coordinator at `coordinator_address` —
+             *     the CollabRefund signature must use it or recovery fails on-chain.
+             */
+            coordinator_version: number;
+            /**
              * @description Minimum output amount for the sweep (always 0).
              *     This is the `minAmountOut` field in the EIP-712 struct.
              */

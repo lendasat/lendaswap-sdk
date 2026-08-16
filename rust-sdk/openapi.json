@@ -3634,7 +3634,8 @@
           "chain_id",
           "sweep_token",
           "min_amount_out",
-          "calls_hash"
+          "calls_hash",
+          "coordinator_version"
         ],
         "properties": {
           "amount": {
@@ -3658,6 +3659,12 @@
           "coordinator_address": {
             "type": "string",
             "description": "HTLCCoordinator contract address (EIP-712 verifyingContract)"
+          },
+          "coordinator_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "EIP-712 domain version of the coordinator at `coordinator_address` —\nthe CollabRefund signature must use it or recovery fails on-chain.",
+            "minimum": 0
           },
           "min_amount_out": {
             "type": "string",
