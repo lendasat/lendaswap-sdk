@@ -88,6 +88,20 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
     }
 
     case "clientfunded": {
+      // Pay-on-Lightning: "funded" means the Lightning payment is locked in —
+      // there is no on-chain deposit and thus no refund to offer. Wait for the
+      // server to fund its leg; a payment that never settles unwinds on its own.
+      if (!clientFunds) {
+        const wait: WaitAction = {
+          id: "wait",
+          waitingOn: "server_funding",
+          recommended: true,
+          automation: "auto",
+          reason: "Waiting for the server to fund the swap.",
+        };
+        return { recommended: "wait", actions: [wait] };
+      }
+
       const refundUnlocked = clientChainNow >= clientRefundLocktime;
 
       if (refundUnlocked) {
@@ -273,6 +287,20 @@ export function deriveSwapActions(input: SwapActionInput): SwapActions {
     case "serverwontfund":
     case "clientfundedtoolate":
     case "clientinvalidfunded": {
+      // Pay-on-Lightning: no on-chain deposit at risk — the failed swap's
+      // Lightning payment unwinds on its own. Terminal.
+      if (!clientFunds) {
+        const done: NoneAction = {
+          id: "none",
+          outcome: "refunded",
+          recommended: true,
+          automation: "auto",
+          reason:
+            "The swap did not complete — your Lightning payment will be refunded automatically.",
+        };
+        return { recommended: "none", actions: [done] };
+      }
+
       // The swap failed with the client's deposit funded — the only path is to
       // reclaim it via the client's refund timelock. (No happy-path wait: unlike
       // `clientfunded`, the swap will not complete.)

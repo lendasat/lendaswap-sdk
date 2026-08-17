@@ -388,6 +388,45 @@ describe("deriveSwapActions", () => {
         false,
       );
     });
+
+    it("clientfunded (payment locked in) → wait on server funding, never refund", () => {
+      // clientRefundLocktime is 0 for pay-on-Lightning swaps, so without the
+      // clientFunds guard the refund would look permanently unlocked.
+      const result = deriveSwapActions(
+        input({
+          status: "clientfunded",
+          clientFunds: false,
+          clientRefundLocktime: 0,
+        }),
+      );
+      expect(result.recommended).toBe("wait");
+      expect(result.actions[0]).toMatchObject({
+        id: "wait",
+        waitingOn: "server_funding",
+      });
+      expect(result.actions.some((a) => a.id === "refund_unilateral")).toBe(
+        false,
+      );
+    });
+
+    it.each([
+      "clientfundedserverrefunded",
+      "serverwontfund",
+      "clientfundedtoolate",
+      "clientinvalidfunded",
+    ] as const)("%s → terminal none (the Lightning payment unwinds on its own)", (status) => {
+      const result = deriveSwapActions(
+        input({ status, clientFunds: false, clientRefundLocktime: 0 }),
+      );
+      expect(result.recommended).toBe("none");
+      expect(result.actions[0]).toMatchObject({
+        id: "none",
+        outcome: "refunded",
+      });
+      expect(result.actions.some((a) => a.id === "refund_unilateral")).toBe(
+        false,
+      );
+    });
   });
 
   // The refund-blocked waits carry `refund_timelock` — a consumer shows the
