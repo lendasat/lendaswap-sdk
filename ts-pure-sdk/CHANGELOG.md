@@ -1,5 +1,16 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 2.0.1
+
+### Patch Changes
+
+- 36fab34: Target backend 0.3.6 in the x-satora-server-version header.
+- 493a61a: Target backend 0.3.7 in the x-satora-server-version header.
+- 52e29d6: `buildRedeemDigest` accepts an optional `htlcVersion` (the swap response's
+  `evm_htlc_version`, defaulting to 4) so EIP-712 redeem signatures keep
+  matching the HTLCErc20 deployment a swap was created on across contract
+  upgrades. The gasless and userop claim paths thread it automatically.
+
 ## 2.0.0
 
 ### Major Changes
