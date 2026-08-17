@@ -355,6 +355,13 @@ export class Client {
   }
 
   /** Delegated to the legacy client (migration checkpoint). */
+  getLightningSendQuote(
+    ...args: Parameters<LegacyClient["getLightningSendQuote"]>
+  ): ReturnType<LegacyClient["getLightningSendQuote"]> {
+    return this.#legacy.getLightningSendQuote(...args);
+  }
+
+  /** Delegated to the legacy client (migration checkpoint). */
   getSwap(
     ...args: Parameters<LegacyClient["getSwap"]>
   ): ReturnType<LegacyClient["getSwap"]> {

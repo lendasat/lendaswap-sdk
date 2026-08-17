@@ -563,12 +563,91 @@ export interface GetQuoteParams {
    */
   extraFees?: number;
   /**
+   * Optional Lightning destination (BOLT11 invoice, lightning address or
+   * LNURL) for Arkade → Lightning quotes. When set, the quote is served
+   * by `/quote/lightning-send` and prices the swap with the provider's
+   * REAL Lightning send fee for that exact payment instead of the flat
+   * network-fee estimate. Invoices pin the payout (amount params are
+   * ignored); addresses/LNURLs use the provided source or target amount.
+   * Ignored for any other pair; on failure the quote silently falls back
+   * to the estimate.
+   */
+  lightningDestination?: string;
+  /**
    * Optional ATA-existence hint for non-EVM CCTP destinations
    * (Solana). `true` = recipient has no USDC ATA yet, `false` =
    * recipient already holds USDC. Omit to let the backend fall back
    * to its conservative default.
    */
   bridgeRecipientSetup?: boolean;
+}
+
+/**
+ * Parameters for {@link Client.getLightningSendQuote}. Exactly one of the
+ * destination fields must be set; `lightningAddress`/`lnurl` additionally
+ * require exactly one of the amount fields.
+ */
+export interface GetLightningSendQuoteParams {
+  /**
+   * BOLT11 invoice the user wants paid; its amount pins the payout.
+   * `sourceAmountSats` cannot be combined with it.
+   */
+  lightningInvoice?: string;
+  /** Lightning address (`user@domain`). */
+  lightningAddress?: string;
+  /** LNURL-pay string (`lnurl1...`). */
+  lnurl?: string;
+  /**
+   * Total to lock on the source chain in satoshis; fees are deducted from
+   * the Lightning payout (send-max). `lightningAddress`/`lnurl` only.
+   */
+  sourceAmountSats?: number;
+  /**
+   * Amount the recipient should receive over Lightning in satoshis; fees
+   * are added on top. With `lightningInvoice` it must match the invoice.
+   */
+  targetAmountSats?: number;
+  /** Optional referral code (falls back to the client default). */
+  referralCode?: string;
+  /**
+   * Optional per-swap fee surcharge in basis points
+   * (0..=max_extra_fee_bps configured on the matching developer key).
+   * Must be passed identically on the corresponding createSwap.
+   */
+  extraFees?: number;
+}
+
+/** Exact quote for a swap paying out over Lightning. Amounts in sats. */
+export interface LightningSendQuote {
+  /** Total the user locks on the source chain (payout + fees). */
+  sourceAmountSats: number;
+  /** Paid out on the Lightning invoice. */
+  targetAmountSats: number;
+  /** Protocol fee. */
+  protocolFeeSats: number;
+  /** Provider-quoted Lightning send fee, charged as the network fee. */
+  networkFeeSats: number;
+  /** Protocol fee rate (as decimal, e.g. 0.003 = 0.30%). */
+  protocolFeeRate: number;
+  /** Minimum payout for this route, in sats. */
+  minAmountSats: number;
+  /** Maximum payout for this route, in sats. */
+  maxAmountSats: number;
+}
+
+/**
+ * Classify a raw Lightning destination string. Addresses contain `@`,
+ * LNURLs are bech32 strings with the `lnurl` HRP, and anything else
+ * starting with `ln` is treated as a BOLT11 invoice.
+ */
+function classifyLightningDestination(
+  destination: string,
+): "invoice" | "address" | "lnurl" | undefined {
+  const d = destination.trim().toLowerCase();
+  if (d.includes("@")) return "address";
+  if (d.startsWith("lnurl1")) return "lnurl";
+  if (d.startsWith("ln")) return "invoice";
+  return undefined;
 }
 
 const DEFAULT_BASE_URL = "https://api.satora.io/";
@@ -1583,6 +1662,30 @@ export class Client {
    * @throws Error if the request fails.
    */
   async getQuote(params: GetQuoteParams): Promise<QuoteResponse> {
+    // Arkade → Lightning with a concrete destination: serve the quote from
+    // /quote/lightning-send, which prices the provider's real send fee for
+    // that exact payment. Fall back to the estimate paths on any failure
+    // (bad destination, LNURL service down, ...) — a create would surface
+    // the real error.
+    if (
+      params.lightningDestination &&
+      params.sourceChain === "Arkade" &&
+      params.targetChain === "Lightning"
+    ) {
+      try {
+        return await this.#lightningSendQuoteAsQuote(
+          params,
+          params.lightningDestination,
+        );
+      } catch (err) {
+        this.#logger.warn({
+          event: "client.getQuote.lightningSendFallback",
+          message:
+            "exact lightning send quote failed; falling back to estimate",
+          data: { error: err instanceof Error ? err.message : String(err) },
+        });
+      }
+    }
     if (this.#canComposeQuote(params)) {
       try {
         return await this.composeQuote({
@@ -1612,6 +1715,124 @@ export class Client {
       }
     }
     return this.#getQuoteFromServer(params);
+  }
+
+  /**
+   * Exact quote for an Arkade → Lightning swap, from a concrete
+   * destination (BOLT11 invoice, lightning address or LNURL).
+   *
+   * Unlike {@link getQuote}, whose network fee for Lightning targets is an
+   * estimate, this resolves the destination and prices the swap with the
+   * provider's actual Lightning send fee — the same numbers `createSwap`
+   * persists. Informational only: create re-quotes the fee, which can move
+   * between the two calls.
+   *
+   * @param params - Destination plus pinned amount (see
+   *   {@link GetLightningSendQuoteParams} for the field rules).
+   * @returns The exact quote, all amounts in sats.
+   * @throws Error if the request fails or the parameters are invalid.
+   */
+  async getLightningSendQuote(
+    params: GetLightningSendQuoteParams,
+  ): Promise<LightningSendQuote> {
+    const destinations = [
+      params.lightningInvoice,
+      params.lightningAddress,
+      params.lnurl,
+    ].filter((d) => d !== undefined);
+    if (destinations.length !== 1) {
+      throw new Error(
+        "Provide exactly one of lightningInvoice, lightningAddress or lnurl",
+      );
+    }
+
+    const { data, error } = await this.#apiClient.GET("/quote/lightning-send", {
+      params: {
+        query: {
+          lightning_invoice: params.lightningInvoice,
+          lightning_address: params.lightningAddress,
+          lnurl: params.lnurl,
+          source_amount_sats: params.sourceAmountSats,
+          target_amount_sats: params.targetAmountSats,
+          // Per-call referral wins; fall back to the client default.
+          ref: params.referralCode ?? this.#config.referralCode,
+          extra_fees: params.extraFees,
+        },
+      },
+    });
+    if (error) {
+      throw new Error(
+        `Failed to get lightning send quote: ${JSON.stringify(error)}`,
+      );
+    }
+    if (!data) {
+      throw new Error("No lightning send quote data returned");
+    }
+
+    return {
+      sourceAmountSats: data.source_amount_sats,
+      targetAmountSats: data.target_amount_sats,
+      protocolFeeSats: data.protocol_fee_sats,
+      networkFeeSats: data.network_fee_sats,
+      protocolFeeRate: data.protocol_fee_rate,
+      minAmountSats: data.min_amount_sats,
+      maxAmountSats: data.max_amount_sats,
+    };
+  }
+
+  /**
+   * Serve an Arkade → Lightning `getQuote` from `/quote/lightning-send`,
+   * adapted to the `QuoteResponse` shape (1:1 rate; net amounts carry the
+   * exact lock/payout including the provider's real send fee).
+   */
+  async #lightningSendQuoteAsQuote(
+    params: GetQuoteParams,
+    destination: string,
+  ): Promise<QuoteResponse> {
+    const kind = classifyLightningDestination(destination);
+    if (!kind) {
+      throw new Error(`unrecognized lightning destination: ${destination}`);
+    }
+    // The invoice pins the payout itself; only address/LNURL flows take a
+    // pinned amount.
+    const sourceAmountSats =
+      kind !== "invoice" && params.sourceAmount != null
+        ? Number(params.sourceAmount)
+        : undefined;
+    const targetAmountSats =
+      kind !== "invoice" &&
+      sourceAmountSats == null &&
+      params.targetAmount != null
+        ? Number(params.targetAmount)
+        : undefined;
+
+    const q = await this.getLightningSendQuote({
+      lightningInvoice: kind === "invoice" ? destination : undefined,
+      lightningAddress: kind === "address" ? destination : undefined,
+      lnurl: kind === "lnurl" ? destination : undefined,
+      sourceAmountSats,
+      targetAmountSats,
+      referralCode: params.referralCode,
+      extraFees: params.extraFees,
+    });
+
+    // 1:1 rate; the pinned side carries the pre-fee amount on both sides,
+    // mirroring the server's /quote for this route.
+    const pinned =
+      sourceAmountSats != null ? q.sourceAmountSats : q.targetAmountSats;
+    return {
+      exchange_rate: "1",
+      network_fee: q.networkFeeSats,
+      gasless_network_fee: 0,
+      protocol_fee: q.protocolFeeSats,
+      protocol_fee_rate: q.protocolFeeRate,
+      min_amount: q.minAmountSats,
+      max_amount: q.maxAmountSats,
+      source_amount: String(pinned),
+      target_amount: String(pinned),
+      net_source_amount: String(q.sourceAmountSats),
+      net_target_amount: String(q.targetAmountSats),
+    };
   }
 
   /**

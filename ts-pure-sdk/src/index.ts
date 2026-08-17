@@ -167,6 +167,8 @@ export type {
   EvmToArkadeSwapResult,
   EvmToBitcoinSwapOptions,
   EvmToBitcoinSwapResult,
+  GetLightningSendQuoteParams,
+  LightningSendQuote,
   OnchainRefundOptions,
   RecoverAllSwapsOptions,
   RecoverAllSwapsResult,

@@ -2523,10 +2523,25 @@ export interface components {
         LightningSendQuoteResponse: {
             /**
              * Format: int64
+             * @description Maximum payout for this route, in satoshis.
+             */
+            max_amount_sats: number;
+            /**
+             * Format: int64
+             * @description Minimum payout for this route, in satoshis.
+             */
+            min_amount_sats: number;
+            /**
+             * Format: int64
              * @description Provider-quoted Lightning send fee, charged as the network fee,
              *     in satoshis.
              */
             network_fee_sats: number;
+            /**
+             * Format: double
+             * @description Protocol fee rate (as decimal, e.g. 0.003 = 0.30%).
+             */
+            protocol_fee_rate: number;
             /**
              * Format: int64
              * @description Protocol fee in satoshis.

@@ -5311,14 +5311,34 @@
           "source_amount_sats",
           "target_amount_sats",
           "protocol_fee_sats",
-          "network_fee_sats"
+          "network_fee_sats",
+          "protocol_fee_rate",
+          "min_amount_sats",
+          "max_amount_sats"
         ],
         "properties": {
+          "max_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Maximum payout for this route, in satoshis.",
+            "minimum": 0
+          },
+          "min_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Minimum payout for this route, in satoshis.",
+            "minimum": 0
+          },
           "network_fee_sats": {
             "type": "integer",
             "format": "int64",
             "description": "Provider-quoted Lightning send fee, charged as the network fee,\nin satoshis.",
             "minimum": 0
+          },
+          "protocol_fee_rate": {
+            "type": "number",
+            "format": "double",
+            "description": "Protocol fee rate (as decimal, e.g. 0.003 = 0.30%)."
           },
           "protocol_fee_sats": {
             "type": "integer",
