@@ -16,7 +16,9 @@
   "paths": {
     "/api/delegate/cosigner-pk": {
       "get": {
-        "tags": ["delegate"],
+        "tags": [
+          "delegate"
+        ],
         "summary": "Get the delegate cosigner public key.",
         "description": "Clients need this key when preparing delegate PSBTs so the backend\ncan participate in the batch ceremony as a cosigner.",
         "operationId": "get_cosigner_pk",
@@ -46,7 +48,9 @@
     },
     "/api/delegate/settle": {
       "post": {
-        "tags": ["delegate"],
+        "tags": [
+          "delegate"
+        ],
         "summary": "Settle a delegated batch.",
         "description": "The client prepares and signs delegate PSBTs (intent + forfeits), then\nPOSTs them here. The backend reconstructs the `Delegate` struct and runs\nthe full Ark batch ceremony on the client's behalf.\n\nThis endpoint blocks until the batch completes (~10-30s).",
         "operationId": "settle_delegate",
@@ -96,7 +100,9 @@
     },
     "/api/swap/arkade-evm/{id}/collab-refund": {
       "post": {
-        "tags": ["swap-btc-evm"],
+        "tags": [
+          "swap-btc-evm"
+        ],
         "summary": "Collaboratively refund spendable VTXOs.",
         "description": "The client builds an offchain transaction (ark_tx + checkpoints) spending the VHTLC\nvia the `refund_script` leaf, signs as sender, and sends the partially-signed PSBTs here.\nThe server cosigns as receiver and returns the countersigned PSBTs.\nThe client then submits to Arkade for the server (3rd) signature.",
         "operationId": "collab_refund",
@@ -178,7 +184,9 @@
     },
     "/api/swap/arkade-evm/{id}/collab-refund-delegate": {
       "post": {
-        "tags": ["swap-btc-evm"],
+        "tags": [
+          "swap-btc-evm"
+        ],
         "summary": "Collaboratively refund recoverable VTXOs via the delegate batch flow.",
         "description": "The client prepares delegate PSBTs (intent_proof + forfeits) spending the VHTLC\nvia the `refund_script` leaf, signs as sender, and sends the partially-signed PSBTs here.\nThe server cosigns as receiver and returns the countersigned PSBTs.\nThe client then calls `/api/delegate/settle` to complete the batch ceremony.",
         "operationId": "collab_refund_delegate",
@@ -260,7 +268,9 @@
     },
     "/api/swap/{id}/collab-refund-evm": {
       "post": {
-        "tags": ["swap-evm-btc"],
+        "tags": [
+          "swap-evm-btc"
+        ],
         "summary": "Collaboratively refund an EVM HTLC before timelock expiry.",
         "description": "The client signs a coordinator-level `CollabRefund` EIP-712 message authorizing\nthe refund parameters. The server cosigns with an HTLC-level `Refund` signature\n(as claimAddress, waiving the timelock) and submits the transaction on-chain.\n\nSupports EVM-to-Arkade, EVM-to-Bitcoin, and EVM-to-Lightning swaps.",
         "operationId": "collab_refund_evm",
@@ -342,7 +352,9 @@
     },
     "/api/swap/{id}/collab-refund-evm/params": {
       "get": {
-        "tags": ["swap-evm-btc"],
+        "tags": [
+          "swap-evm-btc"
+        ],
         "summary": "Get EIP-712 parameters for collaborative EVM HTLC refund.",
         "description": "Returns the addresses, amounts, and struct fields the client needs to\nconstruct and sign the `CollabRefund` EIP-712 typed data. The client signs\nthis, then POSTs the signature to the collab-refund-evm endpoint.\n\nThe refund always sweeps the BTC-pegged HTLC token (tBTC/WBTC) to the\ndepositor: `sweepToken` = tBTC/WBTC, `minAmountOut` = 0.",
         "operationId": "collab_refund_evm_params",
@@ -394,7 +406,9 @@
     },
     "/api/vtxo-swap": {
       "post": {
-        "tags": ["vtxo-swap"],
+        "tags": [
+          "vtxo-swap"
+        ],
         "summary": "Create a new VTXO swap",
         "operationId": "create_vtxo_swap",
         "requestBody": {
@@ -443,7 +457,9 @@
     },
     "/api/vtxo-swap/estimate": {
       "post": {
-        "tags": ["vtxo-swap"],
+        "tags": [
+          "vtxo-swap"
+        ],
         "summary": "Estimate fee for VTXO swap",
         "operationId": "estimate_vtxo_swap",
         "requestBody": {
@@ -492,7 +508,9 @@
     },
     "/api/vtxo-swap/{id}": {
       "get": {
-        "tags": ["vtxo-swap"],
+        "tags": [
+          "vtxo-swap"
+        ],
         "summary": "Get VTXO swap by ID",
         "operationId": "get_vtxo_swap",
         "parameters": [
@@ -543,7 +561,9 @@
     },
     "/chain-config": {
       "get": {
-        "tags": ["swap-pairs"],
+        "tags": [
+          "swap-pairs"
+        ],
         "summary": "Return per-chain configuration (BTC-pegged token, … more to come).",
         "operationId": "get_chain_config",
         "responses": {
@@ -562,7 +582,9 @@
     },
     "/dex-calldata/claim": {
       "post": {
-        "tags": ["dex-calldata"],
+        "tags": [
+          "dex-calldata"
+        ],
         "summary": "Fetch fresh calldata for the **claim** flow.",
         "description": "User redeems tBTC from the HTLC and swaps it for the foreign target\nlanding on the same EOA. The server uses `recipient = sender`.\n\nStateless — no swap-id binding, no persistence. The SDK is expected to\ncall this immediately before submitting a user op so the calldata stays\nfresh; on `AA23 reverted` / slippage failure the SDK should retry.",
         "operationId": "post_dex_calldata_claim",
@@ -622,7 +644,9 @@
     },
     "/dex-calldata/fund": {
       "post": {
-        "tags": ["dex-calldata"],
+        "tags": [
+          "dex-calldata"
+        ],
         "summary": "Fetch fresh calldata for the **fund** flow.",
         "description": "User spends source tokens on their own EOA; the swap output lands on\nthe HTLC coordinator (derived server-side from `to_chain`).\n\nStateless — no swap-id binding, no persistence. The SDK is expected to\ncall this immediately before submitting a user op so the calldata stays\nfresh; on `AA23 reverted` / slippage failure the SDK should retry.",
         "operationId": "post_dex_calldata_fund",
@@ -682,7 +706,9 @@
     },
     "/dex-quote": {
       "post": {
-        "tags": ["dex-quote"],
+        "tags": [
+          "dex-quote"
+        ],
         "summary": "Quote the EVM leg of a foreign-target swap.",
         "description": "Read-only price discovery — no calldata is constructed and no slippage\nis applied. For execution, call [`/dex-calldata`] which returns\nslippage-adjusted bounds plus the bytes to submit.",
         "operationId": "post_dex_quote",
@@ -742,7 +768,9 @@
     },
     "/evm-tokens": {
       "get": {
-        "tags": ["evm-tokens"],
+        "tags": [
+          "evm-tokens"
+        ],
         "summary": "Get available EVM tokens from 1inch for supported chains",
         "operationId": "get_evm_tokens",
         "parameters": [
@@ -784,7 +812,9 @@
     },
     "/evm-tokens/chains": {
       "get": {
-        "tags": ["evm-tokens"],
+        "tags": [
+          "evm-tokens"
+        ],
         "summary": "Get supported EVM chains",
         "operationId": "get_evm_chains",
         "responses": {
@@ -803,7 +833,9 @@
     },
     "/health": {
       "get": {
-        "tags": ["health"],
+        "tags": [
+          "health"
+        ],
         "summary": "Health check endpoint",
         "operationId": "health_check",
         "responses": {
@@ -822,7 +854,9 @@
     },
     "/mtp": {
       "get": {
-        "tags": ["mtp"],
+        "tags": [
+          "mtp"
+        ],
         "summary": "Return the current cached Median Time Past (MTP) and tip height.",
         "operationId": "get_mtp",
         "responses": {
@@ -844,7 +878,9 @@
     },
     "/network-fees": {
       "get": {
-        "tags": ["swap-pairs"],
+        "tags": [
+          "swap-pairs"
+        ],
         "summary": "Return per-pair network-fee estimates in sats at current gas / mining\nprices.",
         "operationId": "get_network_fees",
         "responses": {
@@ -863,7 +899,9 @@
     },
     "/quote": {
       "get": {
-        "tags": ["quote"],
+        "tags": [
+          "quote"
+        ],
         "summary": "Get a quote for swapping BTC to/from EVM tokens",
         "description": "Specify exactly one of source_amount or target_amount.\nAmounts are in the smallest unit of the respective token (satoshis for BTC, raw units for EVM\ntokens).",
         "operationId": "get_quote",
@@ -910,7 +948,10 @@
             "description": "Amount in smallest unit of source token (mutually exclusive with target_amount)",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -919,7 +960,10 @@
             "description": "Amount in smallest unit of target token (mutually exclusive with source_amount)",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -928,7 +972,10 @@
             "description": "Optional: CCTP bridge destination chain (e.g., \"Base\", \"Optimism\").\nWhen set, the CCTP forwarding fee is deducted from the target amount.",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -937,7 +984,10 @@
             "description": "Optional: CCTP bridge source chain (e.g., \"Optimism\", \"Base\"). Set when\nthe user's source USDC originates on another CCTP chain and hops to\nArbitrum via CCTPv2 before the HTLC is created. The quote internally\nruns the DEX calculation on Arbitrum-native USDC and accounts for the\nfast-transfer fee deducted on the burn.",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -955,7 +1005,10 @@
             "description": "Optional referral code for tracking.",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -964,7 +1017,10 @@
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).\nRejected with 400 if it exceeds the per-key cap.",
             "required": false,
             "schema": {
-              "type": ["integer", "null"],
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int32",
               "minimum": 0
             }
@@ -994,9 +1050,159 @@
         }
       }
     },
+    "/quote/lightning-send": {
+      "get": {
+        "tags": [
+          "quote"
+        ],
+        "summary": "Exact quote for a swap paying out over Lightning",
+        "description": "Resolves the destination (invoice, lightning address or LNURL) and\nprices the swap with the provider's actual Lightning send fee for that\npayment — unlike `/quote`, whose network fee for Lightning-target\nroutes is an estimate. `source_chain` defaults to \"Arkade\", currently\nthe only supported source. Informational: the create endpoint\nre-quotes the fee, which may move between the two calls.",
+        "operationId": "get_lightning_send_quote",
+        "parameters": [
+          {
+            "name": "source_chain",
+            "in": "query",
+            "description": "Source chain of the swap. Defaults to \"Arkade\" — currently the\nonly supported source; other chains (e.g. EVM) are planned.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Chain"
+                }
+              ]
+            }
+          },
+          {
+            "name": "lightning_invoice",
+            "in": "query",
+            "description": "BOLT11 invoice the user wants paid; pins the payout. Mutually\nexclusive with `lightning_address` and `lnurl`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "lightning_address",
+            "in": "query",
+            "description": "Lightning address (`user@domain`). Mutually exclusive with the\nother destination fields; requires a pinned amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "lnurl",
+            "in": "query",
+            "description": "LNURL-pay string. Mutually exclusive with the other destination\nfields; requires a pinned amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "source_amount_sats",
+            "in": "query",
+            "description": "Total to lock on the source chain in satoshis (fees are deducted\nfrom the Lightning payout — send-max). Only valid with\n`lightning_address`/`lnurl`; mutually exclusive with\n`target_amount_sats`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "target_amount_sats",
+            "in": "query",
+            "description": "Amount the recipient should receive over Lightning in satoshis\n(fees are added on top). Optional with `lightning_invoice`, where\nit must match the invoice amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "description": "Optional referral code.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "extra_fees",
+            "in": "query",
+            "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact quote for the given Lightning destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningSendQuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Lightning is not available on this deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/referral-fee": {
       "get": {
-        "tags": ["swap-pairs"],
+        "tags": [
+          "swap-pairs"
+        ],
         "summary": "Resolve the referral/extra-fee delta for a referral code.",
         "operationId": "get_referral_fee",
         "parameters": [
@@ -1006,7 +1212,10 @@
             "description": "Referral code. When omitted/unknown/revoked the response is a zero\nextra fee (the base fee applies unchanged).",
             "required": false,
             "schema": {
-              "type": ["string", "null"]
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           {
@@ -1015,7 +1224,10 @@
             "description": "Optional per-swap fee surcharge in basis points. Rejected with 400 if\nit exceeds the referral key's `max_extra_fee_bps`. When omitted the\nkey's `default_extra_fee_bps` applies.",
             "required": false,
             "schema": {
-              "type": ["integer", "null"],
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int32",
               "minimum": 0
             }
@@ -1047,7 +1259,9 @@
     },
     "/status": {
       "get": {
-        "tags": ["status"],
+        "tags": [
+          "status"
+        ],
         "summary": "Probe every external dependency and return their aggregated health.",
         "description": "Returns 200 when every service is healthy, 503 otherwise — the body\ncarries the per-service breakdown either way so callers can distinguish\nwhich dependency is down.",
         "operationId": "get_status",
@@ -1077,7 +1291,9 @@
     },
     "/support-agents": {
       "get": {
-        "tags": ["support"],
+        "tags": [
+          "support"
+        ],
         "summary": "Return the configured support agent npubs.",
         "operationId": "get_support_agents",
         "responses": {
@@ -1096,7 +1312,9 @@
     },
     "/swap-pairs": {
       "get": {
-        "tags": ["swap-pairs"],
+        "tags": [
+          "swap-pairs"
+        ],
         "summary": "Return all supported swap pairs with their limits (in satoshis) and base fee percentages.",
         "operationId": "get_swap_pairs",
         "responses": {
@@ -1115,7 +1333,9 @@
     },
     "/swap/arkade/evm": {
       "post": {
-        "tags": ["swap-btc-evm"],
+        "tags": [
+          "swap-btc-evm"
+        ],
         "summary": "Create a chain-agnostic Arkade-to-EVM swap.",
         "operationId": "create_arkade_evm_swap",
         "requestBody": {
@@ -1174,7 +1394,9 @@
     },
     "/swap/arkade/lightning": {
       "post": {
-        "tags": ["swap-arkade-lightning"],
+        "tags": [
+          "swap-arkade-lightning"
+        ],
         "summary": "Create a new Arkade to Lightning swap request",
         "description": "The user locks Arkade VTXOs in a VHTLC and receives BTC on their\nLightning invoice. Flow:\n1. User funds the returned Arkade VHTLC (locked to the invoice's payment hash)\n2. Server pays the invoice; the settled payment reveals the preimage\n3. Server claims the VHTLC with the preimage\n\nIf the payment fails the swap becomes `ServerWontFund` and the user\nreclaims their VTXOs via the collaborative refund endpoint (or\nunilaterally after the refund locktime).",
         "operationId": "arkade_to_lightning_swap",
@@ -1244,7 +1466,9 @@
     },
     "/swap/bitcoin/arkade": {
       "post": {
-        "tags": ["swap-btc-arkade"],
+        "tags": [
+          "swap-btc-arkade"
+        ],
         "summary": "Create a new Bitcoin (on-chain) to Arkade swap request",
         "description": "The user provides an on-chain BTC amount to swap and receives Arkade VTXOs.\nFlow:\n1. User sends BTC to the Taproot HTLC address returned\n2. After 1 confirmation, server creates Arkade VHTLC for user\n3. User claims Arkade VHTLC with secret, revealing it\n4. Server claims on-chain BTC with the revealed secret",
         "operationId": "bitcoin_to_arkade_swap",
@@ -1304,7 +1528,9 @@
     },
     "/swap/bitcoin/evm": {
       "post": {
-        "tags": ["swap-btc-evm"],
+        "tags": [
+          "swap-btc-evm"
+        ],
         "summary": "Create a chain-agnostic Bitcoin-to-EVM swap.",
         "operationId": "create_bitcoin_evm_swap",
         "requestBody": {
@@ -1363,7 +1589,9 @@
     },
     "/swap/bulk-status": {
       "post": {
-        "tags": ["swaps"],
+        "tags": [
+          "swaps"
+        ],
         "summary": "Get the status of multiple swaps at once.",
         "description": "Returns only the swap status (not the full per-direction details) so the\nwhole batch is served by a single database query. Use `GET /swap/{id}` when\nfull details are needed for a specific swap.",
         "operationId": "get_bulk_status",
@@ -1413,7 +1641,9 @@
     },
     "/swap/evm/arkade": {
       "post": {
-        "tags": ["swap-evm-btc"],
+        "tags": [
+          "swap-evm-btc"
+        ],
         "summary": "Create a chain-agnostic EVM-to-Arkade swap.",
         "operationId": "create_evm_to_arkade_swap_generic",
         "requestBody": {
@@ -1472,7 +1702,9 @@
     },
     "/swap/evm/bitcoin": {
       "post": {
-        "tags": ["swap-evm-btc"],
+        "tags": [
+          "swap-evm-btc"
+        ],
         "summary": "Create a chain-agnostic EVM-to-Bitcoin swap.",
         "operationId": "create_evm_to_bitcoin_swap",
         "requestBody": {
@@ -1531,7 +1763,9 @@
     },
     "/swap/lightning/arkade": {
       "post": {
-        "tags": ["swap-lightning-arkade"],
+        "tags": [
+          "swap-lightning-arkade"
+        ],
         "summary": "Create a new Lightning to Arkade swap request",
         "description": "The user pays a BOLT11 hold invoice and receives Arkade VTXOs.\nFlow:\n1. User pays the returned hold invoice (the payment is held, not settled)\n2. Server creates an Arkade VHTLC locked to the same hash\n3. User claims the VHTLC with their secret, revealing it\n4. Server settles the held Lightning payment with the revealed secret",
         "operationId": "lightning_to_arkade_swap",
@@ -1601,7 +1835,9 @@
     },
     "/swap/recover": {
       "post": {
-        "tags": ["recovery"],
+        "tags": [
+          "recovery"
+        ],
         "summary": "Recover swaps by deriving user_id keys from an Xpub",
         "description": "This endpoint allows clients to recover their swap history after importing a mnemonic. The\nclient provides an Xpub they used to derive `user_id`s, and the server derives `user_id` keys at\nm/9419/121923/<index> from the requested start index until the server-owned gap limit or scan\ncap is reached.",
         "operationId": "recover_swaps",
@@ -1661,7 +1897,9 @@
     },
     "/swap/{id}": {
       "get": {
-        "tags": ["swaps"],
+        "tags": [
+          "swaps"
+        ],
         "summary": "Get swap status and details by ID",
         "operationId": "get_swap",
         "parameters": [
@@ -1712,7 +1950,9 @@
     },
     "/swap/{id}/claim-gasless": {
       "post": {
-        "tags": ["swap-btc-evm"],
+        "tags": [
+          "swap-btc-evm"
+        ],
         "summary": "Claims an EVM-targeted swap gaslessly via the HTLCCoordinator contract.",
         "description": "Supports Arkade-to-EVM, Lightning and Bitcoin-to-EVM swaps. The server submits\n`coordinator.redeemAndExecute` on the client's behalf, using the client's\nEIP-712 signature and secret.\n\n# Prerequisites — what the client must do before calling this endpoint\n\n1. **Create a swap** via one of the swap endpoints (e.g. `POST /swap/arkade/evm`). Wait for the\n   swap status to reach `ServerFunded`.\n\n2. **Fetch calldata** via [`GET\n   /swap/{id}/redeem-and-swap-calldata`](#/redeem-and-swap-calldata/get_dex_calldata). This\n   returns:\n   - `dex_calldata` — DEX swap calldata (only for non-WBTC targets)\n   - `gasless_fee_sats` — the fee deducted from the HTLC amount\n   - `calls_hash` — `keccak256(abi.encode(calls))`, must be included in the signature\n\n3. **Construct the EIP-712 signature** over the `Redeem` struct:\n\n   **Domain:**\n   ```text\n   EIP712Domain(string name, string version, uint256 chainId, address verifyingContract)\n   name            = \"HTLCErc20\"\n   version         = \"4\"\n   chainId         = <target EVM chain ID>\n   verifyingContract = <HTLCErc20 contract address (swap.evm_htlc_address)>\n   ```\n\n   **Struct:**\n   ```text\n   Redeem(\n       bytes32 preimage,       // the swap secret\n       uint256 amount,         // WBTC amount in the HTLC (in sats)\n       address token,          // WBTC token address\n       address sender,         // server's EVM address\n       uint256 timelock,       // HTLC refund locktime\n       address caller,         // HTLCCoordinator contract address\n       address destination,    // where output tokens go\n       address sweepToken,     // target token (or WBTC if direct)\n       uint256 minAmountOut,   // slippage protection from step 2\n       bytes32 callsHash       // from step 2\n   )\n   ```\n\n   The final digest is: `keccak256(\\x19\\x01 || domainSeparator || structHash)`\n\n   Sign this digest with the client's EVM private key (secp256k1) to obtain\n   `v`, `r`, `s`.\n\n   **JavaScript example (using ethers v6):**\n\n   ```javascript\n   import { ethers } from \"ethers\";\n\n   // 1. Fetch calldata (returns calls_hash + optional dex_calldata)\n   const { calls_hash, dex_calldata, gasless_fee_sats, min_amount_out } = await fetch(\n     `${baseUrl}/swap/${swapId}/redeem-and-swap-calldata?destination=${destination}`\n   ).then(r => r.json());\n\n   // 2. Determine sweepToken\n   const needsDexSwap = targetTokenAddress.toLowerCase() !== wbtcAddress.toLowerCase();\n   const sweepToken = needsDexSwap ? targetTokenAddress : wbtcAddress;\n\n   // 3. Build EIP-712 typed data and sign\n   const wallet = new ethers.Wallet(privateKey);\n\n   const domain = {\n     name: \"HTLCErc20\",\n     version: \"4\",\n     chainId: swap.evm_chain_id,               // e.g. 42161 for Arbitrum\n     verifyingContract: swap.evm_htlc_address,  // HTLCErc20 contract\n   };\n\n   const types = {\n     Redeem: [\n       { name: \"preimage\",     type: \"bytes32\" },\n       { name: \"amount\",       type: \"uint256\" },\n       { name: \"token\",        type: \"address\" },\n       { name: \"sender\",       type: \"address\" },\n       { name: \"timelock\",     type: \"uint256\" },\n       { name: \"caller\",       type: \"address\" },\n       { name: \"destination\",  type: \"address\" },\n       { name: \"sweepToken\",   type: \"address\" },\n       { name: \"minAmountOut\", type: \"uint256\" },\n       { name: \"callsHash\",   type: \"bytes32\" },\n     ],\n   };\n\n   const message = {\n     preimage:     secret,                        // 0x-prefixed 32-byte hex\n     amount:       swap.evm_expected_sats,        // WBTC sats locked in HTLC\n     token:        wbtcAddress,                   // WBTC on the target chain\n     sender:       swap.server_evm_address,       // server (HTLC creator)\n     timelock:     swap.evm_refund_locktime,      // HTLC expiry timestamp\n     caller:       swap.evm_coordinator_address,  // HTLCCoordinator contract\n     destination:  destination,                   // where output tokens go\n     sweepToken:   sweepToken,\n     minAmountOut: min_amount_out,                // from step 1\n     callsHash:    calls_hash,                    // from step 1\n   };\n\n   const sig = await wallet.signTypedData(domain, types, message);\n   const { v, r, s } = ethers.Signature.from(sig);\n\n   // 4. POST to claim-gasless\n   await fetch(`${baseUrl}/swap/${swapId}/claim-gasless`, {\n     method: \"POST\",\n     headers: { \"Content-Type\": \"application/json\" },\n     body: JSON.stringify({\n       secret, destination, v, r, s,\n       dex_calldata: needsDexSwap ? dex_calldata : undefined,\n     }),\n   });\n   ```\n\n4. **POST** the request to this endpoint with the secret, destination, signature, and optionally\n   the `dex_calldata` from step 2.",
         "operationId": "claim_via_gasless",
@@ -1774,7 +2014,9 @@
     },
     "/swap/{id}/fund-gasless": {
       "post": {
-        "tags": ["swap-evm-btc"],
+        "tags": [
+          "swap-evm-btc"
+        ],
         "summary": "Fund an EVM-sourced swap gaslessly via Permit2.",
         "description": "The server submits the `executeAndCreateWithPermit2` transaction on the\ndepositor's behalf, pulling tokens via the depositor's Permit2 signature.\nIf an EIP-2612 permit is provided, the server first submits that to approve\nthe Permit2 contract.",
         "operationId": "fund_gasless",
@@ -1836,7 +2078,9 @@
     },
     "/swap/{id}/redeem-and-swap-calldata": {
       "get": {
-        "tags": ["redeem-and-swap-calldata"],
+        "tags": [
+          "redeem-and-swap-calldata"
+        ],
         "summary": "Returns the gasless claim data for an EVM-targeted swap.",
         "description": "For non-WBTC targets: fetches fresh 1inch DEX calldata with `receiver = destination`.\nFor WBTC-direct targets: returns only the gasless fee and calls_hash (no DEX data).\n\nAlways returns `calls_hash` which the client must include in the EIP-712 redeem signature.",
         "operationId": "get_dex_calldata",
@@ -1897,7 +2141,9 @@
     },
     "/swap/{id}/refund-and-swap-calldata": {
       "get": {
-        "tags": ["refund-and-swap-calldata"],
+        "tags": [
+          "refund-and-swap-calldata"
+        ],
         "summary": "Returns calldata to refund an expired EVM-to-Arkade HTLC via the coordinator.",
         "description": "Calls `refundTo` — refunds the BTC-pegged HTLC token (tBTC/WBTC) directly to\nthe caller. Permissionless after the timelock expires.",
         "operationId": "get_refund_calldata",
@@ -1949,7 +2195,9 @@
     },
     "/swap/{id}/swap-and-lock-calldata-permit2": {
       "get": {
-        "tags": ["swap-and-lock-calldata-permit2"],
+        "tags": [
+          "swap-and-lock-calldata-permit2"
+        ],
         "summary": "Returns structured data for funding an EVM-to-BTC swap via Permit2.",
         "description": "Instead of pre-encoded calldata, this returns the individual components\nso the SDK can construct the Permit2 EIP-712 signature and\n`executeAndCreateWithPermit2` calldata client-side.\n\nThe calls array contains only [approve(dexRouter, amount), dexSwap(...)].\nNo `transferFrom` — Permit2 handles the token pull.",
         "operationId": "get_coordinator_funding_calldata_permit2",
@@ -2001,7 +2249,9 @@
     },
     "/swap/{id}/swap-and-lock-calldata-userop": {
       "get": {
-        "tags": ["swap-and-lock-calldata-userop"],
+        "tags": [
+          "swap-and-lock-calldata-userop"
+        ],
         "summary": "Returns data for funding an EVM-to-BTC swap via the depositor's\nEIP-7702-delegated EOA. The client composes a UserOperation that\nexecutes receiveMessage (for CCTP-inbound) + USDC.approve(Permit2,\nmax) + executeAndCreateWithPermit2 atomically. Because the EOA\naddress and the smart-account address are the same under 7702,\nCCTPv2's `destinationCaller` is pinned to the user's EOA directly.",
         "operationId": "get_coordinator_funding_calldata_userop",
         "parameters": [
@@ -2052,7 +2302,9 @@
     },
     "/tokens": {
       "get": {
-        "tags": ["tokens"],
+        "tags": [
+          "tokens"
+        ],
         "summary": "Get list of available tokens for swaps.",
         "description": "Optionally pass `source_chain` + `source_token` **or** `target_chain` + `target_token`\nto filter the response to valid counterparty tokens.",
         "operationId": "get_tokens",
@@ -2106,7 +2358,9 @@
     },
     "/version": {
       "get": {
-        "tags": ["version"],
+        "tags": [
+          "version"
+        ],
         "summary": "Return the current git tag and commit hash.",
         "operationId": "get_version",
         "responses": {
@@ -2129,7 +2383,10 @@
       "AaConfig": {
         "type": "object",
         "description": "ERC-4337 / Kernel addresses the client needs to assemble its\nUserOperation. Under EIP-7702 the depositor's EOA IS the smart\naccount, so there's no factory, no salt, no counterfactual address\nto derive — only the delegation target the EOA upgrades to.",
-        "required": ["entry_point", "delegation_target"],
+        "required": [
+          "entry_point",
+          "delegation_target"
+        ],
         "properties": {
           "delegation_target": {
             "type": "string",
@@ -2159,13 +2416,19 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "How many sats the user wants to send (mutually exclusive with `amount_out`).\nValue is in satoshis (smallest BTC unit).",
             "minimum": 0
           },
           "amount_out": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC)."
           },
           "arkade_htlc_script_version": {
@@ -2178,11 +2441,17 @@
             "description": "ATA-existence flag for non-EVM CCTP destinations (Solana).\nSee `BitcoinToEvmSwapRequest::bridge_recipient_setup`."
           },
           "bridge_target_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: CCTP bridge destination chain (e.g., \"Ethereum\", \"Arbitrum\"). When set,\nUSDC will be bridged to this chain after the DEX swap."
           },
           "bridge_target_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: USDC address on the bridge destination chain."
           },
           "claiming_address": {
@@ -2196,7 +2465,10 @@
             "minimum": 0
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -2210,7 +2482,10 @@
             "description": "Hash lock provided by the client (32-byte hex string with 0x prefix)."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for tracking."
           },
           "refund_pk": {
@@ -2274,18 +2549,30 @@
             "type": "string"
           },
           "bridge_target_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap."
           },
           "bridge_target_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "USDC address on the bridge destination chain."
           },
           "btc_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_vhtlc_address": {
             "type": "string"
@@ -2306,7 +2593,10 @@
             "format": "int64"
           },
           "evm_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_coordinator_address": {
             "type": "string"
@@ -2315,7 +2605,10 @@
             "type": "string"
           },
           "evm_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_htlc_address": {
             "type": "string"
@@ -2364,7 +2657,10 @@
             "type": "string"
           },
           "target_evm_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "EVM address where tokens are swept after the claim (user's final destination)."
           },
           "target_token": {
@@ -2394,7 +2690,11 @@
       },
       "ArkadeToLightningSwapRequest": {
         "type": "object",
-        "required": ["refund_pk", "arkade_htlc_script_version", "user_id"],
+        "required": [
+          "refund_pk",
+          "arkade_htlc_script_version",
+          "user_id"
+        ],
         "properties": {
           "arkade_htlc_script_version": {
             "type": "integer",
@@ -2402,25 +2702,40 @@
             "description": "Arkade VHTLC script version. New swaps must use version 1."
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
           },
           "lightning_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Lightning address (`user@domain`) to resolve into an invoice over\nthe payout amount. Mutually exclusive with the other destination\nfields."
           },
           "lightning_invoice": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "BOLT11 invoice the user wants paid. Must carry an amount (which\npins the payout — `source_amount_sats` cannot be combined with it).\nMutually exclusive with `lightning_address` and `lnurl`."
           },
           "lnurl": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "LNURL-pay string to resolve into an invoice over the payout amount.\nMutually exclusive with the other destination fields."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for fee exemption"
           },
           "refund_pk": {
@@ -2428,12 +2743,18 @@
             "description": "User's refund public key for the Arkade VHTLC (sender role)."
           },
           "source_amount_sats": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Total amount the user wants to lock on Arkade in satoshis (fees are\ndeducted from the Lightning payout — use this for send-max flows).\nOnly valid with `lightning_address`/`lnurl`; mutually exclusive\nwith `target_amount_sats`."
           },
           "target_amount_sats": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Amount the recipient should receive over Lightning in satoshis\n(fees are added on top). Required with `lightning_address`/`lnurl`\nunless `source_amount_sats` is given; optional with\n`lightning_invoice`, where it must match the invoice amount."
           },
@@ -2472,11 +2793,17 @@
         ],
         "properties": {
           "arkade_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC claim transaction ID (server claim)"
           },
           "arkade_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC fund transaction ID (user funding)"
           },
           "arkade_htlc_script_version": {
@@ -2602,7 +2929,10 @@
             "description": "User's claim public key for the Arkade VHTLC"
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -2612,7 +2942,10 @@
             "description": "Hash lock provided by the client (20-byte hex string, no 0x prefix).\nThe client generates a secret and computes HASH160(secret) = RIPEMD160(SHA256(secret)).\nThis hash is used for both the on-chain Bitcoin HTLC (OP_HASH160) and the Arkade VHTLC.\nClient will use the secret to claim the Arkade VHTLC later."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for fee exemption"
           },
           "refund_pk": {
@@ -2649,13 +2982,19 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "How many sats the user wants to send (mutually exclusive with `amount_out`).\nValue is in satoshis (smallest BTC unit).",
             "minimum": 0
           },
           "amount_out": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "How much target token the user wants to receive (mutually exclusive with `amount_in`).\nValue is in the target token's smallest unit (e.g. for USDC with 6 decimals, 1000000 = 1\nUSDC)."
           },
           "bridge_recipient_setup": {
@@ -2663,11 +3002,17 @@
             "description": "ATA-existence flag for non-EVM CCTP destinations (Solana).\n`true` = recipient has no USDC ATA yet (Circle's forwarder\ncreates one, paid out of the burn). `false` (default) = recipient\nalready holds USDC, or destination is EVM. Drives the bridge-fee\nvariant used when inflating the DEX target and must match the\nvalue later passed to `redeem-and-swap-calldata` so the burn\ndoesn't underflow. Solana callers are responsible for probing\nthe destination chain and setting this correctly."
           },
           "bridge_target_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: CCTP bridge destination chain (e.g., \"Ethereum\", \"Arbitrum\"). When set,\nUSDC will be bridged to this chain after the DEX swap."
           },
           "bridge_target_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: USDC address on the bridge destination chain."
           },
           "btc_htlc_script_version": {
@@ -2686,7 +3031,10 @@
             "minimum": 0
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -2700,7 +3048,10 @@
             "description": "Hash lock provided by the client (32-byte hex string with 0x prefix)."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for tracking."
           },
           "refund_pk": {
@@ -2753,19 +3104,31 @@
         ],
         "properties": {
           "bridge_target_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap."
           },
           "bridge_target_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "USDC address on the bridge destination chain."
           },
           "btc_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "On-chain claim transaction ID (server claim)"
           },
           "btc_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "On-chain funding transaction ID"
           },
           "btc_hash_lock": {
@@ -2808,7 +3171,10 @@
             "description": "Numeric EVM chain ID (e.g. 137, 1, 42161)"
           },
           "evm_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "EVM HTLC claim transaction ID (user claim)"
           },
           "evm_coordinator_address": {
@@ -2820,7 +3186,10 @@
             "description": "Amount of WBTC sats locked in the EVM HTLC"
           },
           "evm_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "EVM HTLC fund transaction ID"
           },
           "evm_hash_lock": {
@@ -2874,7 +3243,10 @@
             "description": "How much the user will receive in the target token's smallest unit"
           },
           "target_evm_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "EVM address where tokens are swept after the claim (user's final destination)"
           },
           "target_token": {
@@ -2918,18 +3290,24 @@
               },
               "router": {
                 "type": "string",
-                "enum": ["cctp"]
+                "enum": [
+                  "cctp"
+                ]
               }
             }
           },
           {
             "type": "object",
             "description": "LayerZero OFT (USDT0). No token-denominated deduction: the only cost is\nthe messaging `msg.value`, paid in native ETH on the source chain by\nthe user's own (Alchemy) publish — it never reduces the delivered\nUSDT0. So nothing to subtract today. When we want to *show* that ETH\ncost, it becomes a field on this variant (e.g. `native_fee_wei`).",
-            "required": ["router"],
+            "required": [
+              "router"
+            ],
             "properties": {
               "router": {
                 "type": "string",
-                "enum": ["layerzero"]
+                "enum": [
+                  "layerzero"
+                ]
               }
             }
           }
@@ -2941,31 +3319,44 @@
           {
             "type": "object",
             "description": "EVM destination — the recipient's address (hex).",
-            "required": ["address", "kind"],
+            "required": [
+              "address",
+              "kind"
+            ],
             "properties": {
               "address": {
                 "type": "string"
               },
               "kind": {
                 "type": "string",
-                "enum": ["evm"]
+                "enum": [
+                  "evm"
+                ]
               }
             }
           },
           {
             "type": "object",
             "description": "Solana destination — the recipient's USDC associated token account\n(base58). `wallet` (the recipient's wallet pubkey) is supplied only when\nthe ATA doesn't exist yet; its presence selects Circle's higher\nATA-creation fee variant.",
-            "required": ["address", "kind"],
+            "required": [
+              "address",
+              "kind"
+            ],
             "properties": {
               "address": {
                 "type": "string"
               },
               "kind": {
                 "type": "string",
-                "enum": ["solana"]
+                "enum": [
+                  "solana"
+                ]
               },
               "wallet": {
-                "type": ["string", "null"]
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             }
           }
@@ -3003,11 +3394,17 @@
         ],
         "properties": {
           "arkade_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC claim transaction ID (user claim)"
           },
           "arkade_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC fund transaction ID"
           },
           "arkade_htlc_script_version": {
@@ -3028,11 +3425,17 @@
             "description": "Amount user must send in satoshis\nDeprecated: please use [`target_amount`]"
           },
           "btc_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "On-chain claim transaction ID (server claim)"
           },
           "btc_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "On-chain funding transaction ID"
           },
           "btc_htlc_address": {
@@ -3128,7 +3531,9 @@
       "BulkStatusRequest": {
         "type": "object",
         "description": "Request body for the bulk swap status endpoint.",
-        "required": ["ids"],
+        "required": [
+          "ids"
+        ],
         "properties": {
           "ids": {
             "type": "array",
@@ -3143,7 +3548,10 @@
       "BulkStatusResponse": {
         "type": "object",
         "description": "Response for the bulk swap status endpoint.",
-        "required": ["statuses", "not_found"],
+        "required": [
+          "statuses",
+          "not_found"
+        ],
         "properties": {
           "not_found": {
             "type": "array",
@@ -3165,7 +3573,11 @@
       "CallJson": {
         "type": "object",
         "description": "A single call in the coordinator's Call[] array, serialized as JSON.",
-        "required": ["target", "value", "call_data"],
+        "required": [
+          "target",
+          "value",
+          "call_data"
+        ],
         "properties": {
           "call_data": {
             "type": "string"
@@ -3181,12 +3593,23 @@
       "Chain": {
         "type": "string",
         "description": "Supported blockchain networks.\nEVM chains serialize to their chain ID as a string (e.g. \"137\" for Polygon).",
-        "enum": ["Arkade", "Lightning", "Bitcoin", "137", "1", "42161"]
+        "enum": [
+          "Arkade",
+          "Lightning",
+          "Bitcoin",
+          "137",
+          "1",
+          "42161"
+        ]
       },
       "ChainConfigEntry": {
         "type": "object",
         "description": "Per-chain configuration. EVM chains only — Bitcoin / Lightning /\nArkade don't have a meaningful chain-config shape.",
-        "required": ["chain", "btc_pegged_token", "btc_peg_rate"],
+        "required": [
+          "chain",
+          "btc_pegged_token",
+          "btc_peg_rate"
+        ],
         "properties": {
           "btc_peg_rate": {
             "type": "string",
@@ -3204,7 +3627,9 @@
       },
       "ChainConfigResponse": {
         "type": "object",
-        "required": ["chains"],
+        "required": [
+          "chains"
+        ],
         "properties": {
           "chains": {
             "type": "array",
@@ -3217,14 +3642,26 @@
       "ClaimGaslessRequest": {
         "type": "object",
         "description": "Request body for `POST /swap/{id}/claim-gasless`.\n\nThe client provides the HTLC preimage (secret) and an EIP-712 signature\nauthorising the server to call `redeemAndExecute` on the coordinator\ncontract on the client's behalf.\n\n# Examples\n\nMinimal request (WBTC-direct target, no DEX swap):\n\n```\nlet request = serde_json::json!({\n    \"secret\": \"0x0101010101010101010101010101010101010101010101010101010101010101\",\n    \"destination\": \"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\",\n    \"v\": 27,\n    \"r\": \"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n    \"s\": \"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"\n});\n```\n\nRequest with DEX calldata (non-WBTC target, e.g. USDC):\n\n```\nlet request = serde_json::json!({\n    \"secret\": \"0x0101010101010101010101010101010101010101010101010101010101010101\",\n    \"destination\": \"0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045\",\n    \"v\": 28,\n    \"r\": \"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\n    \"s\": \"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n    \"dex_calldata\": {\n        \"to\": \"0x1111111254EEB25477B68fb85Ed929f73A960582\",\n        \"data\": \"0xabcdef0123456789\",\n        \"value\": \"0\"\n    }\n});\n```",
-        "required": ["secret", "destination", "v", "r", "s"],
+        "required": [
+          "secret",
+          "destination",
+          "v",
+          "r",
+          "s"
+        ],
         "properties": {
           "bridge_recipient": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional non-EVM bridge recipient (e.g. a Solana base58 SPL pubkey).\nUsed as CCTP `mintRecipient` when `bridge_target_chain` is non-EVM;\nmust match the value passed to `redeem-and-swap-calldata` so the\nrebuilt `calls_hash` matches the EIP-712 signature.\n\nFor Solana: this is the recipient's USDC ATA, not their wallet."
           },
           "bridge_recipient_wallet": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional Solana wallet pubkey, supplied alongside `bridge_recipient`\nwhen the recipient's USDC ATA does not yet exist. Triggers the\nextended 65-byte forwarding hookData. Must mirror what was passed to\n`redeem-and-swap-calldata` so the rebuilt `calls_hash` matches."
           },
           "destination": {
@@ -3264,7 +3701,12 @@
       },
       "ClaimGaslessResponse": {
         "type": "object",
-        "required": ["id", "status", "tx_hash", "message"],
+        "required": [
+          "id",
+          "status",
+          "tx_hash",
+          "message"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -3287,7 +3729,10 @@
       "CollabRefundDelegateRequest": {
         "type": "object",
         "description": "Request for collaborative refund of recoverable VTXOs (delegate batch flow).",
-        "required": ["intent_proof", "forfeit_psbts"],
+        "required": [
+          "intent_proof",
+          "forfeit_psbts"
+        ],
         "properties": {
           "forfeit_psbts": {
             "type": "array",
@@ -3305,7 +3750,10 @@
       "CollabRefundDelegateResponse": {
         "type": "object",
         "description": "Response with countersigned delegate PSBTs.",
-        "required": ["intent_proof", "forfeit_psbts"],
+        "required": [
+          "intent_proof",
+          "forfeit_psbts"
+        ],
         "properties": {
           "forfeit_psbts": {
             "type": "array",
@@ -3397,7 +3845,12 @@
       "CollabRefundEvmRequest": {
         "type": "object",
         "description": "Request for collaborative refund of an EVM HTLC.",
-        "required": ["v", "r", "s", "depositor_address"],
+        "required": [
+          "v",
+          "r",
+          "s",
+          "depositor_address"
+        ],
         "properties": {
           "depositor_address": {
             "type": "string",
@@ -3422,7 +3875,11 @@
       "CollabRefundEvmResponse": {
         "type": "object",
         "description": "Response for collaborative refund of an EVM HTLC.",
-        "required": ["id", "tx_hash", "message"],
+        "required": [
+          "id",
+          "tx_hash",
+          "message"
+        ],
         "properties": {
           "id": {
             "type": "string",
@@ -3441,7 +3898,10 @@
       "CollabRefundRequest": {
         "type": "object",
         "description": "Request for collaborative refund of spendable VTXOs (offchain send flow).",
-        "required": ["ark_tx", "checkpoint_txs"],
+        "required": [
+          "ark_tx",
+          "checkpoint_txs"
+        ],
         "properties": {
           "ark_tx": {
             "type": "string",
@@ -3459,7 +3919,10 @@
       "CollabRefundResponse": {
         "type": "object",
         "description": "Response with countersigned PSBTs.",
-        "required": ["ark_tx", "checkpoint_txs"],
+        "required": [
+          "ark_tx",
+          "checkpoint_txs"
+        ],
         "properties": {
           "ark_tx": {
             "type": "string",
@@ -3476,7 +3939,9 @@
       },
       "CosignerPkResponse": {
         "type": "object",
-        "required": ["cosigner_pk"],
+        "required": [
+          "cosigner_pk"
+        ],
         "properties": {
           "cosigner_pk": {
             "type": "string",
@@ -3529,7 +3994,11 @@
       "DexCall": {
         "type": "object",
         "description": "A single EVM contract call the SDK should embed in its batch user op.\n\nThe list ordering matters — the SDK must submit calls in the order\nreturned. Today this is always `[approve(spender, amount), router.swap(...)]`:\nv1 targets fresh EIP-7702-delegated EOAs that start with zero\nallowance, so the approve is unconditional. When native-ETH inputs\nor stable-allowance paths land, the approve will be dropped when\n`allowance(sender, spender) >= amount` and the response will be a\nsingle-element list.",
-        "required": ["target", "data", "value"],
+        "required": [
+          "target",
+          "data",
+          "value"
+        ],
         "properties": {
           "data": {
             "type": "string",
@@ -3548,7 +4017,11 @@
       "DexCallData": {
         "type": "object",
         "description": "DEX swap calldata for the coordinator contract.",
-        "required": ["to", "data", "value"],
+        "required": [
+          "to",
+          "data",
+          "value"
+        ],
         "properties": {
           "data": {
             "type": "string"
@@ -3564,7 +4037,10 @@
       "DexCalldata": {
         "type": "object",
         "description": "DEX calldata for the swap (from 1inch or another aggregator)",
-        "required": ["to", "data"],
+        "required": [
+          "to",
+          "data"
+        ],
         "properties": {
           "data": {
             "type": "string",
@@ -3585,11 +4061,16 @@
           {
             "type": "object",
             "description": "Spend exactly this much `from_token`; receive at least the\nresponse's `estimated_amount_out` (post-slippage) of `to_token`.",
-            "required": ["value", "kind"],
+            "required": [
+              "value",
+              "kind"
+            ],
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["exact_in"]
+                "enum": [
+                  "exact_in"
+                ]
               },
               "value": {
                 "type": "string",
@@ -3600,11 +4081,16 @@
           {
             "type": "object",
             "description": "Receive exactly this much `to_token`; spend at most the\nresponse's `expected_amount_in` (post-slippage) of `from_token`.",
-            "required": ["value", "kind"],
+            "required": [
+              "value",
+              "kind"
+            ],
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["exact_out"]
+                "enum": [
+                  "exact_out"
+                ]
               },
               "value": {
                 "type": "string",
@@ -3618,7 +4104,13 @@
       "DexCalldataRequest": {
         "type": "object",
         "description": "Request shared by both `/dex-calldata/claim` and `/dex-calldata/fund`.\n\nThe flow-specific `recipient` is deliberately not part of this struct —\neach flow's handler resolves it from configuration (fund) or echoes the\nsender (claim).",
-        "required": ["from", "to", "amount", "sender", "slippage_bps"],
+        "required": [
+          "from",
+          "to",
+          "amount",
+          "sender",
+          "slippage_bps"
+        ],
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/DexCalldataAmount",
@@ -3699,7 +4191,10 @@
           {
             "type": "object",
             "description": "Ordered list of EVM contract calls to batch into a Kernel\n`execute(BATCH_MODE, …)` and submit as a single ERC-4337 user op\n(typically EIP-7702-delegated, sponsored by a paymaster).",
-            "required": ["calls", "kind"],
+            "required": [
+              "calls",
+              "kind"
+            ],
             "properties": {
               "calls": {
                 "type": "array",
@@ -3709,7 +4204,9 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["evm"]
+                "enum": [
+                  "evm"
+                ]
               }
             }
           }
@@ -3721,11 +4218,16 @@
           {
             "type": "object",
             "description": "Spend exactly this much `from_token`; the response's\n`estimated_amount_out` is the expected (mid-market) receive\namount that the requested slippage tolerance covers.",
-            "required": ["value", "kind"],
+            "required": [
+              "value",
+              "kind"
+            ],
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["exact_in"]
+                "enum": [
+                  "exact_in"
+                ]
               },
               "value": {
                 "$ref": "#/components/schemas/AmountU256",
@@ -3736,11 +4238,16 @@
           {
             "type": "object",
             "description": "Receive exactly this much `to_token`; the response's\n`expected_amount_in` is the expected (mid-market) required input\nat the requested slippage tolerance.",
-            "required": ["value", "kind"],
+            "required": [
+              "value",
+              "kind"
+            ],
             "properties": {
               "kind": {
                 "type": "string",
-                "enum": ["exact_out"]
+                "enum": [
+                  "exact_out"
+                ]
               },
               "value": {
                 "$ref": "#/components/schemas/AmountU256",
@@ -3753,7 +4260,12 @@
       },
       "DexQuoteRequest": {
         "type": "object",
-        "required": ["from", "to", "amount", "slippage_bps"],
+        "required": [
+          "from",
+          "to",
+          "amount",
+          "slippage_bps"
+        ],
         "properties": {
           "amount": {
             "$ref": "#/components/schemas/DexQuoteAmount",
@@ -3790,7 +4302,10 @@
         ],
         "properties": {
           "bridge_fee": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "The bridge fee **actually deducted** for this quote, in the bridged\ntoken's smallest units (USDC for CCTP), stringified. This is the amount\nthe fold already took out of the end-to-end amounts above — surfaced so\nthe SDK can report it as a line item without re-deriving it from\n`bridge_rate`. Present only for a CCTP bridge leg with a fee; absent for\nsame-chain and OFT (which deduct nothing)."
           },
           "bridge_rate": {
@@ -3833,7 +4348,13 @@
       "Eip2612Permit": {
         "type": "object",
         "description": "EIP-2612 permit signature for gasless token->Permit2 approval.",
-        "required": ["v", "r", "s", "value", "deadline"],
+        "required": [
+          "v",
+          "r",
+          "s",
+          "value",
+          "deadline"
+        ],
         "properties": {
           "deadline": {
             "type": "integer",
@@ -3858,7 +4379,9 @@
       },
       "ErrorResponse": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "string"
@@ -3867,7 +4390,9 @@
       },
       "EstimateVtxoSwapRequest": {
         "type": "object",
-        "required": ["vtxos"],
+        "required": [
+          "vtxos"
+        ],
         "properties": {
           "vtxos": {
             "type": "array",
@@ -3917,7 +4442,10 @@
       },
       "EvmChainInfo": {
         "type": "object",
-        "required": ["chain_id", "name"],
+        "required": [
+          "chain_id",
+          "name"
+        ],
         "properties": {
           "chain_id": {
             "type": "integer",
@@ -3931,7 +4459,9 @@
       },
       "EvmChainsResponse": {
         "type": "object",
-        "required": ["chains"],
+        "required": [
+          "chains"
+        ],
         "properties": {
           "chains": {
             "type": "array",
@@ -3956,11 +4486,17 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Source token amount in smallest units (mutually exclusive with `amount_out`)."
           },
           "amount_out": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Desired BTC output in sats (mutually exclusive with `amount_in`).",
             "minimum": 0
@@ -3971,11 +4507,17 @@
             "description": "Arkade HTLC script version. New swaps must use version 1."
           },
           "bridge_source_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: CCTP bridge source chain (e.g., \"Ethereum\", \"Optimism\"). When set,\nthe user's source USDC originates on this chain and hops through CCTPv2 to\nArbitrum before the HTLC is created. The backend pads `deposit_amount` by\nthe fast-transfer fee at UserOp-calldata time."
           },
           "bridge_source_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: USDC address on the bridge source chain."
           },
           "evm_chain_id": {
@@ -3985,7 +4527,10 @@
             "minimum": 0
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -4003,7 +4548,10 @@
             "description": "User's Arkade VHTLC claim key (receiver)."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for tracking."
           },
           "target_address": {
@@ -4067,18 +4615,30 @@
             "type": "string"
           },
           "bridge_source_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "CCTP bridge source chain. Set when the source USDC originated on\nanother CCTP chain and hopped to Arbitrum via CCTPv2 before the\nHTLC was created. `source_token` still reports the post-hop\nArbitrum USDC; this field tells the SDK what chain the user is\nexpected to burn from."
           },
           "bridge_source_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Native USDC address on the bridge source chain."
           },
           "btc_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_vhtlc_address": {
             "type": "string"
@@ -4098,13 +4658,19 @@
             "format": "int64"
           },
           "evm_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_expected_sats": {
             "type": "string"
           },
           "evm_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_htlc_address": {
             "type": "string"
@@ -4194,21 +4760,33 @@
         ],
         "properties": {
           "amount_in": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Source token amount in smallest units (mutually exclusive with `amount_out`)."
           },
           "amount_out": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Desired BTC output in sats (mutually exclusive with `amount_in`).",
             "minimum": 0
           },
           "bridge_source_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: CCTP bridge source chain (e.g., \"Ethereum\", \"Optimism\"). When set,\nthe user's source USDC originates on this chain and hops through CCTPv2 to\nArbitrum before the HTLC is created. The backend pads `deposit_amount` by\nthe fast-transfer fee at UserOp-calldata time."
           },
           "bridge_source_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional: USDC address on the bridge source chain."
           },
           "btc_htlc_script_version": {
@@ -4227,7 +4805,10 @@
             "minimum": 0
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -4241,11 +4822,17 @@
             "description": "Hash lock (0x-prefixed 32-byte hex). Client generates secret, computes SHA256(secret)."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for tracking."
           },
           "target_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "User's target BTC address to receive claimed funds."
           },
           "token_address": {
@@ -4295,21 +4882,36 @@
         ],
         "properties": {
           "bridge_source_chain": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "CCTP bridge source chain. Set when the source USDC originated on\nanother CCTP chain and hopped to Arbitrum via CCTPv2 before the\nHTLC was created. `source_token` still reports the post-hop\nArbitrum USDC; this field tells the SDK what chain the user is\nexpected to burn from."
           },
           "bridge_source_token_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Native USDC address on the bridge source chain."
           },
           "btc_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "btc_fund_vout": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64"
           },
           "btc_hash_lock": {
@@ -4355,14 +4957,20 @@
             "description": "Numeric EVM chain ID"
           },
           "evm_claim_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_expected_sats": {
             "type": "string",
             "description": "Expected WBTC amount (in sats) on EVM"
           },
           "evm_fund_txid": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "evm_hash_lock": {
             "type": "string",
@@ -4415,7 +5023,10 @@
             "description": "Expected BTC amount (in sats) user will receive"
           },
           "target_btc_address": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "User's target BTC address for receiving claimed funds"
           },
           "target_token": {
@@ -4429,7 +5040,12 @@
       },
       "EvmTokenInfo": {
         "type": "object",
-        "required": ["address", "symbol", "name", "decimals"],
+        "required": [
+          "address",
+          "symbol",
+          "name",
+          "decimals"
+        ],
         "properties": {
           "address": {
             "type": "string"
@@ -4440,7 +5056,10 @@
             "minimum": 0
           },
           "logo_uri": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -4452,7 +5071,9 @@
       },
       "EvmTokensResponse": {
         "type": "object",
-        "required": ["chains"],
+        "required": [
+          "chains"
+        ],
         "properties": {
           "chains": {
             "type": "object",
@@ -4516,7 +5137,11 @@
       },
       "FundGaslessResponse": {
         "type": "object",
-        "required": ["id", "tx_hash", "message"],
+        "required": [
+          "id",
+          "tx_hash",
+          "message"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -4538,11 +5163,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["btc_to_arkade"]
+                    "enum": [
+                      "btc_to_arkade"
+                    ]
                   }
                 }
               }
@@ -4555,11 +5184,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["lightning_to_arkade"]
+                    "enum": [
+                      "lightning_to_arkade"
+                    ]
                   }
                 }
               }
@@ -4572,11 +5205,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["arkade_to_lightning"]
+                    "enum": [
+                      "arkade_to_lightning"
+                    ]
                   }
                 }
               }
@@ -4589,11 +5226,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["bitcoin_to_evm"]
+                    "enum": [
+                      "bitcoin_to_evm"
+                    ]
                   }
                 }
               }
@@ -4606,11 +5247,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["arkade_to_evm"]
+                    "enum": [
+                      "arkade_to_evm"
+                    ]
                   }
                 }
               }
@@ -4623,11 +5268,15 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["evm_to_arkade"]
+                    "enum": [
+                      "evm_to_arkade"
+                    ]
                   }
                 }
               }
@@ -4640,17 +5289,56 @@
               },
               {
                 "type": "object",
-                "required": ["direction"],
+                "required": [
+                  "direction"
+                ],
                 "properties": {
                   "direction": {
                     "type": "string",
-                    "enum": ["evm_to_bitcoin"]
+                    "enum": [
+                      "evm_to_bitcoin"
+                    ]
                   }
                 }
               }
             ]
           }
         ]
+      },
+      "LightningSendQuoteResponse": {
+        "type": "object",
+        "required": [
+          "source_amount_sats",
+          "target_amount_sats",
+          "protocol_fee_sats",
+          "network_fee_sats"
+        ],
+        "properties": {
+          "network_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Provider-quoted Lightning send fee, charged as the network fee,\nin satoshis.",
+            "minimum": 0
+          },
+          "protocol_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Protocol fee in satoshis.",
+            "minimum": 0
+          },
+          "source_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total the user locks on the source chain (payout + fees), in\nsatoshis.",
+            "minimum": 0
+          },
+          "target_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Paid out on the Lightning invoice, in satoshis.",
+            "minimum": 0
+          }
+        }
       },
       "LightningToArkadeSwapRequest": {
         "type": "object",
@@ -4672,7 +5360,10 @@
             "description": "User's claim public key for the Arkade VHTLC"
           },
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
             "minimum": 0
@@ -4682,20 +5373,32 @@
             "description": "Hash lock provided by the client (0x-prefixed 32-byte hex).\nThe client generates a secret and computes SHA256(secret); the hold\ninvoice and the Arkade VHTLC both lock on this hash."
           },
           "invoice_description": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional BOLT11 invoice description (max 639 bytes)."
           },
           "referral_code": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional referral code for fee exemption"
           },
           "source_amount_sats": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Amount the user wants to send via Lightning in satoshis (fees are\ndeducted from it — use this for send-max flows). Mutually exclusive\nwith `target_amount_sats`."
           },
           "target_amount_sats": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Amount the user wants to receive on Arkade in satoshis (fees are\nadded on top of it). Mutually exclusive with `source_amount_sats`."
           },
@@ -4739,11 +5442,17 @@
         ],
         "properties": {
           "arkade_claim_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC claim transaction ID (user claim)"
           },
           "arkade_fund_txid": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Arkade VHTLC fund transaction ID (server funding)"
           },
           "arkade_htlc_script_version": {
@@ -4847,7 +5556,10 @@
       },
       "MtpResponse": {
         "type": "object",
-        "required": ["mtp", "tip_height"],
+        "required": [
+          "mtp",
+          "tip_height"
+        ],
         "properties": {
           "mtp": {
             "type": "integer",
@@ -4866,7 +5578,10 @@
       "NetworkFee": {
         "type": "object",
         "description": "Sats the server pays on each side of the pair at *current* gas/mining\nprices. Extensible — future breakouts (`htlc_create_sats`,\n`dex_swap_sats`, …) land alongside.",
-        "required": ["source_sats", "target_sats"],
+        "required": [
+          "source_sats",
+          "target_sats"
+        ],
         "properties": {
           "source_sats": {
             "type": "integer",
@@ -4885,7 +5600,11 @@
       "NetworkFeePairEntry": {
         "type": "object",
         "description": "One entry in the pair grid. Same shape vocabulary as\n[`crate::api::swap_pairs::SwapPairInfo`] so SDK consumers can join on\n`(source, target)`.",
-        "required": ["source", "target", "fees"],
+        "required": [
+          "source",
+          "target",
+          "fees"
+        ],
         "properties": {
           "fees": {
             "$ref": "#/components/schemas/NetworkFee"
@@ -4900,7 +5619,9 @@
       },
       "NetworkFeesResponse": {
         "type": "object",
-        "required": ["pairs"],
+        "required": [
+          "pairs"
+        ],
         "properties": {
           "pairs": {
             "type": "array",
@@ -4927,7 +5648,10 @@
         ],
         "properties": {
           "bridge_fee": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "CCTP bridge forwarding fee in USDC smallest units (6 decimals).\nOnly present when bridge_target_chain was specified in the quote request.",
             "minimum": 0
@@ -4997,7 +5721,9 @@
           },
           {
             "type": "object",
-            "required": ["index"],
+            "required": [
+              "index"
+            ],
             "properties": {
               "index": {
                 "type": "integer",
@@ -5011,10 +5737,15 @@
       },
       "RecoveryRequest": {
         "type": "object",
-        "required": ["xpub"],
+        "required": [
+          "xpub"
+        ],
         "properties": {
           "start_index": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Derivation index to start scanning from.\n\nIf omitted, recovery starts from index 0. The server owns all scan limits.",
             "minimum": 0
@@ -5069,7 +5800,11 @@
       "RedeemAndSwapResponse": {
         "type": "object",
         "description": "Response containing fresh DEX calldata for an EVM-targeted gasless claim.",
-        "required": ["gasless_fee_sats", "min_amount_out", "calls_hash"],
+        "required": [
+          "gasless_fee_sats",
+          "min_amount_out",
+          "calls_hash"
+        ],
         "properties": {
           "calls_hash": {
             "type": "string",
@@ -5102,20 +5837,28 @@
         "type": "object",
         "properties": {
           "extra_fees": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int32",
             "description": "Optional per-swap fee surcharge in basis points. Rejected with 400 if\nit exceeds the referral key's `max_extra_fee_bps`. When omitted the\nkey's `default_extra_fee_bps` applies.",
             "minimum": 0
           },
           "ref": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Referral code. When omitted/unknown/revoked the response is a zero\nextra fee (the base fee applies unchanged)."
           }
         }
       },
       "ReferralFeeResponse": {
         "type": "object",
-        "required": ["extra_fee_rate"],
+        "required": [
+          "extra_fee_rate"
+        ],
         "properties": {
           "extra_fee_rate": {
             "type": "number",
@@ -5123,7 +5866,10 @@
             "description": "Extra fee as a **decimal fraction** (e.g. `0.005` = 0.5% = 50 bps), to be\n**added on top of** the per-pair `fee_percentage` from `/swap-pairs`\n(also a fraction) — so a client composes `fee_percentage + extra_fee_rate`\nwith no conversion. `0` when there's no/unknown referral and no\n`extra_fees`.\n\nNote the asymmetry: the *input* (`extra_fees`, the key's\n`max_extra_fee_bps`) is in **basis points** (the key-config convention);\nthis *output* is a fraction (the composition convention). The endpoint\nconverts once so the client never handles bps."
           },
           "referral_label": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Human-readable partner label for the referral code, when registered.\nInformational (attribution / display) only."
           }
         }
@@ -5131,7 +5877,10 @@
       "RefundCalldataResponse": {
         "type": "object",
         "description": "Response containing refund calldata for an EVM-to-Arkade swap.",
-        "required": ["coordinator_address", "calldata"],
+        "required": [
+          "coordinator_address",
+          "calldata"
+        ],
         "properties": {
           "calldata": {
             "type": "string",
@@ -5146,22 +5895,33 @@
       "ServiceStatus": {
         "type": "object",
         "description": "Per-service health datapoint.\n\nFailures intentionally do not include the underlying error: transport\nerrors from RPC clients can echo back full URLs (with embedded API keys)\nand other internal topology. Detailed errors are logged server-side; the\npublic response only carries a sanitized `\"unavailable\"` marker.",
-        "required": ["healthy"],
+        "required": [
+          "healthy"
+        ],
         "properties": {
           "block_height": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Tip / block height for chain-backed services (Bitcoin and EVMs).",
             "minimum": 0
           },
           "block_time": {
-            "type": ["integer", "null"],
+            "type": [
+              "integer",
+              "null"
+            ],
             "format": "int64",
             "description": "Tip block timestamp (Unix seconds) for chain-backed services.",
             "minimum": 0
           },
           "error": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "healthy": {
             "type": "boolean"
@@ -5170,7 +5930,13 @@
       },
       "ServicesStatus": {
         "type": "object",
-        "required": ["arkade", "bitcoin", "polygon", "ethereum", "arbitrum"],
+        "required": [
+          "arkade",
+          "bitcoin",
+          "polygon",
+          "ethereum",
+          "arbitrum"
+        ],
         "properties": {
           "arbitrum": {
             "$ref": "#/components/schemas/ServiceStatus"
@@ -5229,18 +5995,26 @@
             "description": "Base64-encoded intent proof PSBT (signed by the VTXO owner)."
           },
           "preimage": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional hex-encoded preimage (the HTLC secret). Required together with `swap_id`."
           },
           "swap_id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Optional swap ID. When provided alongside `preimage`, the backend marks the\nswap as ClientRedeemed so the EVM claimer can proceed."
           }
         }
       },
       "SettleDelegateResponse": {
         "type": "object",
-        "required": ["commitment_txid"],
+        "required": [
+          "commitment_txid"
+        ],
         "properties": {
           "commitment_txid": {
             "type": "string",
@@ -5251,7 +6025,10 @@
       "StatusResponse": {
         "type": "object",
         "description": "Aggregated health of every external dependency.",
-        "required": ["healthy", "services"],
+        "required": [
+          "healthy",
+          "services"
+        ],
         "properties": {
           "healthy": {
             "type": "boolean",
@@ -5264,7 +6041,9 @@
       },
       "SupportAgentInfo": {
         "type": "object",
-        "required": ["npub"],
+        "required": [
+          "npub"
+        ],
         "properties": {
           "npub": {
             "type": "string"
@@ -5273,7 +6052,9 @@
       },
       "SupportAgentsResponse": {
         "type": "object",
-        "required": ["agents"],
+        "required": [
+          "agents"
+        ],
         "properties": {
           "agents": {
             "type": "array",
@@ -5329,7 +6110,9 @@
       "SwapPairsResponse": {
         "type": "object",
         "description": "All supported swap pairs with their limits and fees.",
-        "required": ["pairs"],
+        "required": [
+          "pairs"
+        ],
         "properties": {
           "pairs": {
             "type": "array",
@@ -5364,7 +6147,10 @@
       "SwapStatusEntry": {
         "type": "object",
         "description": "Status of a single swap.",
-        "required": ["id", "status"],
+        "required": [
+          "id",
+          "status"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -5378,7 +6164,11 @@
         "oneOf": [
           {
             "type": "object",
-            "required": ["chain_id", "address", "kind"],
+            "required": [
+              "chain_id",
+              "address",
+              "kind"
+            ],
             "properties": {
               "address": {
                 "type": "string",
@@ -5392,13 +6182,18 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["evm"]
+                "enum": [
+                  "evm"
+                ]
               }
             }
           },
           {
             "type": "object",
-            "required": ["address", "kind"],
+            "required": [
+              "address",
+              "kind"
+            ],
             "properties": {
               "address": {
                 "type": "string",
@@ -5406,7 +6201,9 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["solana"]
+                "enum": [
+                  "solana"
+                ]
               }
             }
           }
@@ -5416,7 +6213,10 @@
       "TokenAmount": {
         "type": "object",
         "description": "Smallest-unit amount paired with the associated token's symbol and\ndecimal places, so the SDK can format `raw / 10^decimals` for\ndisplay (and label it with the symbol) without a separate lookup.\n\n`raw` is a stringified `u256` to dodge the JS `Number` precision\ncliff at 2^53 (which 18-decimal tokens exceed routinely).",
-        "required": ["raw", "decimals"],
+        "required": [
+          "raw",
+          "decimals"
+        ],
         "properties": {
           "decimals": {
             "type": "integer",
@@ -5429,7 +6229,10 @@
             "description": "Smallest-unit amount, stringified `u256`."
           },
           "symbol": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Ticker symbol of the associated token (`\"USDC\"`, `\"tBTC\"`, …),\nwhen known. Omitted from the wire when the server can't resolve\nit — informational only, do not key business logic on this\nstring."
           }
         }
@@ -5438,7 +6241,9 @@
         "oneOf": [
           {
             "type": "string",
-            "enum": ["btc"]
+            "enum": [
+              "btc"
+            ]
           },
           {
             "type": "string"
@@ -5448,7 +6253,13 @@
       },
       "TokenInfo": {
         "type": "object",
-        "required": ["token_id", "symbol", "chain", "name", "decimals"],
+        "required": [
+          "token_id",
+          "symbol",
+          "chain",
+          "name",
+          "decimals"
+        ],
         "properties": {
           "chain": {
             "$ref": "#/components/schemas/Chain"
@@ -5471,7 +6282,10 @@
       },
       "TokenInfos": {
         "type": "object",
-        "required": ["btc_tokens", "evm_tokens"],
+        "required": [
+          "btc_tokens",
+          "evm_tokens"
+        ],
         "properties": {
           "btc_tokens": {
             "type": "array",
@@ -5490,7 +6304,11 @@
       "TokenRef": {
         "type": "object",
         "description": "Reference to an ERC-20 token plus the decimals/symbol the SDK needs\nto format amounts. Address is lowercase hex (`0x`-prefixed).",
-        "required": ["address", "decimals", "symbol"],
+        "required": [
+          "address",
+          "decimals",
+          "symbol"
+        ],
         "properties": {
           "address": {
             "type": "string"
@@ -5551,7 +6369,10 @@
             "type": "string"
           },
           "relay_fee": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "source_amount": {
             "type": "string"
@@ -5568,7 +6389,10 @@
       },
       "Version": {
         "type": "object",
-        "required": ["tag", "commit_hash"],
+        "required": [
+          "tag",
+          "commit_hash"
+        ],
         "properties": {
           "commit_hash": {
             "type": "string"

@@ -394,6 +394,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/quote/lightning-send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Exact quote for a swap paying out over Lightning
+         * @description Resolves the destination (invoice, lightning address or LNURL) and
+         *     prices the swap with the provider's actual Lightning send fee for that
+         *     payment — unlike `/quote`, whose network fee for Lightning-target
+         *     routes is an estimate. `source_chain` defaults to "Arkade", currently
+         *     the only supported source. Informational: the create endpoint
+         *     re-quotes the fee, which may move between the two calls.
+         */
+        get: operations["get_lightning_send_quote"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/referral-fee": {
         parameters: {
             query?: never;
@@ -2495,6 +2520,30 @@ export interface components {
             /** @enum {string} */
             direction: "evm_to_bitcoin";
         });
+        LightningSendQuoteResponse: {
+            /**
+             * Format: int64
+             * @description Provider-quoted Lightning send fee, charged as the network fee,
+             *     in satoshis.
+             */
+            network_fee_sats: number;
+            /**
+             * Format: int64
+             * @description Protocol fee in satoshis.
+             */
+            protocol_fee_sats: number;
+            /**
+             * Format: int64
+             * @description Total the user locks on the source chain (payout + fees), in
+             *     satoshis.
+             */
+            source_amount_sats: number;
+            /**
+             * Format: int64
+             * @description Paid out on the Lightning invoice, in satoshis.
+             */
+            target_amount_sats: number;
+        };
         LightningToArkadeSwapRequest: {
             /**
              * Format: int64
@@ -3959,6 +4008,85 @@ export interface operations {
             };
             /** @description Bad request - invalid parameters */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_lightning_send_quote: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Source chain of the swap. Defaults to "Arkade" — currently the
+                 *     only supported source; other chains (e.g. EVM) are planned.
+                 */
+                source_chain?: null | components["schemas"]["Chain"];
+                /**
+                 * @description BOLT11 invoice the user wants paid; pins the payout. Mutually
+                 *     exclusive with `lightning_address` and `lnurl`.
+                 */
+                lightning_invoice?: string | null;
+                /**
+                 * @description Lightning address (`user@domain`). Mutually exclusive with the
+                 *     other destination fields; requires a pinned amount.
+                 */
+                lightning_address?: string | null;
+                /**
+                 * @description LNURL-pay string. Mutually exclusive with the other destination
+                 *     fields; requires a pinned amount.
+                 */
+                lnurl?: string | null;
+                /**
+                 * @description Total to lock on the source chain in satoshis (fees are deducted
+                 *     from the Lightning payout — send-max). Only valid with
+                 *     `lightning_address`/`lnurl`; mutually exclusive with
+                 *     `target_amount_sats`.
+                 */
+                source_amount_sats?: number | null;
+                /**
+                 * @description Amount the recipient should receive over Lightning in satoshis
+                 *     (fees are added on top). Optional with `lightning_invoice`, where
+                 *     it must match the invoice amount.
+                 */
+                target_amount_sats?: number | null;
+                /** @description Optional referral code. */
+                ref?: string | null;
+                /**
+                 * @description Optional per-swap fee surcharge in basis points
+                 *     (0..=max_extra_fee_bps configured on the matching developer key).
+                 */
+                extra_fees?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact quote for the given Lightning destination */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningSendQuoteResponse"];
+                };
+            };
+            /** @description Bad request - invalid parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Lightning is not available on this deployment */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

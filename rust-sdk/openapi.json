@@ -1050,6 +1050,154 @@
         }
       }
     },
+    "/quote/lightning-send": {
+      "get": {
+        "tags": [
+          "quote"
+        ],
+        "summary": "Exact quote for a swap paying out over Lightning",
+        "description": "Resolves the destination (invoice, lightning address or LNURL) and\nprices the swap with the provider's actual Lightning send fee for that\npayment — unlike `/quote`, whose network fee for Lightning-target\nroutes is an estimate. `source_chain` defaults to \"Arkade\", currently\nthe only supported source. Informational: the create endpoint\nre-quotes the fee, which may move between the two calls.",
+        "operationId": "get_lightning_send_quote",
+        "parameters": [
+          {
+            "name": "source_chain",
+            "in": "query",
+            "description": "Source chain of the swap. Defaults to \"Arkade\" — currently the\nonly supported source; other chains (e.g. EVM) are planned.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/Chain"
+                }
+              ]
+            }
+          },
+          {
+            "name": "lightning_invoice",
+            "in": "query",
+            "description": "BOLT11 invoice the user wants paid; pins the payout. Mutually\nexclusive with `lightning_address` and `lnurl`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "lightning_address",
+            "in": "query",
+            "description": "Lightning address (`user@domain`). Mutually exclusive with the\nother destination fields; requires a pinned amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "lnurl",
+            "in": "query",
+            "description": "LNURL-pay string. Mutually exclusive with the other destination\nfields; requires a pinned amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "source_amount_sats",
+            "in": "query",
+            "description": "Total to lock on the source chain in satoshis (fees are deducted\nfrom the Lightning payout — send-max). Only valid with\n`lightning_address`/`lnurl`; mutually exclusive with\n`target_amount_sats`.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "target_amount_sats",
+            "in": "query",
+            "description": "Amount the recipient should receive over Lightning in satoshis\n(fees are added on top). Optional with `lightning_invoice`, where\nit must match the invoice amount.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "query",
+            "description": "Optional referral code.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "extra_fees",
+            "in": "query",
+            "description": "Optional per-swap fee surcharge in basis points\n(0..=max_extra_fee_bps configured on the matching developer key).",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact quote for the given Lightning destination",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LightningSendQuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request - invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Lightning is not available on this deployment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/referral-fee": {
       "get": {
         "tags": [
@@ -5156,6 +5304,41 @@
             ]
           }
         ]
+      },
+      "LightningSendQuoteResponse": {
+        "type": "object",
+        "required": [
+          "source_amount_sats",
+          "target_amount_sats",
+          "protocol_fee_sats",
+          "network_fee_sats"
+        ],
+        "properties": {
+          "network_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Provider-quoted Lightning send fee, charged as the network fee,\nin satoshis.",
+            "minimum": 0
+          },
+          "protocol_fee_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Protocol fee in satoshis.",
+            "minimum": 0
+          },
+          "source_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Total the user locks on the source chain (payout + fees), in\nsatoshis.",
+            "minimum": 0
+          },
+          "target_amount_sats": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Paid out on the Lightning invoice, in satoshis.",
+            "minimum": 0
+          }
+        }
       },
       "LightningToArkadeSwapRequest": {
         "type": "object",
