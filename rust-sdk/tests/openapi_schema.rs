@@ -236,6 +236,7 @@ fn evm_to_arkade_swap_response_matches_spec() {
         target_amount: "150000".to_string(),
         evm_expected_sats: "150000".to_string(),
         evm_htlc_address: "0xhtlc".to_string(),
+        evm_htlc_version: 6,
         client_evm_address: "0xclient".to_string(),
         server_evm_address: "0xserver".to_string(),
         evm_refund_locktime: 1_000_000,
