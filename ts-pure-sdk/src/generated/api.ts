@@ -144,57 +144,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/vtxo-swap": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create a new VTXO swap */
-        post: operations["create_vtxo_swap"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/vtxo-swap/estimate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Estimate fee for VTXO swap */
-        post: operations["estimate_vtxo_swap"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/vtxo-swap/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get VTXO swap by ID */
-        get: operations["get_vtxo_swap"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/chain-config": {
         parameters: {
             query?: never;
@@ -1858,26 +1807,6 @@ export interface components {
             /** @description Hex-encoded compressed public key of the delegate cosigner. */
             cosigner_pk: string;
         };
-        CreateVtxoSwapRequest: {
-            /**
-             * Format: int64
-             * @description Client Arkade HTLC script version. New swaps must use version 1.
-             */
-            client_arkade_htlc_script_version: number;
-            /** @description Client's public key for the VHTLC */
-            client_pk: string;
-            /** @description SHA256(preimage) - client generates the secret */
-            preimage_hash: string;
-            /**
-             * Format: int64
-             * @description Server Arkade HTLC script version. New swaps must use version 1.
-             */
-            server_arkade_htlc_script_version: number;
-            /** @description User ID for recovery purposes */
-            user_id: string;
-            /** @description List of VTXO outpoints to refresh */
-            vtxos: string[];
-        };
         /**
          * @description A single EVM contract call the SDK should embed in its batch user op.
          *
@@ -2173,35 +2102,6 @@ export interface components {
         };
         ErrorResponse: {
             error: string;
-        };
-        EstimateVtxoSwapRequest: {
-            /** @description List of VTXO outpoints to refresh ("txid:vout" format) */
-            vtxos: string[];
-        };
-        EstimateVtxoSwapResponse: {
-            /**
-             * Format: int64
-             * @description Expected expiry timestamp (Unix) of the resulting VTXOs.
-             *     This is the minimum expiry among the server's VTXOs that will be used to fund the swap.
-             */
-            expected_vtxo_expiry: number;
-            /**
-             * Format: int64
-             * @description Total fee in satoshis
-             */
-            fee_sats: number;
-            /**
-             * Format: int64
-             * @description Amount user will receive (total_input_sats - fee_sats)
-             */
-            output_sats: number;
-            /**
-             * Format: int64
-             * @description Total input amount in satoshis
-             */
-            total_input_sats: number;
-            /** @description Number of VTXOs being refreshed */
-            vtxo_count: number;
         };
         EvmChainInfo: {
             /** Format: int64 */
@@ -3152,83 +3052,6 @@ export interface components {
             commit_hash: string;
             tag: string;
         };
-        VtxoSwapResponse: {
-            arkade_server_pk: string;
-            /** Format: int64 */
-            client_arkade_htlc_script_version: number;
-            /** Format: int64 */
-            client_fund_amount_sats: number;
-            /** Format: int64 */
-            client_locktime: number;
-            client_pk: string;
-            /** Format: int64 */
-            client_unilateral_claim_delay: number;
-            /** Format: int64 */
-            client_unilateral_refund_delay: number;
-            /** Format: int64 */
-            client_unilateral_refund_without_receiver_delay: number;
-            client_vhtlc_address: string;
-            /**
-             * Format: date-time
-             * @description Creation timestamp
-             */
-            created_at: string;
-            /** Format: int64 */
-            fee_sats: number;
-            /**
-             * Format: uuid
-             * @description Swap ID
-             */
-            id: string;
-            network: string;
-            preimage_hash: string;
-            /** Format: int64 */
-            server_arkade_htlc_script_version: number;
-            /** Format: int64 */
-            server_fund_amount_sats: number;
-            /** Format: int64 */
-            server_locktime: number;
-            server_pk: string;
-            /** Format: int64 */
-            server_unilateral_claim_delay: number;
-            /** Format: int64 */
-            server_unilateral_refund_delay: number;
-            /** Format: int64 */
-            server_unilateral_refund_without_receiver_delay: number;
-            server_vhtlc_address: string;
-            /** @description Swap status */
-            status: components["schemas"]["VtxoSwapStatus"];
-        };
-        /**
-         * @description VTXO Swap state machine for BTC-to-BTC (Arkade refresh) swaps.
-         *
-         *     # Overview
-         *
-         *     This enum tracks the state of a VTXO refresh swap where users exchange
-         *     old VTXOs for new ones with refreshed expiry times.
-         *
-         *     # Normal Flow
-         *
-         *     ```text
-         *     Pending -> ClientFunded -> ServerFunded -> ClientRedeemed -> ServerRedeemed
-         *     ```
-         *
-         *     1. Swap created -> `Pending`
-         *     2. Client funds their VHTLC -> `ClientFunded`
-         *     3. Server funds their VHTLC -> `ServerFunded`
-         *     4. Client claims server's VHTLC (reveals preimage) -> `ClientRedeemed`
-         *     5. Server claims client's VHTLC -> `ServerRedeemed` (terminal)
-         *
-         *     # Refund Flows
-         *
-         *     ```text
-         *     Pending -> Expired (no funding)
-         *     ClientFunded -> ClientRefunded (server didn't fund in time)
-         *     ServerFunded -> ClientFundedServerRefunded (client didn't claim in time)
-         *     ```
-         * @enum {string}
-         */
-        VtxoSwapStatus: "pending" | "clientfunded" | "serverfunded" | "clientredeemed" | "serverredeemed" | "clientrefunded" | "clientfundedserverrefunded" | "expired";
     };
     responses: never;
     parameters: never;
@@ -3517,131 +3340,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CollabRefundEvmParams"];
-                };
-            };
-            /** @description Swap not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_vtxo_swap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateVtxoSwapRequest"];
-            };
-        };
-        responses: {
-            /** @description Swap created */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VtxoSwapResponse"];
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    estimate_vtxo_swap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EstimateVtxoSwapRequest"];
-            };
-        };
-        responses: {
-            /** @description Estimate calculated */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EstimateVtxoSwapResponse"];
-                };
-            };
-            /** @description Bad request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_vtxo_swap: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Swap ID */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Swap found */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VtxoSwapResponse"];
                 };
             };
             /** @description Swap not found */
