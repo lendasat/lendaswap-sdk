@@ -2,7 +2,7 @@
 // Kept in sync with package.json on `npm version` and `npm run build`.
 // SDK_COMMIT_HASH is injected from the GIT_COMMIT_HASH env var at build time.
 export const SDK_NAME = "lendaswap-sdk-pure";
-export const SDK_VERSION = "2.0.1";
+export const SDK_VERSION = "2.1.0";
 export const SDK_COMMIT_HASH = "unknown";
 export const SATORA_SERVER_VERSION = "0.3.7";
 export const CLIENT_AGENT = `${SDK_NAME}/${SDK_VERSION}`;

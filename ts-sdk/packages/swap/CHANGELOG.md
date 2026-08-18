@@ -1,5 +1,18 @@
 # @satora/swap
 
+## 1.3.0
+
+### Minor Changes
+
+- bc8011c: Exact Arkade → Lightning quotes: `getLightningSendQuote` and the
+  `lightningDestination` option on `getQuote` are delegated from the pure
+  SDK — quotes with a concrete destination (invoice / lightning address /
+  LNURL) carry the provider's real Lightning send fee instead of the flat
+  estimate.
+- 8ef73bb: Lightning → EVM swaps: `createLightningToEvmSwap` delegation, tracker
+  mapping (EVM server leg, no client leg), and action derivation (no refund
+  action — the hold payment unwinds on its own).
+
 ## 1.2.1
 
 ### Patch Changes

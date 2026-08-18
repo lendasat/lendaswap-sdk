@@ -1,5 +1,27 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 2.1.0
+
+### Minor Changes
+
+- bc8011c: Exact Arkade → Lightning quotes. New `getLightningSendQuote` hits
+  `/quote/lightning-send` with a concrete destination (BOLT11 invoice,
+  lightning address or LNURL) and returns amounts priced with the
+  provider's real Lightning send fee — which the server now charges as the
+  swap's network fee instead of a config-flat estimate. `getQuote` accepts
+  an optional `lightningDestination` and serves Arkade → Lightning quotes
+  through the exact endpoint when it is set, falling back to the estimate
+  on failure.
+- 8ef73bb: Lightning → EVM swaps: `createLightningToEvmSwap` (and `createSwap` with a
+  Lightning source + EVM target) pays a hold invoice and receives any
+  1inch-reachable ERC-20, with gasless claims and CCTP/USDT0 bridge
+  destinations supported. Claims reuse the existing EVM-targeted flow; there
+  is no client refund action — an unclaimed hold payment unwinds on its own.
+
+### Patch Changes
+
+- 6d62269: Remove the deprecated VTXO refresh swap API from generated types.
+
 ## 2.0.1
 
 ### Patch Changes
