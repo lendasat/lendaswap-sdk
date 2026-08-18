@@ -98,6 +98,10 @@ export async function fetchAttestation(
       if (err instanceof DOMException && err.name === "AbortError") {
         throw err;
       }
+      if (err instanceof CctpForwardingFailedError) {
+        // Terminal state from IRIS — retrying cannot change it.
+        throw err;
+      }
       // Network errors — retry after delay
       await sleep(pollIntervalMs, signal);
     }
@@ -111,6 +115,9 @@ export async function fetchAttestation(
 // ============================================================================
 // Cross-chain message tracking (with forwarding)
 // ============================================================================
+
+/** A CCTP message reached a terminal non-delivered forwarding state. */
+export class CctpForwardingFailedError extends Error {}
 
 /** Options for tracking a CCTP cross-chain message via IRIS. */
 export interface TrackCctpMessageOptions {
@@ -227,7 +234,7 @@ export async function trackCctpMessage(
         msg.forwardState !== "COMPLETE"
       ) {
         emitStatus("FAILED");
-        throw new Error(
+        throw new CctpForwardingFailedError(
           `CCTP forwarding failed (state: ${msg.forwardState}) for tx ${txHash} on ${sourceChain}`,
         );
       }
@@ -237,6 +244,10 @@ export async function trackCctpMessage(
       await sleep(pollIntervalMs, signal);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
+        throw err;
+      }
+      if (err instanceof CctpForwardingFailedError) {
+        // Terminal state from IRIS — retrying cannot change it.
         throw err;
       }
       // Network errors — retry after delay
