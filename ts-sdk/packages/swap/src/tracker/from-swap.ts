@@ -281,6 +281,25 @@ export function swapToTracked(stored: StoredSwap): TrackedSwap | undefined {
     // watch) and claims an on-chain HTLC. No client-funded leg — the client's
     // claim completes the swap; a hold invoice that never settles auto-unwinds.
 
+    // Client pays the invoice, then claims the server's EVM HTLC.
+    case "lightning_to_evm":
+      return {
+        swapId: r.id,
+        serverHtlc: evmLeg({
+          chainId: r.evm_chain_id,
+          htlc: r.evm_htlc_address,
+          hashLock: r.hash_lock,
+          claimAddress: r.client_evm_address, // the client claims the server's EVM HTLC
+          expectedSats: r.evm_expected_sats,
+          token: r.wbtc_address,
+          sender: r.server_evm_address, // the server funded it
+          timelockSec: r.evm_refund_locktime,
+          createdAt: r.created_at,
+        }),
+        clientRefundLocktime: 0, // no on-chain client leg
+        serverRefundLocktime: ms(r.evm_refund_locktime),
+      };
+
     // Client pays the invoice, then claims the Arkade VHTLC (target_amount).
     case "lightning_to_arkade":
       return {

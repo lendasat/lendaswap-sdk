@@ -55,6 +55,8 @@ export type EvmToBitcoinSwapResponse =
 // Lightning-to-Arkade types
 export type LightningToArkadeSwapResponse =
   components["schemas"]["LightningToArkadeSwapResponse"];
+export type LightningToEvmSwapResponse =
+  components["schemas"]["LightningToEvmSwapResponse"];
 
 // Arkade-to-Lightning types
 export type ArkadeToLightningSwapResponse =

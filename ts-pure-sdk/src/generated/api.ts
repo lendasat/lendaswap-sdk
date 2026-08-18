@@ -609,6 +609,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/swap/lightning/evm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a chain-agnostic Lightning-to-EVM swap.
+         * @description Flow:
+         *     1. User pays the returned hold invoice; the payment is held.
+         *     2. Server funds an HTLCErc20 locked to the same hash.
+         *     3. User claims the HTLC (gasless), revealing the preimage.
+         *     4. Server settles the held payment with the revealed preimage.
+         *
+         *     If the server never funds (or the user never claims) the held payment
+         *     is automatically returned to the payer when the hold expires.
+         */
+        post: operations["create_lightning_evm_swap"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/swap/recover": {
         parameters: {
             query?: never;
@@ -2407,6 +2434,9 @@ export interface components {
         }) | (components["schemas"]["ArkadeToLightningSwapResponse"] & {
             /** @enum {string} */
             direction: "arkade_to_lightning";
+        }) | (components["schemas"]["LightningToEvmSwapResponse"] & {
+            /** @enum {string} */
+            direction: "lightning_to_evm";
         }) | (components["schemas"]["BitcoinToEvmSwapResponse"] & {
             /** @enum {string} */
             direction: "bitcoin_to_evm";
@@ -2569,6 +2599,153 @@ export interface components {
              * @description VHTLC refund locktime (unix timestamp)
              */
             vhtlc_refund_locktime: number;
+        };
+        /** @description Chain-agnostic request for Lightning-to-EVM swaps. */
+        LightningToEvmSwapRequest: {
+            /**
+             * Format: int64
+             * @description How many sats the user wants to send over Lightning (mutually
+             *     exclusive with `amount_out`).
+             */
+            amount_in?: number | null;
+            /**
+             * @description How much target token the user wants to receive (mutually exclusive
+             *     with `amount_in`), in the target token's smallest unit.
+             */
+            amount_out?: string | null;
+            /**
+             * @description ATA-existence flag for non-EVM CCTP destinations (Solana). See the
+             *     Bitcoin→EVM request for semantics.
+             */
+            bridge_recipient_setup?: boolean;
+            /**
+             * @description Optional: bridge destination chain (e.g., "Base", "Optimism").
+             *     When set, the DEX output is bridged there after the claim — CCTP
+             *     for USDC, LayerZero OFT for USDT0, chosen from `token_address`.
+             */
+            bridge_target_chain?: string | null;
+            /** @description Optional: token address on the bridge destination chain. */
+            bridge_target_token_address?: string | null;
+            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
+            claiming_address: string;
+            /**
+             * Format: int64
+             * @description Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum).
+             */
+            evm_chain_id: number;
+            /**
+             * Format: int32
+             * @description Optional per-swap fee surcharge in basis points
+             *     (0..=max_extra_fee_bps configured on the matching developer key).
+             */
+            extra_fees?: number | null;
+            /** @description `true` to use gasless funding via sdk derived wallet (Permit2 relay). */
+            gasless?: boolean;
+            /**
+             * @description Hash lock provided by the client (32-byte hex string with 0x
+             *     prefix): `sha256(secret)`. The client keeps the secret — it is the
+             *     invoice's payment hash and the EVM HTLC's lock.
+             */
+            hash_lock: string;
+            /**
+             * @description Optional description shown in the payer's wallet when they open the
+             *     hold invoice.
+             */
+            invoice_description?: string | null;
+            /** @description Optional referral code for tracking. */
+            referral_code?: string | null;
+            /**
+             * @description Recipient where tokens land after the claim (user's final destination).
+             *     An EVM hex address, or a base58 Solana pubkey for a Solana bridge target.
+             */
+            target_address: string;
+            /** @description ERC-20 contract address of the desired token on the target chain. */
+            token_address: string;
+            /** @description User ID derived from wallet for recovery purposes. */
+            user_id: string;
+        };
+        /** @description Lightning → EVM swap response (Spark era). */
+        LightningToEvmSwapResponse: {
+            /**
+             * @description BOLT11 hold invoice the user pays. The payment is held until the
+             *     user's EVM claim reveals the preimage.
+             */
+            bolt11_invoice: string;
+            /** @description CCTP bridge destination chain. When set, USDC is bridged cross-chain after the swap. */
+            bridge_target_chain?: string | null;
+            /** @description USDC address on the bridge destination chain. */
+            bridge_target_token_address?: string | null;
+            /** @description EVM chain name (e.g. "Polygon", "Ethereum", "Arbitrum") */
+            chain: string;
+            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims) */
+            client_evm_address: string;
+            /**
+             * Format: date-time
+             * @description Timestamp of when the swap was created
+             */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description Numeric EVM chain ID (e.g. 137, 1, 42161)
+             */
+            evm_chain_id: number;
+            /** @description EVM HTLC claim transaction ID (user claim) */
+            evm_claim_txid?: string | null;
+            /** @description HTLCCoordinator contract address (for redeemAndExecute) */
+            evm_coordinator_address: string;
+            /**
+             * @description Amount locked in the EVM HTLC, in token smallest units (WBTC sats,
+             *     or 18-decimal units for tBTC — hence U256, not i64)
+             */
+            evm_expected_sats: string;
+            /** @description EVM HTLC fund transaction ID */
+            evm_fund_txid?: string | null;
+            /** @description EVM HTLC contract address */
+            evm_htlc_address: string;
+            /**
+             * Format: int64
+             * @description HTLCErc20 contract VERSION of the deployment this swap lives on —
+             *     the EIP-712 domain version string for redeem/refund signatures.
+             */
+            evm_htlc_version: number;
+            /**
+             * Format: int64
+             * @description EVM HTLC refund locktime (unix timestamp)
+             */
+            evm_refund_locktime: number;
+            /**
+             * Format: int64
+             * @description Protocol fee + network fee in satoshis
+             */
+            fee_sats: number;
+            /**
+             * @description Hash lock (32-byte hex, 0x-prefixed) — the hold invoice's payment
+             *     hash and the EVM HTLC's lock. The client holds the preimage.
+             */
+            hash_lock: string;
+            id: string;
+            /**
+             * Format: int64
+             * @description Unix timestamp after which the invoice can no longer be paid
+             */
+            invoice_expires_at?: number | null;
+            /** @description Bitcoin network */
+            network: string;
+            /** @description Server's EVM address */
+            server_evm_address: string;
+            /** @description Amount the user pays over Lightning, in satoshis */
+            source_amount: string;
+            /** @description Source token info */
+            source_token: components["schemas"]["TokenInfo"];
+            status: components["schemas"]["SwapStatus"];
+            /** @description How much the user will receive in the target token's smallest unit */
+            target_amount: string;
+            /** @description EVM address where tokens are swept after the claim (user's final destination) */
+            target_evm_address?: string | null;
+            /** @description Target token info */
+            target_token: components["schemas"]["TokenInfo"];
+            /** @description WBTC token contract address on the target EVM chain (the token locked in the HTLC) */
+            wbtc_address: string;
         };
         MtpResponse: {
             /**
@@ -4296,6 +4473,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LightningToArkadeSwapResponse"];
+                };
+            };
+            /** @description Bad request - invalid parameters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict - a swap with this preimage hash exists already */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal server error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Lightning is not available on this deployment */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_lightning_evm_swap: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightningToEvmSwapRequest"];
+            };
+        };
+        responses: {
+            /** @description Swap created successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningToEvmSwapResponse"];
                 };
             };
             /** @description Bad request - invalid parameters */

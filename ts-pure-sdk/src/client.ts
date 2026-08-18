@@ -51,12 +51,15 @@ import {
   createEvmToArkadeSwapGeneric,
   createEvmToBitcoinSwap,
   createLightningToArkadeSwap,
+  createLightningToEvmSwap,
   type EvmToArkadeSwapGenericOptions,
   type EvmToArkadeSwapGenericResult,
   type EvmToBitcoinSwapOptions,
   type EvmToBitcoinSwapResult,
   type LightningToArkadeSwapOptions,
   type LightningToArkadeSwapResult,
+  type LightningToEvmSwapOptions,
+  type LightningToEvmSwapResult,
 } from "./create/index.js";
 import { delegateClaim, delegateRefund } from "./delegate.js";
 import {
@@ -200,10 +203,16 @@ export type {
   EvmToArkadeSwapResult,
   EvmToBitcoinSwapOptions,
   EvmToBitcoinSwapResult,
+  LightningToEvmSwapOptions,
+  LightningToEvmSwapResponse,
+  LightningToEvmSwapResult,
   UsdcBridgeParams,
 } from "./create/index.js";
 
-import type { BitcoinToEvmSwapResponse } from "./create/index.js";
+import type {
+  BitcoinToEvmSwapResponse,
+  LightningToEvmSwapResponse,
+} from "./create/index.js";
 
 // Re-export coordinator utilities for Arkade-to-EVM redeemAndExecute flow
 export {
@@ -2317,11 +2326,13 @@ export class Client {
     // The destination is always the stored target_evm_address (set at swap creation time)
     if (
       swap.direction === "arkade_to_evm" ||
-      swap.direction === "bitcoin_to_evm"
+      swap.direction === "bitcoin_to_evm" ||
+      swap.direction === "lightning_to_evm"
     ) {
       const evmSwap = swap as (
         | ArkadeToEvmSwapResponse
         | BitcoinToEvmSwapResponse
+        | LightningToEvmSwapResponse
       ) & {
         direction: string;
       };
@@ -2485,10 +2496,11 @@ export class Client {
 
     if (
       swap.direction !== "arkade_to_evm" &&
-      swap.direction !== "bitcoin_to_evm"
+      swap.direction !== "bitcoin_to_evm" &&
+      swap.direction !== "lightning_to_evm"
     ) {
       throw new Error(
-        `Expected arkade_to_evm or bitcoin_to_evm swap, got ${swap.direction}. claimViaGasless is for EVM-targeted swaps.`,
+        `Expected an EVM-targeted swap (arkade_to_evm, bitcoin_to_evm or lightning_to_evm), got ${swap.direction}. claimViaGasless is for EVM-targeted swaps.`,
       );
     }
 
@@ -4740,6 +4752,31 @@ export class Client {
       });
     }
 
+    // Lightning → EVM
+    if (isLightning(sourceAsset) && isEvmToken(targetChain)) {
+      if ((options.sourceAmount == null) === (options.targetAmount == null)) {
+        throw new Error(
+          "Provide exactly one of sourceAmount (sats over Lightning) or targetAmount (token units to receive) for Lightning → EVM swaps",
+        );
+      }
+      return this.createLightningToEvmSwap({
+        targetAddress: options.targetAddress,
+        tokenAddress,
+        evmChainId: Number(targetChain),
+        sourceAmount:
+          options.sourceAmount == null
+            ? undefined
+            : Number(options.sourceAmount),
+        targetAmount:
+          options.targetAmount == null
+            ? undefined
+            : BigInt(options.targetAmount),
+        referralCode: options.referralCode,
+        extraFees: options.extraFees,
+        bridgeParams,
+      });
+    }
+
     // Bitcoin (on-chain) → EVM
     if (isBtcOnchain(sourceAsset) && isEvmToken(targetChain)) {
       return this.createBitcoinToEvmSwap({
@@ -4948,6 +4985,40 @@ export class Client {
     options: LightningToArkadeSwapOptions,
   ): Promise<LightningToArkadeSwapResult> {
     return createLightningToArkadeSwap(options, this.#getCreateContext());
+  }
+
+  // =========================================================================
+  // Swap Creation - Lightning to EVM
+  // =========================================================================
+
+  /**
+   * Creates a new Lightning to EVM swap.
+   *
+   * The user pays a hold invoice; the server funds an HTLCErc20 with the
+   * same hash lock, and claiming it (gasless) reveals the preimage that
+   * settles the held payment. If the swap fails before the claim, the
+   * held payment is automatically returned when the hold expires — there
+   * is no client-side refund action on this route.
+   *
+   * @param options - The swap options.
+   * @returns The swap response and parameters for storage.
+   * @throws Error if the swap creation fails.
+   *
+   * @example
+   * ```ts
+   * const result = await client.createLightningToEvmSwap({
+   *   targetAddress: "0x1234...",
+   *   tokenAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359", // USDC on Polygon
+   *   evmChainId: 137,
+   *   sourceAmount: 100000, // 100k sats over Lightning
+   * });
+   * console.log("Pay this invoice:", result.response.bolt11_invoice);
+   * ```
+   */
+  async createLightningToEvmSwap(
+    options: LightningToEvmSwapOptions,
+  ): Promise<LightningToEvmSwapResult> {
+    return createLightningToEvmSwap(options, this.#getCreateContext());
   }
 
   // =========================================================================

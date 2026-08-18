@@ -236,6 +236,32 @@ describe("swapToTracked", () => {
     expect(tracked?.serverRefundLocktime).toBe(1_000_000_000); // vhtlc leg
   });
 
+  it("maps lightning_to_evm: client claims the EVM HTLC, no client leg", () => {
+    const tracked = swapToTracked(
+      stored({
+        ...bitcoinEvmFields,
+        id: "swap-ln-evm",
+        hash_lock: hashLock, // this route exposes hash_lock, not evm_hash_lock
+        direction: "lightning_to_evm",
+      }),
+    );
+    expect(tracked?.clientHtlc).toBeUndefined();
+    expect(tracked?.serverHtlc).toEqual({
+      ledger: "evm",
+      chainId: 137,
+      htlc: "0xhtlc",
+      preimageHash: `0x${hashLock}`,
+      claimAddress: "0xclient", // the client claims the server's EVM HTLC
+      expectedAmount: 2450n,
+      expectedToken: "0xwbtc",
+      sender: "0xserver",
+      timelockSec: 900_000,
+      createdAtMs: undefined,
+    });
+    expect(tracked?.clientRefundLocktime).toBe(0); // no on-chain client leg
+    expect(tracked?.serverRefundLocktime).toBe(900_000_000); // EVM leg
+  });
+
   it("token-less directions fall back to the per-chain locked token on mainnet", () => {
     const tracked = swapToTracked(
       stored({

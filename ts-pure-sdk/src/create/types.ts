@@ -6,6 +6,7 @@ import type {
   BitcoinToEvmSwapResponse as ApiBitcoinToEvmSwapResponse,
   ApiClient,
   EvmToBitcoinSwapResponse as ApiEvmToBitcoinSwapResponse,
+  LightningToEvmSwapResponse as ApiLightningToEvmSwapResponse,
   ArkadeToEvmSwapResponse,
   ArkadeToLightningSwapResponse,
   BtcToArkadeSwapResponse,
@@ -112,6 +113,41 @@ export interface BitcoinToEvmSwapOptions {
 
 /** Response from the generic `/swap/bitcoin/evm` endpoint. */
 export type BitcoinToEvmSwapResponse = ApiBitcoinToEvmSwapResponse;
+
+/** Response from the `/swap/lightning/evm` endpoint. */
+export type LightningToEvmSwapResponse = ApiLightningToEvmSwapResponse;
+
+/** Options for creating a Lightning to EVM swap via the generic endpoint. */
+export interface LightningToEvmSwapOptions {
+  /** EVM address where tokens are swept after the claim (user's final destination) */
+  targetAddress: string;
+  /** ERC-20 contract address of the desired token on the target chain */
+  tokenAddress: string;
+  /** Numeric EVM chain ID: 1 (Ethereum), 137 (Polygon), 42161 (Arbitrum) */
+  evmChainId: number;
+  /** Sats to pay over Lightning (mutually exclusive with targetAmount) */
+  sourceAmount?: number;
+  /** Amount of target token to receive in smallest unit (mutually exclusive with sourceAmount) */
+  targetAmount?: bigint;
+  /** Optional description shown in the payer's wallet on the hold invoice */
+  invoiceDescription?: string;
+  /** Optional referral code for fee exemption */
+  referralCode?: string;
+  /** Optional per-swap fee surcharge in basis points (0..=max_extra_fee_bps configured on the matching developer key). */
+  extraFees?: number;
+  /** Whether the server should execute the DEX swap on behalf of the user (gasless claim). Defaults to true. */
+  gasless?: boolean;
+  /** Optional: when set, the DEX output is bridged to the destination chain after the claim. */
+  bridgeParams?: UsdcBridgeParams;
+}
+
+/** Result of creating a Lightning to EVM swap */
+export interface LightningToEvmSwapResult {
+  /** The swap response from the API */
+  response: LightningToEvmSwapResponse;
+  /** The swap parameters used (for storage/recovery) */
+  swapParams: SwapParams;
+}
 
 /** Result of creating a Bitcoin (on-chain) to EVM swap */
 export interface BitcoinToEvmSwapResult {
@@ -430,6 +466,7 @@ export type CreateSwapResult =
   | BitcoinToEvmSwapResult
   | BitcoinToArkadeSwapResult
   | LightningToArkadeSwapResult
+  | LightningToEvmSwapResult
   | EvmToArkadeSwapGenericResult
   | EvmToBitcoinSwapResult;
 
