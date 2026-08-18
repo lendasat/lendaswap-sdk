@@ -1024,7 +1024,13 @@ export interface components {
             bridge_target_chain?: string | null;
             /** @description Optional: USDC address on the bridge destination chain. */
             bridge_target_token_address?: string | null;
-            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
+            /**
+             * @description EVM address that will sign the HTLC claim (SDK-derived for gasless
+             *     claims). Typed: garbage is rejected at deserialization, before an
+             *     invoice/HTLC exists — a background funder can never be handed an
+             *     unparseable claim address. Always an EVM address, even for Solana
+             *     bridge targets (the claim happens on the hub chain).
+             */
             claiming_address: string;
             /**
              * Format: int64
@@ -1319,7 +1325,13 @@ export interface components {
              * @description Bitcoin HTLC script version. New swaps must use version 1.
              */
             btc_htlc_script_version: number;
-            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
+            /**
+             * @description EVM address that will sign the HTLC claim (SDK-derived for gasless
+             *     claims). Typed: garbage is rejected at deserialization, before an
+             *     invoice/HTLC exists — a background funder can never be handed an
+             *     unparseable claim address. Always an EVM address, even for Solana
+             *     bridge targets (the claim happens on the hub chain).
+             */
             claiming_address: string;
             /**
              * Format: int64
@@ -2626,7 +2638,13 @@ export interface components {
             bridge_target_chain?: string | null;
             /** @description Optional: token address on the bridge destination chain. */
             bridge_target_token_address?: string | null;
-            /** @description EVM address that will sign the HTLC claim (SDK-derived for gasless claims). */
+            /**
+             * @description EVM address that will sign the HTLC claim (SDK-derived for gasless
+             *     claims). Typed: garbage is rejected at deserialization, before an
+             *     invoice/HTLC exists — a background funder can never be handed an
+             *     unparseable claim address. Always an EVM address, even for Solana
+             *     bridge targets (the claim happens on the hub chain).
+             */
             claiming_address: string;
             /**
              * Format: int64

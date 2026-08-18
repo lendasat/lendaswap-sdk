@@ -2233,7 +2233,7 @@
           },
           "claiming_address": {
             "type": "string",
-            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless claims)."
+            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless\nclaims). Typed: garbage is rejected at deserialization, before an\ninvoice/HTLC exists — a background funder can never be handed an\nunparseable claim address. Always an EVM address, even for Solana\nbridge targets (the claim happens on the hub chain)."
           },
           "evm_chain_id": {
             "type": "integer",
@@ -2723,7 +2723,7 @@
           },
           "claiming_address": {
             "type": "string",
-            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless claims)."
+            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless\nclaims). Typed: garbage is rejected at deserialization, before an\ninvoice/HTLC exists — a background funder can never be handed an\nunparseable claim address. Always an EVM address, even for Solana\nbridge targets (the claim happens on the hub chain)."
           },
           "evm_chain_id": {
             "type": "integer",
@@ -4907,7 +4907,7 @@
           },
           "claiming_address": {
             "type": "string",
-            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless claims)."
+            "description": "EVM address that will sign the HTLC claim (SDK-derived for gasless\nclaims). Typed: garbage is rejected at deserialization, before an\ninvoice/HTLC exists — a background funder can never be handed an\nunparseable claim address. Always an EVM address, even for Solana\nbridge targets (the claim happens on the hub chain)."
           },
           "evm_chain_id": {
             "type": "integer",
