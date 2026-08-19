@@ -175,7 +175,12 @@ import {
   type WireSwapPairsResponse,
 } from "./types/index.js";
 import { USDT0_ADDRESSES } from "./usdt0-bridge/constants.js";
-import { CLIENT_AGENT, SATORA_SERVER_VERSION } from "./version.js";
+import {
+  CLIENT_AGENT,
+  DEFAULT_AA_BUNDLER_URL,
+  DEFAULT_AA_POLICY_ID,
+  SATORA_SERVER_VERSION,
+} from "./version.js";
 import {
   createSwapStatusWatcher,
   type SwapStatusHandler,
@@ -725,6 +730,20 @@ export interface ClientConfig {
 }
 
 /**
+ * Account-abstraction config baked into official npm builds (sponsored gas
+ * for CCTP-inbound settlement and UserOp claims).
+ */
+function defaultAaConfig(): AaConfig | undefined {
+  if (!DEFAULT_AA_BUNDLER_URL) return undefined;
+  return {
+    bundlerUrl: DEFAULT_AA_BUNDLER_URL,
+    ...(DEFAULT_AA_POLICY_ID
+      ? { paymasterPolicyId: DEFAULT_AA_POLICY_ID }
+      : {}),
+  };
+}
+
+/**
  * Builder for creating a Lendaswap client with a fluent API.
  *
  * The `build()` method is async and returns a fully initialized client.
@@ -919,7 +938,10 @@ export class ClientBuilder {
   /**
    * Sets the account-abstraction config (bundler + Gas Manager policy).
    *
-   * Required when using the CCTP-inbound swap flow (any non-Arbitrum
+   * Official npm builds ship a baked-in default (Satora's sponsored
+   * bundler + policy, the same values the hosted frontend uses); calling
+   * this overrides it. Local/dev builds have no default, so this is
+   * required when using the CCTP-inbound swap flow (any non-Arbitrum
    * EVM chain as the source). The settlement UserOp — `receiveMessage`
    * + `USDC.approve(Permit2)` + `executeAndCreateWithPermit2` — is
    * submitted via the Kernel smart account owned by the consumer's
@@ -1015,7 +1037,7 @@ export class ClientBuilder {
           : this.#esploraUrl?.replace(/\/+$/, ""),
         electrumWsUrl: this.#electrumWsUrl?.replace(/\/+$/, ""),
         arkadeServerUrl: this.#arkadeServerUrl?.replace(/\/+$/, ""),
-        aa: this.#aa,
+        aa: this.#aa ?? defaultAaConfig(),
         logger: this.#logger,
         logLevel: this.#logLevel,
       },
