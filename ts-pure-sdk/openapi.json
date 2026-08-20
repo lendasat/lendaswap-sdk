@@ -5506,6 +5506,10 @@
           },
           "services": {
             "$ref": "#/components/schemas/ServicesStatus"
+          },
+          "swaps_paused": {
+            "type": "boolean",
+            "description": "True when the operator kill switch has paused swap creation and\nquoting. Independent of `healthy`: a paused service is not unhealthy.\nOnly the `/status` endpoint fills this in; `gather_status` itself has\nno database access and leaves it false."
           }
         }
       },

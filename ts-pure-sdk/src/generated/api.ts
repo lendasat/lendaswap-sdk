@@ -3046,6 +3046,13 @@ export interface components {
             /** @description True if every probed service is healthy. */
             healthy: boolean;
             services: components["schemas"]["ServicesStatus"];
+            /**
+             * @description True when the operator kill switch has paused swap creation and
+             *     quoting. Independent of `healthy`: a paused service is not unhealthy.
+             *     Only the `/status` endpoint fills this in; `gather_status` itself has
+             *     no database access and leaves it false.
+             */
+            swaps_paused?: boolean;
         };
         SupportAgentInfo: {
             npub: string;
