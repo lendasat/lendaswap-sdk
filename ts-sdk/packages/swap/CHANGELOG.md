@@ -1,5 +1,15 @@
 # @satora/swap
 
+## 1.3.1
+
+### Patch Changes
+
+- e198470: Target backend 0.3.8 in the x-satora-server-version header.
+- 7771b28: Target backend 0.3.9 in the x-satora-server-version header.
+- 1997ca0: Pick up the pure SDK's baked-in default account-abstraction config (bundler
+  URL + Gas Manager policy): CCTP-inbound swaps and sponsored UserOp claims work
+  out of the box; `withAa()` still overrides.
+
 ## 1.3.0
 
 ### Minor Changes

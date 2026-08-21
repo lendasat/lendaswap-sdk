@@ -1,5 +1,15 @@
 # @lendasat/lendaswap-sdk-pure
 
+## 2.1.1
+
+### Patch Changes
+
+- e198470: Target backend 0.3.8 in the x-satora-server-version header.
+- 7771b28: Target backend 0.3.9 in the x-satora-server-version header.
+- 1997ca0: Bake the default account-abstraction config (bundler URL + Gas Manager policy)
+  into published builds, matching the hosted frontend. CCTP-inbound swaps and
+  sponsored UserOp claims now work out of the box; `withAa()` still overrides.
+
 ## 2.1.0
 
 ### Minor Changes
