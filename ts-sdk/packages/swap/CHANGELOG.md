@@ -1,5 +1,13 @@
 # @satora/swap
 
+## 1.3.2
+
+### Patch Changes
+
+- 0f7f94f: Target backend 0.3.10 in the x-satora-server-version header and align the
+  Arkade SDK dependency on 0.4.66.
+- 6817e60: Target backend 0.3.11 in the x-satora-server-version header.
+
 ## 1.3.1
 
 ### Patch Changes

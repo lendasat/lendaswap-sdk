@@ -1,5 +1,16 @@
 # @satora/escrow-client
 
+## 7.0.2
+
+### Patch Changes
+
+- 0f7f94f: Target backend 0.3.10 in the x-satora-server-version header and align the
+  Arkade SDK dependency on 0.4.66.
+- Updated dependencies [0f7f94f]
+- Updated dependencies [6817e60]
+  - @satora/swap@1.3.2
+  - @satora/escrow@0.0.6
+
 ## 7.0.1
 
 ### Patch Changes
