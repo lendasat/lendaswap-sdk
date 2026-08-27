@@ -175,6 +175,16 @@ export async function claimViaUserOp(
   const receipt = await client.waitForUserOperationReceipt({
     hash: userOpHash,
   });
+  // Included-but-reverted resolves with success=false rather than throwing
+  // (same as cctp-inbound/submit.ts). Surface it so a plain claim can fall
+  // back to the server path and a DEX claim reports a real failure.
+  if (!receipt.success) {
+    throw new Error(
+      `redeemAndExecute UserOp ${userOpHash} reverted on-chain ` +
+        `(tx ${receipt.receipt.transactionHash})` +
+        (receipt.reason ? `: ${receipt.reason}` : ""),
+    );
+  }
 
   return {
     id: swap.id,
