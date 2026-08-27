@@ -2565,18 +2565,19 @@ export class Client {
     const isCctpBridge = isBridge && !isOftBridge && bridgeTargetToken != null;
     const isSolanaBridge = isBridge && isSolanaToken(bridgeTargetChain);
 
-    const userOpEligible =
-      (dexSwapNeeded || this.#config.aa != null) &&
-      swap.evm_chain_id === 42161 &&
-      (!isBridge || isCctpBridge);
-    if (userOpEligible) {
-      if (this.#config.aa == null) {
-        throw new Error(
-          "Claiming an Arbitrum EVM DEX/CCTP swap requires AA config for the " +
-            "sponsored UserOp. Call `.withAa({ bundlerUrl, paymasterPolicyId })` " +
-            "on the ClientBuilder before `.build()`.",
-        );
-      }
+    // TODO: this needs some refactoring, this function is ugly as a naked cat
+    // The sponsored path exists for the Arbitrum hub only (Ethereum/Polygon
+    // claims and OFT bridges stay on the server-submitted path).
+    const arbitrumHubClaim =
+      swap.evm_chain_id === 42161 && (!isBridge || isCctpBridge);
+    if (arbitrumHubClaim && dexSwapNeeded && this.#config.aa == null) {
+      throw new Error(
+        "Claiming an Arbitrum EVM DEX/CCTP swap requires AA config for the " +
+          "sponsored UserOp. Call `.withAa({ bundlerUrl, paymasterPolicyId })` " +
+          "on the ClientBuilder before `.build()`.",
+      );
+    }
+    if (arbitrumHubClaim && this.#config.aa != null) {
       // Direct claim default: no DEX leg — the coordinator redeems and
       // sweeps the locked token itself, so the sweep floor is the full HTLC
       // amount.
