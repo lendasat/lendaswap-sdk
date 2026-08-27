@@ -1,5 +1,13 @@
 # @satora/escrow-client
 
+## 7.0.3
+
+### Patch Changes
+
+- Updated dependencies [f401036]
+- Updated dependencies [b8e0b74]
+  - @satora/swap@1.3.3
+
 ## 7.0.2
 
 ### Patch Changes

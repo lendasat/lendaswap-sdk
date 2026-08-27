@@ -1,6 +1,6 @@
 {
   "name": "@satora/swap",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Satora swap client",
   "type": "module",
   "main": "dist/index.cjs",

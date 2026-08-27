@@ -1,5 +1,13 @@
 # @satora/swap
 
+## 1.3.3
+
+### Patch Changes
+
+- f401036: Target backend 0.3.12 in the x-satora-server-version header.
+- b8e0b74: Pick up `@lendasat/lendaswap-sdk-pure`: every Arbitrum EVM-target claim is
+  published as a paymaster-sponsored UserOp when AA config is present.
+
 ## 1.3.2
 
 ### Patch Changes
