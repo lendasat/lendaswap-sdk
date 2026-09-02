@@ -687,8 +687,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 [[package]]
 name = "ark-bdk-wallet"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8681c78a4618b095d49c2f91b36bf105bc6ab50a758e4a0b8942982c70a066f2"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "anyhow",
  "ark-client",
@@ -707,8 +706,7 @@ dependencies = [
 [[package]]
 name = "ark-client"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "930ae75b2156c2f52683b34c54649b79d2df1d812b9f09997f2b75f59fe67e4d"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "ark-core",
  "ark-delegator",
@@ -731,7 +729,7 @@ dependencies = [
  "rand 0.8.6",
  "reqwest 0.12.28",
  "rusqlite",
- "secp256k1 0.32.0-beta.2",
+ "secp256k1 0.33.1",
  "serde",
  "serde_json",
  "serde_with",
@@ -748,8 +746,7 @@ dependencies = [
 [[package]]
 name = "ark-core"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77fae7a8afde12d8972393ec23fa436d0d15cdec26ae67d9b50093d300bdebe8"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "bech32",
  "bitcoin",
@@ -759,7 +756,7 @@ dependencies = [
  "hex",
  "js-sys",
  "rand 0.8.6",
- "secp256k1 0.32.0-beta.2",
+ "secp256k1 0.33.1",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -770,8 +767,7 @@ dependencies = [
 [[package]]
 name = "ark-delegator"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5dd54f75ec582c7a13e8730a6be1f62092a83c88e7f80aca7e144ec979bdc73"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "ark-core",
  "bitcoin",
@@ -784,8 +780,7 @@ dependencies = [
 [[package]]
 name = "ark-fees"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76b6bfd7438277cf330d28e596d7a22a991d6a11db5ae70705855a1b92bdbe61"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "cel",
 ]
@@ -919,8 +914,7 @@ dependencies = [
 [[package]]
 name = "ark-grpc"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f65fba48122ca6671a961175efc7d8d181394d0ef951afbc335727fc5c076d7c"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "ark-core",
  "async-stream",
@@ -938,8 +932,7 @@ dependencies = [
 [[package]]
 name = "ark-rs"
 version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2280cdf032d7ce611e90aa95a165729ed0b040ddf6323522907aa681d75a9d2"
+source = "git+https://github.com/arkade-os/rust-sdk?rev=d8bc8a3e0860ffb5d7500d199844179715897293#d8bc8a3e0860ffb5d7500d199844179715897293"
 dependencies = [
  "ark-client",
  "ark-core",
@@ -4753,12 +4746,12 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.32.0-beta.2"
+version = "0.33.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c5fdc7d6e800869d3fd60ff857c479bf0a83ea7bf44b389e64461e844204994"
+checksum = "d7f404a8dab7a7a5a631e741d8699aa9c8e1d689fc26ccf897c7187565490b69"
 dependencies = [
  "rand 0.9.4",
- "secp256k1-sys 0.12.0",
+ "secp256k1-sys 0.14.1",
  "serde",
 ]
 
@@ -4782,9 +4775,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.12.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d3be00697c88c00fe102af8dc316038cc2062eab8da646e7463f4c0e70ca9fd"
+checksum = "f6b2992d4a3cd244539a7d5d0966aadbe5ca7fb868a5d7e38c29499b9e709bbd"
 dependencies = [
  "cc",
 ]
